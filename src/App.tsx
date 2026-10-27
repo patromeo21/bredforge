@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { audioEngine } from './services/audio/AudioEngine';
+import type { TrackKey } from './services/audio/types';
 
 type WorkspaceName =
   | 'Groovebox'
@@ -128,7 +129,9 @@ function App() {
     });
   };
 
-  const updateTrackGain = (trackId: string, nextValue: number) => {
+    const updateTrackGain = (trackId: string, nextValue: number) => {
+    const key = trackId as TrackKey;
+
     setTracks((prev) =>
       prev.map((track) =>
         track.id === trackId
@@ -139,10 +142,13 @@ function App() {
           : track,
       ),
     );
-    audioEngine.setTrackGain(trackId as keyof typeof audioEngine, nextValue);
+
+    audioEngine.setTrackGain(key, nextValue);
   };
 
   const updateTrackPan = (trackId: string, nextValue: number) => {
+    const key = trackId as TrackKey;
+
     setTracks((prev) =>
       prev.map((track) =>
         track.id === trackId
@@ -153,7 +159,8 @@ function App() {
           : track,
       ),
     );
-    audioEngine.setTrackPan(trackId as keyof typeof audioEngine, nextValue);
+
+    audioEngine.setTrackPan(key, nextValue);
   };
 
   const formatTime = (value: number) => {
