@@ -9,7 +9,7 @@ export class SampleManager {
       duration: buffer.duration,
       sampleRate: buffer.sampleRate,
       numberOfChannels: buffer.numberOfChannels,
-      fileName
+      fileName,
     };
   }
 }

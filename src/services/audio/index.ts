@@ -1,6 +1,7 @@
-import { AudioGraph, type TrackKey } from './AudioGraph';
+import { AudioGraph } from './AudioGraph';
 import { SampleManager } from './SampleManager';
 import { AudioTransport } from './Transport';
+import type { EngineTrackState, TrackKey } from './types';
 
 export class AudioEngine {
   private context: AudioContext | null = null;
@@ -9,12 +10,13 @@ export class AudioEngine {
   private sampleManager = new SampleManager();
   private buffer: AudioBuffer | null = null;
   private activeSource: AudioBufferSourceNode | null = null;
+  private playbackRate = 1;
 
-  private trackState = {
-    vocals: { key: 'vocals' as const, enabled: true, gain: 1, pan: 0, mute: false, solo: false },
-    drums: { key: 'drums' as const, enabled: true, gain: 1, pan: 0, mute: false, solo: false },
-    bass: { key: 'bass' as const, enabled: true, gain: 1, pan: 0, mute: false, solo: false },
-    other: { key: 'other' as const, enabled: true, gain: 1, pan: 0, mute: false, solo: false }
+  private trackState: Record<TrackKey, EngineTrackState> = {
+    vocals: { key: 'vocals', enabled: true, gain: 1, pan: 0, mute: false, solo: false },
+    drums: { key: 'drums', enabled: true, gain: 1, pan: 0, mute: false, solo: false },
+    bass: { key: 'bass', enabled: true, gain: 1, pan: 0, mute: false, solo: false },
+    other: { key: 'other', enabled: true, gain: 1, pan: 0, mute: false, solo: false },
   };
 
   constructor() {
@@ -41,7 +43,9 @@ export class AudioEngine {
 
   async loadFile(file: File) {
     this.ensureContext();
-    if (!this.context) throw new Error('AudioContext is unavailable in this browser.');
+    if (!this.context) {
+      throw new Error('AudioContext is unavailable in this browser.');
+    }
 
     this.stop();
     this.buffer = await this.sampleManager.decodeFile(file, this.context);
@@ -65,6 +69,7 @@ export class AudioEngine {
 
     const source = this.context.createBufferSource();
     source.buffer = this.buffer;
+    source.playbackRate.value = this.playbackRate;
     this.graph.connectSource(source);
     this.activeSource = source;
     await this.transport.start(source, offset);
@@ -90,12 +95,11 @@ export class AudioEngine {
   }
 
   setPlaybackRate(value: number) {
-    // Placeholder for transport-driven scheduling later.
-    if (value <= 0) return;
-    if (this.isPlaying()) {
-      const currentTime = this.getCurrentTime();
-      this.stop();
-      this.transport.seek(currentTime);
+    const nextValue = Math.max(0.5, Math.min(2, value));
+    this.playbackRate = nextValue;
+
+    if (this.activeSource) {
+      this.activeSource.playbackRate.value = nextValue;
     }
   }
 

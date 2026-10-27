@@ -15,3 +15,9 @@ export interface AudioBufferMetadata {
   numberOfChannels: number;
   fileName?: string;
 }
+
+export interface TransportSnapshot {
+  isPlaying: boolean;
+  currentTime: number;
+  duration: number;
+}

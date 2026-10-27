@@ -25,7 +25,7 @@ function App() {
     }, 100);
 
     return () => window.clearInterval(interval);
-  }, [isPlaying, duration]);
+  }, [duration, isPlaying]);
 
   const handleFileLoad = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -82,17 +82,62 @@ function App() {
   };
 
   return (
-    <main style={{ minHeight: '100vh', background: '#07111f', color: '#e2e8f0', display: 'grid', placeItems: 'center', padding: 24 }}>
-      <div style={{ width: 'min(980px, 100%)', background: '#0f172a', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 20, padding: 24, boxShadow: '0 30px 60px rgba(2,6,23,0.6)' }}>
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 28, flexWrap: 'wrap' }}>
+    <main
+      style={{
+        minHeight: '100vh',
+        background: '#07111f',
+        color: '#e2e8f0',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 24,
+      }}
+    >
+      <div
+        style={{
+          width: 'min(980px, 100%)',
+          background: '#0f172a',
+          border: '1px solid rgba(148, 163, 184, 0.2)',
+          borderRadius: 20,
+          padding: 24,
+          boxShadow: '0 30px 60px rgba(2, 6, 23, 0.6)',
+        }}
+      >
+        <header
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 16,
+            marginBottom: 28,
+            flexWrap: 'wrap',
+          }}
+        >
           <div>
-            <div style={{ fontSize: 12, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#67e8f9', marginBottom: 8 }}>Bredforge</div>
+            <div
+              style={{
+                fontSize: 12,
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase',
+                color: '#67e8f9',
+                marginBottom: 8,
+              }}
+            >
+              Bredforge
+            </div>
             <h1 style={{ margin: 0, fontSize: 'clamp(2rem, 4vw, 3rem)' }}>Audio engine foundation</h1>
           </div>
 
           <button
             onClick={() => fileInputRef.current?.click()}
-            style={{ appearance: 'none', border: '1px solid rgba(103,232,249,0.35)', background: '#111827', color: '#e0f2fe', borderRadius: 12, padding: '0.8rem 1rem', cursor: 'pointer' }}
+            style={{
+              appearance: 'none',
+              border: '1px solid rgba(103, 232, 249, 0.35)',
+              background: '#111827',
+              color: '#e0f2fe',
+              borderRadius: 12,
+              padding: '0.8rem 1rem',
+              cursor: 'pointer',
+            }}
           >
             Import sample
           </button>
@@ -100,15 +145,49 @@ function App() {
         </header>
 
         <section style={{ display: 'grid', gap: 20 }}>
-          <div style={{ background: '#020817', border: '1px solid rgba(148,163,184,0.14)', borderRadius: 18, padding: 18 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <span style={{ color: '#cbd5e1', fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Transport</span>
-              <span style={{ color: '#a5f3fc', fontFamily: 'monospace' }}>{formatTime(currentTime)} / {formatTime(duration)}</span>
+          <div
+            style={{
+              background: '#020817',
+              border: '1px solid rgba(148, 163, 184, 0.14)',
+              borderRadius: 18,
+              padding: 18,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 16,
+              }}
+            >
+              <span
+                style={{
+                  color: '#cbd5e1',
+                  fontSize: 12,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Transport
+              </span>
+              <span style={{ color: '#a5f3fc', fontFamily: 'monospace' }}>
+                {formatTime(currentTime)} / {formatTime(duration)}
+              </span>
             </div>
 
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
               <button onClick={handleReset} style={buttonStyle}>Reset</button>
-              <button onClick={handlePlaybackToggle} style={{ ...buttonStyle, background: isPlaying ? '#ef4444' : '#22c55e', borderColor: 'transparent' }}>{isPlaying ? 'Pause' : 'Play'}</button>
+              <button
+                onClick={handlePlaybackToggle}
+                style={{
+                  ...buttonStyle,
+                  background: isPlaying ? '#ef4444' : '#22c55e',
+                  borderColor: 'transparent',
+                }}
+              >
+                {isPlaying ? 'Pause' : 'Play'}
+              </button>
             </div>
           </div>
 
@@ -159,7 +238,15 @@ function App() {
           </div>
 
           {error && (
-            <div style={{ background: 'rgba(127,29,29,0.35)', border: '1px solid rgba(248,113,113,0.45)', color: '#fecaca', borderRadius: 12, padding: '0.8rem 1rem' }}>
+            <div
+              style={{
+                background: 'rgba(127, 29, 29, 0.35)',
+                border: '1px solid rgba(248, 113, 113, 0.45)',
+                color: '#fecaca',
+                borderRadius: 12,
+                padding: '0.8rem 1rem',
+              }}
+            >
               {error}
             </div>
           )}
@@ -171,30 +258,182 @@ function App() {
 
 const buttonStyle: React.CSSProperties = {
   appearance: 'none',
-  border: '1px solid rgba(148,163,184,0.25)',
+  border: '1px solid rgba(148, 163, 184, 0.25)',
   background: '#111827',
   color: '#f8fafc',
   borderRadius: 10,
   padding: '0.7rem 1rem',
-  cursor: 'pointer'
+  cursor: 'pointer',
 };
 
 const panelStyle: React.CSSProperties = {
   background: '#020817',
-  border: '1px solid rgba(148,163,184,0.15)',
+  border: '1px solid rgba(148, 163, 184, 0.15)',
   borderRadius: 16,
   padding: 18,
   display: 'grid',
-  gap: 10
+  gap: 10,
 };
 
 const labelStyle: React.CSSProperties = {
   color: '#cbd5e1',
   fontSize: 12,
   letterSpacing: '0.12em',
-  textTransform: 'uppercase'
+  textTransform: 'uppercase',
 };
 
 export default App;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

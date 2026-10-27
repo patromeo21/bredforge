@@ -1,13 +1,6 @@
-export type TrackKey = 'vocals' | 'drums' | 'bass' | 'other';
+import type { TrackKey } from './types';
 
-export interface EngineTrackState {
-  key: TrackKey;
-  enabled: boolean;
-  gain: number;
-  pan: number;
-  mute: boolean;
-  solo: boolean;
-}
+export type { TrackKey } from './types';
 
 export class AudioGraph {
   readonly context: AudioContext;
@@ -27,7 +20,7 @@ export class AudioGraph {
       vocals: this.createTrackNode('peaking', 2000),
       drums: this.createTrackNode('peaking', 400),
       bass: this.createTrackNode('lowshelf', 200),
-      other: this.createTrackNode('highshelf', 5000)
+      other: this.createTrackNode('highshelf', 5000),
     };
 
     (Object.keys(this.tracks) as TrackKey[]).forEach((key) => {
