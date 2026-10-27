@@ -1,7 +1,50 @@
 import { AudioGraph } from './AudioGraph';
 import { SampleManager } from './SampleManager';
 import { AudioTransport } from './Transport';
-import type { EngineTrackState, TrackKey } from './types';
+import type { EngineTrackState, MasterEffectState, TrackKey } from './types';
+
+const audioBufferToWav = (audioBuffer: AudioBuffer) => {
+  const channels = audioBuffer.numberOfChannels;
+  const sampleRate = audioBuffer.sampleRate;
+  const format = 1;
+  const bitDepth = 16;
+  const bytesPerSample = bitDepth / 8;
+  const blockAlign = channels * bytesPerSample;
+  const dataLength = audioBuffer.length * blockAlign;
+  const buffer = new ArrayBuffer(44 + dataLength);
+  const view = new DataView(buffer);
+
+  const writeString = (offset: number, value: string) => {
+    for (let i = 0; i < value.length; i += 1) {
+      view.setUint8(offset + i, value.charCodeAt(i));
+    }
+  };
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + dataLength, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, format, true);
+  view.setUint16(22, channels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitDepth, true);
+  writeString(36, 'data');
+  view.setUint32(40, dataLength, true);
+
+  let offset = 44;
+  for (let sampleIndex = 0; sampleIndex < audioBuffer.length; sampleIndex += 1) {
+    for (let channel = 0; channel < channels; channel += 1) {
+      const value = Math.max(-1, Math.min(1, audioBuffer.getChannelData(channel)[sampleIndex]));
+      view.setInt16(offset, value < 0 ? value * 0x8000 : value * 0x7fff, true);
+      offset += 2;
+    }
+  }
+
+  return buffer;
+};
 
 export class AudioEngine {
   private context: AudioContext | null = null;
@@ -11,6 +54,14 @@ export class AudioEngine {
   private buffer: AudioBuffer | null = null;
   private activeSource: AudioBufferSourceNode | null = null;
   private playbackRate = 1;
+  private mediaRecorder: MediaRecorder | null = null;
+  private recorderDestination: MediaStreamAudioDestinationNode | null = null;
+  private masterEffects: MasterEffectState = {
+    drive: 1.2,
+    cutoff: 12000,
+    resonance: 1,
+    limiter: -4,
+  };
 
   private trackState: Record<TrackKey, EngineTrackState> = {
     vocals: { key: 'vocals', enabled: true, gain: 1, pan: 0, mute: false, solo: false, drive: 1.5, cutoff: 2000, resonance: 1 },
@@ -29,6 +80,7 @@ export class AudioEngine {
       this.graph = new AudioGraph(this.context);
       this.transport.attachContext(this.context);
       this.applyTrackState();
+      this.applyMasterEffects();
     }
   }
 
@@ -44,6 +96,7 @@ export class AudioEngine {
       this.graph = new AudioGraph(this.context);
     }
     this.applyTrackState();
+    this.applyMasterEffects();
   }
 
   private getEffectiveTrackGain(track: TrackKey) {
@@ -66,6 +119,14 @@ export class AudioEngine {
       this.graph.setTrackFilterResonance(key, state.resonance);
       this.graph.setTrackPan(key, state.pan);
     });
+  }
+
+  private applyMasterEffects() {
+    if (!this.graph) return;
+    this.graph.setMasterDrive(this.masterEffects.drive);
+    this.graph.setMasterFilterCutoff(this.masterEffects.cutoff);
+    this.graph.setMasterFilterResonance(this.masterEffects.resonance);
+    this.graph.setMasterLimiter(this.masterEffects.limiter);
   }
 
   async play(offset = 0) {
@@ -105,6 +166,26 @@ export class AudioEngine {
 
   setMasterVolume(value: number) {
     this.graph?.setMasterVolume(value);
+  }
+
+  setMasterDrive(value: number) {
+    this.masterEffects.drive = value;
+    this.graph?.setMasterDrive(value);
+  }
+
+  setMasterCutoff(value: number) {
+    this.masterEffects.cutoff = value;
+    this.graph?.setMasterFilterCutoff(value);
+  }
+
+  setMasterResonance(value: number) {
+    this.masterEffects.resonance = value;
+    this.graph?.setMasterFilterResonance(value);
+  }
+
+  setMasterLimiter(value: number) {
+    this.masterEffects.limiter = value;
+    this.graph?.setMasterLimiter(value);
   }
 
   setPlaybackRate(value: number) {
@@ -158,6 +239,60 @@ export class AudioEngine {
       }
     });
     this.applyTrackState();
+  }
+
+  async toggleRecording() {
+    if (!this.context || !this.graph) return false;
+
+    if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
+      this.mediaRecorder.stop();
+      this.mediaRecorder = null;
+      this.recorderDestination = null;
+      return false;
+    }
+
+    const destination = this.context.createMediaStreamDestination();
+    this.graph.output.connect(destination);
+    this.recorderDestination = destination;
+
+    const chunks: BlobPart[] = [];
+    const mediaRecorder = new MediaRecorder(destination.stream);
+    this.mediaRecorder = mediaRecorder;
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        chunks.push(event.data);
+      }
+    };
+
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(chunks, { type: 'audio/webm' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'bredforge-session.webm';
+      anchor.click();
+      URL.revokeObjectURL(url);
+      this.recorderDestination = null;
+      this.mediaRecorder = null;
+    };
+
+    mediaRecorder.start();
+    return true;
+  }
+
+  exportWav(filename = 'bredforge-export.wav') {
+    if (!this.buffer) return null;
+
+    const wavBuffer = audioBufferToWav(this.buffer);
+    const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    return filename;
   }
 
   getCurrentTime() {
