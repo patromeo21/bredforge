@@ -1,9 +1,20 @@
+export type TrackKey = 'vocals' | 'drums' | 'bass' | 'other';
+
+export interface EngineTrackState {
+  key: TrackKey;
+  enabled: boolean;
+  gain: number;
+  pan: number;
+  mute: boolean;
+  solo: boolean;
+}
+
 export class AudioGraph {
   readonly context: AudioContext;
   readonly masterGain: GainNode;
   readonly analyser: AnalyserNode;
   readonly output: GainNode;
-  readonly tracks: Record<string, { filter: BiquadFilterNode; gain: GainNode; pan: StereoPannerNode }>;
+  readonly tracks: Record<TrackKey, { filter: BiquadFilterNode; gain: GainNode; pan: StereoPannerNode }>;
 
   constructor(context: AudioContext) {
     this.context = context;
@@ -19,9 +30,10 @@ export class AudioGraph {
       other: this.createTrackNode('highshelf', 5000)
     };
 
-    Object.values(this.tracks).forEach(({ gain, pan }) => {
-      gain.connect(pan);
-      pan.connect(this.masterGain);
+    (Object.keys(this.tracks) as TrackKey[]).forEach((key) => {
+      const track = this.tracks[key];
+      track.gain.connect(track.pan);
+      track.pan.connect(this.masterGain);
     });
 
     this.masterGain.connect(this.output);
@@ -46,19 +58,20 @@ export class AudioGraph {
   }
 
   connectSource(source: AudioBufferSourceNode) {
-    Object.values(this.tracks).forEach(({ filter }) => {
-      source.connect(filter);
+    (Object.keys(this.tracks) as TrackKey[]).forEach((key) => {
+      const track = this.tracks[key];
+      source.connect(track.filter);
     });
   }
 
-  setTrackGain(track: keyof typeof this.tracks, value: number) {
+  setTrackGain(track: TrackKey, value: number) {
     const node = this.tracks[track];
     if (!node) return;
     node.gain.gain.setTargetAtTime(value, this.context.currentTime, 0.05);
     node.filter.gain.setTargetAtTime((value - 1) * 20, this.context.currentTime, 0.1);
   }
 
-  setTrackPan(track: keyof typeof this.tracks, value: number) {
+  setTrackPan(track: TrackKey, value: number) {
     const node = this.tracks[track];
     if (!node) return;
     node.pan.pan.setTargetAtTime(value, this.context.currentTime, 0.05);

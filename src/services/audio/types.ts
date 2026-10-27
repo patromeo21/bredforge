@@ -1,136 +1,114 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { audioEngine } from './services/audio/AudioEngine';
 
 function App() {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [fileName, setFileName] = useState('No sample loaded');
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [masterVolume, setMasterVolume] = useState(0.8);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
 
-  const status = useMemo(() => {
-    return {
-      currentTime: audioEngine.getCurrentTime(),
-      duration: audioEngine.getDuration(),
-      loaded: audioEngine.isLoaded(),
-      trackCount: audioEngine.getTrackCount()
-    };
-  }, [isPlaying, selectedFile]);
+  useEffect(() => {
+    if (!isPlaying) return;
 
-  const onFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const interval = window.setInterval(() => {
+      const nextTime = audioEngine.getCurrentTime();
+      setCurrentTime(nextTime);
+
+      if (duration > 0 && nextTime >= duration) {
+        audioEngine.pause();
+        setIsPlaying(false);
+      }
+    }, 100);
+
+    return () => window.clearInterval(interval);
+  }, [isPlaying, duration]);
+
+  const handleFileLoad = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     try {
       setError(null);
-      setSelectedFile(file);
+      setFileName(file.name);
       await audioEngine.loadFile(file);
+      setDuration(audioEngine.getDuration());
+      setCurrentTime(audioEngine.getCurrentTime());
       audioEngine.setMasterVolume(masterVolume);
       audioEngine.setPlaybackRate(playbackRate);
     } catch (loadError) {
       console.error(loadError);
-      setError('Failed to decode audio. Please choose a valid WAV, MP3, or AAC file.');
+      setError('Unable to decode this audio file in the current browser environment.');
     }
   };
 
-  const togglePlayback = async () => {
+  const handlePlaybackToggle = async () => {
     try {
       if (!audioEngine.isLoaded()) {
-        setError('Load an audio file before playing.');
+        setError('Load a valid audio sample before playback.');
         return;
       }
 
       if (isPlaying) {
         audioEngine.pause();
         setIsPlaying(false);
+        setCurrentTime(audioEngine.getCurrentTime());
         return;
       }
 
       await audioEngine.play();
       setIsPlaying(true);
+      setCurrentTime(audioEngine.getCurrentTime());
     } catch (playError) {
       console.error(playError);
-      setError('Audio playback failed. User interaction may be required to resume the audio context.');
+      setError('Playback requires a user gesture to resume the audio context.');
     }
   };
 
-  const seekToZero = () => {
+  const handleReset = () => {
     audioEngine.seek(0);
-    if (isPlaying) {
-      setIsPlaying(false);
-    }
+    setCurrentTime(0);
+    setIsPlaying(false);
   };
 
-  const formatTime = (seconds: number) => {
-    if (!Number.isFinite(seconds) || seconds <= 0) return '0:00';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  const formatTime = (value: number) => {
+    if (!Number.isFinite(value) || value <= 0) return '0:00';
+    const minutes = Math.floor(value / 60);
+    const seconds = Math.floor(value % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
   return (
-    <main style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(180deg, #050b16 0%, #0a1325 100%)',
-      display: 'grid',
-      placeItems: 'center',
-      padding: 24
-    }}>
-      <div style={{
-        width: 'min(980px, 100%)',
-        background: 'rgba(15, 23, 42, 0.9)',
-        border: '1px solid rgba(148, 163, 184, 0.2)',
-        borderRadius: 20,
-        padding: 24,
-        boxShadow: '0 20px 60px rgba(15, 23, 42, 0.4)'
-      }}>
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 24 }}>
+    <main style={{ minHeight: '100vh', background: '#07111f', color: '#e2e8f0', display: 'grid', placeItems: 'center', padding: 24 }}>
+      <div style={{ width: 'min(980px, 100%)', background: '#0f172a', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 20, padding: 24, boxShadow: '0 30px 60px rgba(2,6,23,0.6)' }}>
+        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 28, flexWrap: 'wrap' }}>
           <div>
-            <div style={{ fontSize: 12, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#67e8f9', marginBottom: 8 }}>
-              Bredforge
-            </div>
-            <h1 style={{ margin: 0, fontSize: 'clamp(2rem, 4vw, 3rem)', lineHeight: 1.1 }}>Audio engine foundation</h1>
+            <div style={{ fontSize: 12, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#67e8f9', marginBottom: 8 }}>Bredforge</div>
+            <h1 style={{ margin: 0, fontSize: 'clamp(2rem, 4vw, 3rem)' }}>Audio engine foundation</h1>
           </div>
 
           <button
-            onClick={() => inputRef.current?.click()}
-            style={{
-              appearance: 'none',
-              border: '1px solid rgba(103, 232, 249, 0.35)',
-              background: '#0f172a',
-              color: '#e0f2fe',
-              borderRadius: 12,
-              padding: '0.75rem 1rem',
-              cursor: 'pointer'
-            }}
+            onClick={() => fileInputRef.current?.click()}
+            style={{ appearance: 'none', border: '1px solid rgba(103,232,249,0.35)', background: '#111827', color: '#e0f2fe', borderRadius: 12, padding: '0.8rem 1rem', cursor: 'pointer' }}
           >
             Import sample
           </button>
-          <input ref={inputRef} type="file" accept="audio/*" onChange={onFileUpload} hidden />
+          <input ref={fileInputRef} type="file" accept="audio/*" onChange={handleFileLoad} hidden />
         </header>
 
         <section style={{ display: 'grid', gap: 20 }}>
-          <div style={{
-            background: '#020817',
-            border: '1px solid rgba(148, 163, 184, 0.15)',
-            borderRadius: 18,
-            padding: 20
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <span style={{ color: '#cbd5e1', fontSize: 13, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-                Transport
-              </span>
-              <span style={{ color: '#a5f3fc', fontFamily: 'monospace' }}>
-                {formatTime(status.currentTime)} / {formatTime(status.duration)}
-              </span>
+          <div style={{ background: '#020817', border: '1px solid rgba(148,163,184,0.14)', borderRadius: 18, padding: 18 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <span style={{ color: '#cbd5e1', fontSize: 12, letterSpacing: '0.12em', textTransform: 'uppercase' }}>Transport</span>
+              <span style={{ color: '#a5f3fc', fontFamily: 'monospace' }}>{formatTime(currentTime)} / {formatTime(duration)}</span>
             </div>
 
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button onClick={seekToZero} style={buttonStyle}>Reset</button>
-              <button onClick={togglePlayback} style={{ ...buttonStyle, background: isPlaying ? '#ef4444' : '#22c55e', borderColor: 'transparent' }}>
-                {isPlaying ? 'Pause' : 'Play'}
-              </button>
+              <button onClick={handleReset} style={buttonStyle}>Reset</button>
+              <button onClick={handlePlaybackToggle} style={{ ...buttonStyle, background: isPlaying ? '#ef4444' : '#22c55e', borderColor: 'transparent' }}>{isPlaying ? 'Pause' : 'Play'}</button>
             </div>
           </div>
 
@@ -173,21 +151,15 @@ function App() {
           <div style={panelStyle}>
             <div style={labelStyle}>Engine status</div>
             <div style={{ display: 'grid', gap: 8, color: '#dbeafe' }}>
-              <div>File: {selectedFile ? selectedFile.name : 'No audio loaded'}</div>
-              <div>Audio loaded: {status.loaded ? 'yes' : 'no'}</div>
-              <div>Track count: {status.trackCount}</div>
-              <div>Output: master bus + analyser connected</div>
+              <div>File: {fileName}</div>
+              <div>Loaded: {audioEngine.isLoaded() ? 'yes' : 'no'}</div>
+              <div>Track count: {audioEngine.getTrackCount()}</div>
+              <div>Output chain: master -> analyser -> destination</div>
             </div>
           </div>
 
           {error && (
-            <div style={{
-              background: 'rgba(127, 29, 29, 0.35)',
-              border: '1px solid rgba(248, 113, 113, 0.45)',
-              color: '#fecaca',
-              borderRadius: 12,
-              padding: '0.75rem 1rem'
-            }}>
+            <div style={{ background: 'rgba(127,29,29,0.35)', border: '1px solid rgba(248,113,113,0.45)', color: '#fecaca', borderRadius: 12, padding: '0.8rem 1rem' }}>
               {error}
             </div>
           )}
@@ -199,7 +171,7 @@ function App() {
 
 const buttonStyle: React.CSSProperties = {
   appearance: 'none',
-  border: '1px solid rgba(148, 163, 184, 0.25)',
+  border: '1px solid rgba(148,163,184,0.25)',
   background: '#111827',
   color: '#f8fafc',
   borderRadius: 10,
@@ -209,7 +181,7 @@ const buttonStyle: React.CSSProperties = {
 
 const panelStyle: React.CSSProperties = {
   background: '#020817',
-  border: '1px solid rgba(148, 163, 184, 0.15)',
+  border: '1px solid rgba(148,163,184,0.15)',
   borderRadius: 16,
   padding: 18,
   display: 'grid',
@@ -224,3 +196,5 @@ const labelStyle: React.CSSProperties = {
 };
 
 export default App;
+
+

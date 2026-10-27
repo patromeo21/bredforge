@@ -1,7 +1,7 @@
 export class AudioTransport {
   private context: AudioContext | null = null;
   private source: AudioBufferSourceNode | null = null;
-  private startTimestamp = 0;
+  private startedAt = 0;
   private pausedAt = 0;
   private isRunning = false;
 
@@ -9,7 +9,7 @@ export class AudioTransport {
     this.context = context;
   }
 
-  async start(buffer: AudioBuffer, offset = 0, when: number = 0) {
+  async start(source: AudioBufferSourceNode, offset = 0) {
     if (!this.context) {
       throw new Error('Audio context is not initialized.');
     }
@@ -22,13 +22,9 @@ export class AudioTransport {
       this.stop();
     }
 
-    const source = this.context.createBufferSource();
-    source.buffer = buffer;
-    source.loop = false;
-    source.start(when, offset);
-
     this.source = source;
-    this.startTimestamp = this.context.currentTime - offset;
+    this.source.start(0, offset);
+    this.startedAt = this.context.currentTime - offset;
     this.pausedAt = offset;
     this.isRunning = true;
   }
@@ -39,10 +35,10 @@ export class AudioTransport {
     try {
       this.source.stop();
     } catch {
-      // No-op if source already ended.
+      // safe no-op when the source has already ended
     }
 
-    this.pausedAt = this.context.currentTime - this.startTimestamp;
+    this.pausedAt = this.context.currentTime - this.startedAt;
     this.isRunning = false;
     this.source.disconnect();
     this.source = null;
@@ -54,13 +50,13 @@ export class AudioTransport {
     try {
       this.source.stop();
     } catch {
-      // No-op if source already stopped.
+      // safe no-op when the source has already stopped
     }
 
     this.source.disconnect();
     this.source = null;
-    this.isRunning = false;
     this.pausedAt = 0;
+    this.isRunning = false;
   }
 
   seek(time: number) {
@@ -72,7 +68,7 @@ export class AudioTransport {
 
   getCurrentTime() {
     if (!this.context || !this.isRunning) return this.pausedAt;
-    return this.context.currentTime - this.startTimestamp;
+    return this.context.currentTime - this.startedAt;
   }
 
   isPlaying() {
