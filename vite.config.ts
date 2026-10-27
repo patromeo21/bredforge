@@ -3,8 +3,13 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  base: '/bredforge/',
   server: {
     port: 3000,
-    host: '0.0.0.0'
-  }
+    host: '0.0.0.0',
+  },
+  preview: {
+    host: '0.0.0.0',
+    port: 4173,
+  },
 });
