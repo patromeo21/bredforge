@@ -46,11 +46,21 @@ export class AudioEngine {
     this.applyTrackState();
   }
 
+  private getEffectiveTrackGain(track: TrackKey) {
+    const state = this.trackState[track];
+    const hasSolo = Object.values(this.trackState).some((item) => item.solo);
+
+    if (state.mute) return 0;
+    if (hasSolo && !state.solo) return 0;
+
+    return state.gain;
+  }
+
   private applyTrackState() {
     if (!this.graph) return;
     (Object.keys(this.trackState) as TrackKey[]).forEach((key) => {
       const state = this.trackState[key];
-      this.graph.setTrackGain(key, state.gain);
+      this.graph.setTrackGain(key, this.getEffectiveTrackGain(key));
       this.graph.setTrackPan(key, state.pan);
     });
   }
@@ -105,12 +115,31 @@ export class AudioEngine {
 
   setTrackGain(track: TrackKey, value: number) {
     this.trackState[track].gain = value;
-    this.graph?.setTrackGain(track, value);
+    this.graph?.setTrackGain(track, this.getEffectiveTrackGain(track));
   }
 
   setTrackPan(track: TrackKey, value: number) {
     this.trackState[track].pan = value;
     this.graph?.setTrackPan(track, value);
+  }
+
+  setTrackMute(track: TrackKey, value: boolean) {
+    this.trackState[track].mute = value;
+    if (value) {
+      this.trackState[track].solo = false;
+    }
+    this.applyTrackState();
+  }
+
+  setTrackSolo(track: TrackKey, value: boolean) {
+    (Object.keys(this.trackState) as TrackKey[]).forEach((key) => {
+      const isSelected = key === track;
+      this.trackState[key].solo = isSelected ? value : false;
+      if (isSelected && value) {
+        this.trackState[key].mute = false;
+      }
+    });
+    this.applyTrackState();
   }
 
   getCurrentTime() {
