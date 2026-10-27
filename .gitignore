@@ -1,0 +1,128 @@
+import { AudioGraph } from './AudioGraph';
+import { AudioTransport } from './Transport';
+import { SampleManager } from './SampleManager';
+import type { EngineTrackState, TrackKey } from './types';
+
+class AudioEngine {
+  private context: AudioContext | null = null;
+  private graph: AudioGraph | null = null;
+  private transport: AudioTransport = new AudioTransport();
+  private sampleManager = new SampleManager();
+  private buffer: AudioBuffer | null = null;
+  private activeTrackState: Record<TrackKey, EngineTrackState> = {
+    vocals: { key: 'vocals', enabled: true, gain: 1, pan: 0, mute: false, solo: false },
+    drums: { key: 'drums', enabled: true, gain: 1, pan: 0, mute: false, solo: false },
+    bass: { key: 'bass', enabled: true, gain: 1, pan: 0, mute: false, solo: false },
+    other: { key: 'other', enabled: true, gain: 1, pan: 0, mute: false, solo: false }
+  };
+
+  constructor() {
+    this.context = new AudioContext();
+    this.graph = new AudioGraph(this.context);
+    this.transport.attachContext(this.context);
+    this.applyTrackState();
+  }
+
+  private ensureContext() {
+    if (!this.context) {
+      this.context = new AudioContext();
+      this.graph = new AudioGraph(this.context);
+      this.transport.attachContext(this.context);
+      this.applyTrackState();
+    }
+  }
+
+  private applyTrackState() {
+    if (!this.graph) return;
+
+    Object.entries(this.activeTrackState).forEach(([key, state]) => {
+      const trackKey = key as TrackKey;
+      this.graph.setTrackGain(trackKey, state.gain);
+      this.graph.setTrackPan(trackKey, state.pan);
+    });
+  }
+
+  async loadFile(file: File) {
+    this.ensureContext();
+    if (!this.context) throw new Error('No audio context could be created.');
+
+    this.buffer = await this.sampleManager.decodeFile(file, this.context);
+    this.graph = new AudioGraph(this.context);
+    this.transport.attachContext(this.context);
+    this.applyTrackState();
+
+    if (this.buffer) {
+      this.graph.connectSource(this.context.createBufferSource());
+    }
+  }
+
+  async play(offset = 0) {
+    this.ensureContext();
+    if (!this.context || !this.buffer) return;
+
+    const source = this.context.createBufferSource();
+    source.buffer = this.buffer;
+    this.graph?.connectSource(source);
+    this.transport.attachContext(this.context);
+    await this.transport.start(this.buffer, offset, 0);
+  }
+
+  pause() {
+    this.transport.pause();
+  }
+
+  stop() {
+    this.transport.stop();
+  }
+
+  seek(time: number) {
+    this.transport.seek(time);
+  }
+
+  setMasterVolume(value: number) {
+    this.graph?.setMasterVolume(value);
+  }
+
+  setPlaybackRate(value: number) {
+    if (!this.buffer) return;
+    const wasPlaying = this.transport.isPlaying();
+    const currentTime = this.getCurrentTime();
+    this.stop();
+    if (wasPlaying) {
+      this.transport.seek(currentTime);
+    }
+    this.buffer = this.buffer;
+  }
+
+  setTrackGain(track: TrackKey, value: number) {
+    this.activeTrackState[track].gain = value;
+    this.graph?.setTrackGain(track, value);
+  }
+
+  setTrackPan(track: TrackKey, value: number) {
+    this.activeTrackState[track].pan = value;
+    this.graph?.setTrackPan(track, value);
+  }
+
+  getCurrentTime() {
+    return this.transport.getCurrentTime();
+  }
+
+  getDuration() {
+    return this.buffer?.duration ?? 0;
+  }
+
+  isLoaded() {
+    return !!this.buffer;
+  }
+
+  getTrackCount() {
+    return Object.keys(this.activeTrackState).length;
+  }
+
+  getAnalyser() {
+    return this.graph?.analyser ?? null;
+  }
+}
+
+export const audioEngine = new AudioEngine();
