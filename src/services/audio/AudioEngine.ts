@@ -46,12 +46,14 @@ export class AudioEngine {
     this.applyTrackState();
   }
 
-  private applyTrackState() {
-    if (!this.graph) return;
+    private applyTrackState() {
+    const graph = this.graph;
+    if (!graph) return;
+
     (Object.keys(this.trackState) as TrackKey[]).forEach((key) => {
       const state = this.trackState[key];
-      this.graph.setTrackGain(key, state.gain);
-      this.graph.setTrackPan(key, state.pan);
+      graph.setTrackGain(key, state.gain);
+      graph.setTrackPan(key, state.pan);
     });
   }
 
