@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { audioEngine } from './services/audio/AudioEngine';
+import type { TrackKey } from './services/audio/types';
 
 type WorkspaceName =
   | 'Groovebox'
@@ -139,7 +140,7 @@ function App() {
           : track,
       ),
     );
-    audioEngine.setTrackGain(trackId as keyof typeof audioEngine, nextValue);
+    audioEngine.setTrackGain(trackId as TrackKey, nextValue);
   };
 
   const updateTrackPan = (trackId: string, nextValue: number) => {
@@ -153,7 +154,38 @@ function App() {
           : track,
       ),
     );
-    audioEngine.setTrackPan(trackId as keyof typeof audioEngine, nextValue);
+    audioEngine.setTrackPan(trackId as TrackKey, nextValue);
+  };
+
+  const updateTrackMute = (trackId: string, nextValue: boolean) => {
+    setTracks((prev) =>
+      prev.map((track) =>
+        track.id === trackId
+          ? {
+              ...track,
+              muted: nextValue,
+            }
+          : track,
+      ),
+    );
+    audioEngine.setTrackMute(trackId as TrackKey, nextValue);
+  };
+
+  const updateTrackSolo = (trackId: string, nextValue: boolean) => {
+    setTracks((prev) =>
+      prev.map((track) =>
+        track.id === trackId
+          ? {
+              ...track,
+              solo: nextValue,
+            }
+          : {
+              ...track,
+              solo: false,
+            },
+      ),
+    );
+    audioEngine.setTrackSolo(trackId as TrackKey, nextValue);
   };
 
   const formatTime = (value: number) => {
@@ -266,8 +298,18 @@ function App() {
                 />
 
                 <div className="button-row">
-                  <button className="tiny-button">Mute</button>
-                  <button className="tiny-button">Solo</button>
+                  <button
+                    className={`tiny-button ${track.muted ? 'active' : ''}`}
+                    onClick={() => updateTrackMute(track.id, !track.muted)}
+                  >
+                    {track.muted ? 'Unmute' : 'Mute'}
+                  </button>
+                  <button
+                    className={`tiny-button ${track.solo ? 'active' : ''}`}
+                    onClick={() => updateTrackSolo(track.id, !track.solo)}
+                  >
+                    {track.solo ? 'Unsolo' : 'Solo'}
+                  </button>
                 </div>
               </div>
             ))}
@@ -448,6 +490,20 @@ function App() {
                     value={track.gain}
                     onChange={(event) => updateTrackGain(track.id, Number(event.target.value))}
                   />
+                </div>
+                <div className="button-row compact">
+                  <button
+                    className={`tiny-button ${track.muted ? 'active' : ''}`}
+                    onClick={() => updateTrackMute(track.id, !track.muted)}
+                  >
+                    {track.muted ? 'Muted' : 'Mute'}
+                  </button>
+                  <button
+                    className={`tiny-button ${track.solo ? 'active' : ''}`}
+                    onClick={() => updateTrackSolo(track.id, !track.solo)}
+                  >
+                    {track.solo ? 'Solo' : 'Solo'}
+                  </button>
                 </div>
               </div>
             ))}
