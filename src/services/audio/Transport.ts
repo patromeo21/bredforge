@@ -1,80 +1,77 @@
-import type { TrackKey } from './types';
+export class AudioTransport {
+  private context: AudioContext | null = null;
+  private source: AudioBufferSourceNode | null = null;
+  private startedAt = 0;
+  private pausedAt = 0;
+  private isRunning = false;
 
-export type { TrackKey } from './types';
-
-export class AudioGraph {
-  readonly context: AudioContext;
-  readonly masterGain: GainNode;
-  readonly analyser: AnalyserNode;
-  readonly output: GainNode;
-  readonly tracks: Record<TrackKey, { filter: BiquadFilterNode; gain: GainNode; pan: StereoPannerNode }>;
-
-  constructor(context: AudioContext) {
+  attachContext(context: AudioContext) {
     this.context = context;
-    this.masterGain = context.createGain();
-    this.output = context.createGain();
-    this.analyser = context.createAnalyser();
-    this.analyser.fftSize = 2048;
-
-    this.tracks = {
-      vocals: this.createTrackNode('peaking', 2000),
-      drums: this.createTrackNode('peaking', 400),
-      bass: this.createTrackNode('lowshelf', 200),
-      other: this.createTrackNode('highshelf', 5000),
-    };
-
-    (Object.keys(this.tracks) as TrackKey[]).forEach((key) => {
-      const track = this.tracks[key];
-      track.gain.connect(track.pan);
-      track.pan.connect(this.masterGain);
-    });
-
-    this.masterGain.connect(this.output);
-    this.output.connect(this.analyser);
-    this.output.connect(this.context.destination);
   }
 
-  private createTrackNode(type: BiquadFilterType, frequency: number) {
-    const filter = this.context.createBiquadFilter();
-    filter.type = type;
-    filter.frequency.value = frequency;
-    filter.Q.value = 1;
+  async start(source: AudioBufferSourceNode, offset = 0) {
+    if (!this.context) {
+      throw new Error('Audio context is not initialized.');
+    }
 
-    const gain = this.context.createGain();
-    gain.gain.value = 1;
+    if (this.context.state === 'suspended') {
+      await this.context.resume();
+    }
 
-    const pan = this.context.createStereoPanner();
-    pan.pan.value = 0;
+    if (this.source) {
+      this.stop();
+    }
 
-    filter.connect(gain);
-    return { filter, gain, pan };
+    this.source = source;
+    this.source.start(0, offset);
+    this.startedAt = this.context.currentTime - offset;
+    this.pausedAt = offset;
+    this.isRunning = true;
   }
 
-  connectSource(source: AudioBufferSourceNode) {
-    (Object.keys(this.tracks) as TrackKey[]).forEach((key) => {
-      const track = this.tracks[key];
-      source.connect(track.filter);
-    });
+  pause() {
+    if (!this.context || !this.source || !this.isRunning) return;
+
+    try {
+      this.source.stop();
+    } catch {
+      // safe no-op when the source has already ended
+    }
+
+    this.pausedAt = this.context.currentTime - this.startedAt;
+    this.isRunning = false;
+    this.source.disconnect();
+    this.source = null;
   }
 
-  setTrackGain(track: TrackKey, value: number) {
-    const node = this.tracks[track];
-    if (!node) return;
-    node.gain.gain.setTargetAtTime(value, this.context.currentTime, 0.05);
-    node.filter.gain.setTargetAtTime((value - 1) * 20, this.context.currentTime, 0.1);
+  stop() {
+    if (!this.source) return;
+
+    try {
+      this.source.stop();
+    } catch {
+      // safe no-op when the source has already stopped
+    }
+
+    this.source.disconnect();
+    this.source = null;
+    this.pausedAt = 0;
+    this.isRunning = false;
   }
 
-  setTrackPan(track: TrackKey, value: number) {
-    const node = this.tracks[track];
-    if (!node) return;
-    node.pan.pan.setTargetAtTime(value, this.context.currentTime, 0.05);
+  seek(time: number) {
+    this.pausedAt = Math.max(0, time);
+    if (this.isRunning) {
+      this.pause();
+    }
   }
 
-  setMasterVolume(value: number) {
-    this.output.gain.setTargetAtTime(value, this.context.currentTime, 0.05);
+  getCurrentTime() {
+    if (!this.context || !this.isRunning) return this.pausedAt;
+    return this.context.currentTime - this.startedAt;
   }
 
-  getTrackCount() {
-    return Object.keys(this.tracks).length;
+  isPlaying() {
+    return this.isRunning;
   }
 }
