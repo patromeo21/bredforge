@@ -35,3 +35,10 @@ export interface PatternState {
   length: number;
   steps: PatternStep[];
 }
+
+export interface MasterEffectState {
+  drive: number;
+  cutoff: number;
+  resonance: number;
+  limiter: number;
+}

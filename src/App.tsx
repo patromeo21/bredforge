@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { audioEngine } from './services/audio/AudioEngine';
 import type { TrackKey } from './services/audio/types';
 
@@ -26,6 +26,8 @@ type PatternStep = {
   active: boolean;
 };
 
+type TimeSignature = '4/4' | '3/4' | '6/8' | '5/4';
+
 const workspaces: WorkspaceName[] = [
   'Groovebox',
   'Samples',
@@ -38,7 +40,7 @@ const workspaces: WorkspaceName[] = [
 ];
 
 const sampleLibrary = ['Kicks', 'Snares', 'Hats', 'Bass', 'Synth'];
-const trackNames = ['vocals', 'drums', 'bass', 'other'];
+const timeSignatureOptions: TimeSignature[] = ['4/4', '3/4', '6/8', '5/4'];
 const patternLength = 16;
 
 const defaultTrackState: TrackDefinition[] = [
@@ -60,6 +62,7 @@ function App() {
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceName>('Groovebox');
   const [fileName, setFileName] = useState('No sample loaded');
   const [selectedSample, setSelectedSample] = useState(sampleLibrary[0]);
+  const [timeSignature, setTimeSignature] = useState<TimeSignature>('4/4');
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [masterVolume, setMasterVolume] = useState(0.8);
@@ -73,6 +76,30 @@ function App() {
   const [pattern, setPattern] = useState<Record<string, PatternStep[]>>(defaultPattern);
 
   const trackState = useMemo(() => tracks, [tracks]);
+
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    let frameId = 0;
+
+    const tick = () => {
+      const elapsed = audioEngine.getCurrentTime();
+      setCurrentTime(elapsed);
+
+      const beatDuration = 60 / tempo;
+      const stepDuration = beatDuration / 4;
+      const swingOffset = swing > 0 ? stepDuration * (swing / 200) : 0;
+      const stepIndex = Math.floor(elapsed / stepDuration) % patternLength;
+      const swingStepIndex = Math.floor(elapsed / (stepDuration + swingOffset)) % patternLength;
+      const nextIndex = swing > 0 && stepIndex % 2 === 1 ? swingStepIndex : stepIndex;
+
+      setPlayhead(nextIndex);
+      frameId = requestAnimationFrame(tick);
+    };
+
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [isPlaying, swing, tempo]);
 
   const toggleTrackState = (trackId: string, field: 'muted' | 'solo') => {
     setTracks((prev) =>
@@ -420,12 +447,32 @@ function App() {
               <strong>On</strong>
             </div>
             <div className="meta-row">
-              <span>Signature</span>
-              <strong>4 / 4</strong>
+              <span>Time Sig</span>
+              <select
+                value={timeSignature}
+                onChange={(event) => setTimeSignature(event.target.value as TimeSignature)}
+                className="time-signature-select"
+              >
+                {timeSignatureOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
             </div>
             <div className="meta-row">
               <span>Swing</span>
               <strong>{swing}%</strong>
+            </div>
+            <div className="meta-row meta-slider-row">
+              <label htmlFor="swing-slider" className="sr-only">Swing</label>
+              <input
+                id="swing-slider"
+                type="range"
+                min={0}
+                max={60}
+                step={1}
+                value={swing}
+                onChange={(event) => setSwing(Number(event.target.value))}
+              />
             </div>
           </div>
 
