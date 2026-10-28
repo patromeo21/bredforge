@@ -41,4 +41,4 @@ export interface MasterEffectState {
   cutoff: number;
   resonance: number;
   limiter: number;
-}';
+}
