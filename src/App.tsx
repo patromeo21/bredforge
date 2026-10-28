@@ -37,6 +37,7 @@ const workspaces: WorkspaceName[] = [
   'Arrangement',
 ];
 
+const sampleLibrary = ['Kicks', 'Snares', 'Hats', 'Bass', 'Synth'];
 const trackNames = ['vocals', 'drums', 'bass', 'other'];
 const patternLength = 16;
 
@@ -58,6 +59,7 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceName>('Groovebox');
   const [fileName, setFileName] = useState('No sample loaded');
+  const [selectedSample, setSelectedSample] = useState(sampleLibrary[0]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [masterVolume, setMasterVolume] = useState(0.8);
@@ -71,6 +73,21 @@ function App() {
   const [pattern, setPattern] = useState<Record<string, PatternStep[]>>(defaultPattern);
 
   const trackState = useMemo(() => tracks, [tracks]);
+
+  const toggleTrackState = (trackId: string, field: 'muted' | 'solo') => {
+    setTracks((prev) =>
+      prev.map((track) => {
+        if (track.id !== trackId) {
+          if (field === 'solo') {
+            return { ...track, solo: false };
+          }
+          return track;
+        }
+
+        return { ...track, [field]: !track[field] };
+      }),
+    );
+  };
 
   const handleFileLoad = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -129,7 +146,7 @@ function App() {
     });
   };
 
-    const updateTrackGain = (trackId: string, nextValue: number) => {
+  const updateTrackGain = (trackId: string, nextValue: number) => {
     const key = trackId as TrackKey;
 
     setTracks((prev) =>
@@ -273,8 +290,18 @@ function App() {
                 />
 
                 <div className="button-row">
-                  <button className="tiny-button">Mute</button>
-                  <button className="tiny-button">Solo</button>
+                  <button
+                    className={`tiny-button ${track.muted ? 'muted active' : ''}`}
+                    onClick={() => toggleTrackState(track.id, 'muted')}
+                  >
+                    {track.muted ? 'Unmute' : 'Mute'}
+                  </button>
+                  <button
+                    className={`tiny-button ${track.solo ? 'active' : ''}`}
+                    onClick={() => toggleTrackState(track.id, 'solo')}
+                  >
+                    {track.solo ? 'Solo On' : 'Solo'}
+                  </button>
                 </div>
               </div>
             ))}
@@ -411,10 +438,14 @@ function App() {
             </div>
 
             <div className="sample-list">
-              {['Kicks', 'Snares', 'Hats', 'Bass', 'Synth'].map((sample) => (
-                <button className="sample-entry" key={sample}>
+              {sampleLibrary.map((sample) => (
+                <button
+                  className={`sample-entry ${selectedSample === sample ? 'active' : ''}`}
+                  key={sample}
+                  onClick={() => setSelectedSample(sample)}
+                >
                   <span>{sample}</span>
-                  <small>Ready</small>
+                  <small>{selectedSample === sample ? 'Selected' : 'Ready'}</small>
                 </button>
               ))}
             </div>
@@ -455,6 +486,20 @@ function App() {
                     value={track.gain}
                     onChange={(event) => updateTrackGain(track.id, Number(event.target.value))}
                   />
+                  <div className="mix-strip-actions">
+                    <button
+                      className={`tiny-button ${track.muted ? 'muted active' : ''}`}
+                      onClick={() => toggleTrackState(track.id, 'muted')}
+                    >
+                      {track.muted ? 'Muted' : 'Mute'}
+                    </button>
+                    <button
+                      className={`tiny-button ${track.solo ? 'active' : ''}`}
+                      onClick={() => toggleTrackState(track.id, 'solo')}
+                    >
+                      {track.solo ? 'Solo' : 'Solo'}
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

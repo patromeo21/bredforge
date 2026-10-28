@@ -1,4 +1,4 @@
-:root {
+ :root {
   --bg-deep: #070d1a;
   --bg-strong: #0d1525;
   --bg-panel: #111d2f;
@@ -333,6 +333,11 @@ input[type='range'] {
   color: var(--text);
 }
 
+.sample-entry.active {
+  border-color: rgba(103, 232, 249, 0.35);
+  background: rgba(103, 232, 249, 0.08);
+}
+
 .sample-entry small {
   color: var(--text-muted);
 }
@@ -498,7 +503,8 @@ input[type='range'] {
   align-items: center;
 }
 
-.button-row {
+.button-row,
+.mix-strip-actions {
   display: flex;
   gap: 8px;
 }
@@ -510,6 +516,18 @@ input[type='range'] {
   background: rgba(148, 163, 184, 0.05);
   border: 1px solid var(--line);
   color: var(--text);
+}
+
+.tiny-button.active {
+  background: rgba(103, 232, 249, 0.08);
+  border-color: rgba(103, 232, 249, 0.28);
+  color: var(--text);
+}
+
+.tiny-button.muted.active {
+  background: rgba(248, 113, 113, 0.08);
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #fecaca;
 }
 
 .mixer-stack {
@@ -575,142 +593,3 @@ input[type='range'] {
     grid-template-columns: 110px repeat(16, minmax(26px, 1fr));
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
