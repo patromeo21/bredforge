@@ -42,6 +42,12 @@ const workspaces: WorkspaceName[] = [
 const sampleLibrary = ['Kicks', 'Snares', 'Hats', 'Bass', 'Synth'];
 const timeSignatureOptions: TimeSignature[] = ['4/4', '3/4', '6/8', '5/4'];
 const patternLength = 16;
+const timeSignatureBeats: Record<TimeSignature, number> = {
+  '4/4': 4,
+  '3/4': 3,
+  '6/8': 6,
+  '5/4': 5,
+};
 
 const defaultTrackState: TrackDefinition[] = [
   { id: 'vocals', name: 'vocals', color: '#67e8f9', gain: 1, pan: 0, muted: false, solo: false },
@@ -77,29 +83,36 @@ function App() {
 
   const trackState = useMemo(() => tracks, [tracks]);
 
+  const stepDuration = 60 / tempo / 4;
+  const swingCompensation = swing / 100;
+  const beatsPerBar = timeSignatureBeats[timeSignature] ?? 4;
+
   useEffect(() => {
     if (!isPlaying) return;
 
-    let frameId = 0;
+    let cancelled = false;
 
     const tick = () => {
+      if (cancelled) return;
+
       const elapsed = audioEngine.getCurrentTime();
       setCurrentTime(elapsed);
 
-      const beatDuration = 60 / tempo;
-      const stepDuration = beatDuration / 4;
-      const swingOffset = swing > 0 ? stepDuration * (swing / 200) : 0;
-      const stepIndex = Math.floor(elapsed / stepDuration) % patternLength;
-      const swingStepIndex = Math.floor(elapsed / (stepDuration + swingOffset)) % patternLength;
-      const nextIndex = swing > 0 && stepIndex % 2 === 1 ? swingStepIndex : stepIndex;
+      const stepDurationWithSwing = stepDuration * (1 + swingCompensation * 0.5);
+      const rawIndex = Math.floor(elapsed / stepDurationWithSwing) % patternLength;
+      const swingIndex = Math.floor(elapsed / stepDuration) % patternLength;
+      const nextIndex = rawIndex % 2 === 1 && swing > 0 ? swingIndex : rawIndex;
 
-      setPlayhead(nextIndex);
-      frameId = requestAnimationFrame(tick);
+      setPlayhead(nextIndex % patternLength);
+      requestAnimationFrame(tick);
     };
 
-    frameId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frameId);
-  }, [isPlaying, swing, tempo]);
+    const rafId = requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+    };
+  }, [isPlaying, stepDuration, swingCompensation, swing]);
 
   const toggleTrackState = (trackId: string, field: 'muted' | 'solo') => {
     setTracks((prev) =>
