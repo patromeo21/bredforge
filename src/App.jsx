@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { initialSessionState } from './stateSchema';
+import { initialSessionState } from '../stateSchema';
 import { DAWEventBus } from './EventBus';
 
-// Import our quarantined sandbox addons
-import WaveformChopperAddon from './addons-and-alterations/WaveformChopperAddon';
-import FilterRoutingAddon from './addons-and-alterations/FilterRoutingAddon';
-import TouchTrackerAddon from './addons-and-alterations/TouchTrackerAddon';
+// Import our quarantined sandbox addons (stepping up one level to root)
+import WaveformChopperAddon from '../addons-and-alterations/WaveformChopperAddon';
+import FilterRoutingAddon from '../addons-and-alterations/FilterRoutingAddon';
+import TouchTrackerAddon from '../addons-and-alterations/TouchTrackerAddon';
 
 export default function App() {
   const [session, setSession] = useState(initialSessionState);
