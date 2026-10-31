@@ -12,6 +12,43 @@ export default function App() {
   const [activeBank, setActiveBank] = useState('A');
   const [currentStep, setCurrentStep] = useState(0);
 
+  // Wire up Route A: Zero-latency pad audio triggering & synthesis engine
+  useEffect(() => {
+    const handleBusTrigger = ({ bank, padIndex, sample }) => {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc.type = 'triangle';
+        // Distinct frequency mapping per pad index for immediate acoustic feedback
+        osc.frequency.setValueAtTime(120 + padIndex * 30, audioCtx.currentTime);
+        
+        gain.gain.setValueAtTime(0.35, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.18);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.18);
+        
+        console.log(`[BredForge Audio] Triggered Bank ${bank} Pad ${padIndex + 1}: ${sample?.name || 'Slot ' + (padIndex + 1)}`);
+      } catch (err) {
+        console.warn('Audio context awaiting user gesture interaction', err);
+      }
+    };
+
+    DAWEventBus.on('PAD_TRIGGER', handleBusTrigger);
+    return () => {
+      DAWEventBus.off('PAD_TRIGGER', handleBusTrigger);
+    };
+  }, []);
+
   // Pad trigger handler (Route A: Zero-latency audition, Route B: Sequencer staging)
   const handlePadTrigger = (padIndex) => {
     const padData = session.sampleBanks[activeBank][padIndex];
@@ -26,93 +63,81 @@ export default function App() {
   };
 
   return (
-    <div 
-      className="min-h-screen bg-gray-950 text-gray-100 font-sans p-2 sm:p-4 select-none flex flex-col"
-      style={{ touchAction: 'none' }} // Prevents mobile Chrome/Safari zooming and panning gestures
-    >
-      {/* Header Deck: Project Controls & BPM / Speed Metadata */}
-      <header className="flex justify-between items-center bg-gray-900 border border-gray-800 rounded-lg p-3 mb-3 shadow-lg">
-        <div className="flex items-center space-x-2">
-          <span className="text-lg font-black tracking-widest text-amber-500 uppercase">BREDFORGE</span>
-          <span className="text-[10px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded border border-amber-500/40 font-mono">
-            MOBILE HYBRID DAW
-          </span>
-        </div>
-
-        <div className="flex items-center space-x-4 font-mono text-xs">
-          <div className="flex items-center space-x-1 bg-gray-950 px-2.5 py-1 rounded border border-gray-800">
-            <span className="text-gray-500">BPM</span>
-            <span className="text-sky-400 font-bold">{session.bpm}</span>
-          </div>
-          <div className="flex items-center space-x-1 bg-gray-950 px-2.5 py-1 rounded border border-gray-800">
-            <span className="text-gray-500">SPD</span>
-            <span className="text-emerald-400 font-bold">{session.speed}</span>
-          </div>
+    <div className="bredforge-app" style={{ background: '#0a0a0c', color: '#f0f0f5', minHeight: '100vh', padding: '1rem', fontFamily: 'system-ui, sans-serif' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #222', paddingBottom: '0.75rem' }}>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: '700', letterSpacing: '0.05em' }}>BredForge <span style={{ fontSize: '0.75rem', color: '#888', fontWeight: '400' }}>Mobile DAW v0.9</span></h1>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {['A', 'B', 'C', 'D'].map(bank => (
+            <button
+              key={bank}
+              onClick={() => setActiveBank(bank)}
+              style={{
+                background: activeBank === bank ? '#3b82f6' : '#18181b',
+                color: '#fff',
+                border: '1px solid #333',
+                padding: '0.4rem 0.8rem',
+                borderRadius: '4px',
+                fontWeight: '600',
+                cursor: 'pointer'
+              }}
+            >
+              Bank {bank}
+            </button>
+          ))}
         </div>
       </header>
 
-      {/* Main Bento Layout Grid (Left Stage: Sound Sculpting, Right Stage: Tracker Matrix) */}
-      <main className="grid grid-cols-1 lg:grid-cols-12 gap-3 flex-grow mb-3">
-        {/* Left Bento Stage: Waveform Chopper & Filter Routing */}
-        <section className="lg:col-span-6 flex flex-col space-y-3">
-          <div className="bg-gray-900/90 border border-gray-800 rounded-lg p-3 shadow-md flex-grow">
-            <span className="text-[11px] font-mono text-gray-400 uppercase tracking-wider block mb-2 font-bold">
-              Bento Deck 01 // Sample Chopper
-            </span>
+      {/* Main Bento Grid Layout */}
+      <main style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+        
+        {/* MPC 4x4 Pad Performance Panel */}
+        <section style={{ background: '#121216', border: '1px solid #26262b', borderRadius: '8px', padding: '1rem' }}>
+          <h2 style={{ fontSize: '0.9rem', color: '#a1a1aa', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Performance Pads (Bank {activeBank})
+          </h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+            {Array.from({ length: 16 }).map((_, i) => (
+              <button
+                key={i}
+                onTouchStart={() => handlePadTrigger(i)}
+                onMouseDown={() => handlePadTrigger(i)}
+                style={{
+                  aspectRatio: '1',
+                  background: '#1e1e24',
+                  border: '1px solid #33333d',
+                  borderRadius: '6px',
+                  color: '#e4e4e7',
+                  fontSize: '0.85rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  touchAction: 'manipulation',
+                  transition: 'background 0.1s'
+                }}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* Sandbox Addons Integration */}
+        <section style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ background: '#121216', border: '1px solid #26262b', borderRadius: '8px', padding: '1rem' }}>
             <WaveformChopperAddon />
           </div>
-
-          <div className="bg-gray-900/90 border border-gray-800 rounded-lg p-3 shadow-md flex-grow">
-            <span className="text-[11px] font-mono text-gray-400 uppercase tracking-wider block mb-2 font-bold">
-              Bento Deck 02 // Filter Routing
-            </span>
+          <div style={{ background: '#121216', border: '1px solid #26262b', borderRadius: '8px', padding: '1rem' }}>
             <FilterRoutingAddon />
           </div>
         </section>
 
-        {/* Right Stage: M8 Touch-Optimized Tracker Grid */}
-        <section className="lg:col-span-6 bg-gray-900/90 border border-gray-800 rounded-lg p-3 shadow-md flex flex-col">
-          <TouchTrackerAddon currentStep={currentStep} onStepSelect={setCurrentStep} />
-        </section>
       </main>
 
-      {/* Bottom Stage: 4x4 MPC-Style Performance Pad Drawer */}
-      <footer className="bg-gray-900 border border-gray-800 rounded-lg p-3 shadow-xl">
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-xs font-mono text-gray-400 font-bold uppercase">
-            MPC Performance Pads // Bank {activeBank}
-          </span>
-          {/* Bank Selectors */}
-          <div className="flex space-x-1 font-mono text-xs">
-            {['A', 'B', 'C', 'D'].map(bank => (
-              <button
-                key={bank}
-                onClick={() => setActiveBank(bank)}
-                className={`px-3 py-1 rounded font-bold transition-colors ${
-                  activeBank === bank
-                    ? 'bg-amber-500 text-gray-950 shadow-md'
-                    : 'bg-gray-950 text-gray-400 border border-gray-800 hover:text-gray-200'
-                }`}
-              >
-                {bank}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* 4x4 Pad Grid */}
-        <div className="grid grid-cols-4 gap-2">
-          {session.sampleBanks[activeBank].map((pad, idx) => (
-            <button
-              key={pad.id}
-              onPointerDown={() => handlePadTrigger(idx)}
-              className="h-14 bg-gray-950 border border-gray-800 active:bg-amber-500/30 active:border-amber-500 rounded-lg flex flex-col items-center justify-center font-mono text-xs text-gray-300 hover:border-gray-700 transition-all shadow-inner"
-            >
-              <span className="text-[10px] text-gray-500 font-bold">{pad.id}</span>
-              <span className="text-[10px] text-sky-400 font-semibold truncate max-w-[80%]">{pad.name}</span>
-            </button>
-          ))}
-        </div>
+      {/* Tracker & Touch Grid Footer */}
+      <footer style={{ marginTop: '1rem', background: '#121216', border: '1px solid #26262b', borderRadius: '8px', padding: '1rem' }}>
+        <TouchTrackerAddon currentStep={currentStep} />
       </footer>
     </div>
   );
