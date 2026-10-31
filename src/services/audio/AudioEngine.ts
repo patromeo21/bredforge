@@ -1,140 +1,122 @@
-// src/services/audio/AudioEngine.ts
-// Complete AudioEngine implementation satisfying all App.tsx method calls including seek, setTrackGain, and setTrackPan.
+// src/services/AudioEngine.ts
 
-export class AudioEngine {
+export interface PadVoice {
+  buffer: AudioBuffer | null;
+  start: number; // in seconds
+  end: number;   // in seconds
+  gain: number;  // 0.0 to 1.0
+}
+
+class AudioEngineService {
   private ctx: AudioContext | null = null;
-  private bufferMap: Map<string, AudioBuffer> = new Map();
-  private activeSources: Map<string, AudioBufferSourceNode> = new Map();
-  private startTimeMap: Map<string, number> = new Map();
-  private masterVolume: number = 0.85;
+  private masterGain: GainNode | null = null;
+  private voices: Map<number, PadVoice> = new Map();
+  private activeSources: Map<number, AudioBufferSourceNode> = new Map();
+  private isUnlocked: boolean = false;
 
-  public getContext(): AudioContext {
-    if (!this.ctx) {
-      const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.ctx = new AudioCtxClass();
-    }
-    if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
-    return this.ctx;
+  constructor() {
+    // Lazy init to satisfy browser autoplay policies
   }
 
-  public async loadFile(key?: string | File, file?: File): Promise<AudioBuffer | null> {
-    try {
-      const targetFile = file || (key instanceof File ? key : undefined);
-      const targetKey = typeof key === 'string' ? key : 'default';
-      if (!targetFile) return null;
+  public init() {
+    if (this.ctx) return;
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    this.ctx = new AudioCtx();
+    this.masterGain = this.ctx.createGain();
+    this.masterGain.gain.setValueAtTime(0.85, this.ctx.currentTime);
+    this.masterGain.connect(this.ctx.destination);
 
-      const context = this.getContext();
-      const arrayBuffer = await targetFile.arrayBuffer();
-      const decoded = await context.decodeAudioData(arrayBuffer);
-      this.bufferMap.set(targetKey, decoded);
-      return decoded;
-    } catch (err) {
-      console.error('[AudioEngine] Failed to load file:', err);
-      return null;
-    }
-  }
-
-  public isLoaded(key?: string): boolean {
-    const targetKey = key || 'default';
-    return this.bufferMap.has(targetKey) || this.bufferMap.size > 0;
-  }
-
-  public play(key?: string | { rate?: number; volume?: number }, options?: { rate?: number; volume?: number }): void {
-    const context = this.getContext();
-    const targetKey = typeof key === 'string' ? key : Array.from(this.bufferMap.keys())[0] || 'default';
-    const opts = typeof key === 'object' ? key : options;
-
-    const buffer = this.bufferMap.get(targetKey);
-    if (!buffer) return;
-
-    try {
-      this.pause(targetKey);
-      const source = context.createBufferSource();
-      source.buffer = buffer;
-
-      if (opts?.rate) {
-        source.playbackRate.setValueAtTime(opts.rate, context.currentTime);
-      }
-
-      const gain = context.createGain();
-      gain.gain.setValueAtTime(opts?.volume ?? this.masterVolume, context.currentTime);
-
-      source.connect(gain);
-      gain.connect(context.destination);
-
-      source.start(0);
-      this.activeSources.set(targetKey, source);
-      this.startTimeMap.set(targetKey, context.currentTime);
-
-      source.onended = () => {
-        this.activeSources.delete(targetKey);
-      };
-    } catch (err) {
-      console.error('[AudioEngine] Playback error:', err);
-    }
-  }
-
-  public pause(key?: string): void {
-    if (key) {
-      const source = this.activeSources.get(key);
-      if (source) {
-        try { source.stop(); } catch {}
-        this.activeSources.delete(key);
-      }
-    } else {
-      this.activeSources.forEach((source) => {
-        try { source.stop(); } catch {}
+    // Initialize 16 default pad configs
+    for (let i = 0; i < 16; i++) {
+      this.voices.set(i, {
+        buffer: null,
+        start: 0,
+        end: 0,
+        gain: 1.0,
       });
-      this.activeSources.clear();
     }
   }
 
-  public seek(timeOrKey?: number | string, time?: number): void {
-    // Stub for seeking playback position
+  public async unlock(): Promise<void> {
+    this.init();
+    if (this.ctx && this.ctx.state === 'suspended') {
+      await this.ctx.resume();
+    }
+    this.isUnlocked = true;
   }
 
-  public setTrackGain(trackIdOrVal?: string | number, gainVal?: number): void {
-    // Stub for track level gain adjustment
+  public async decodeAudioFile(file: File): Promise<AudioBuffer> {
+    this.init();
+    const arrayBuffer = await file.arrayBuffer();
+    return await this.ctx!.decodeAudioData(arrayBuffer);
   }
 
-  public setTrackPan(trackIdOrVal?: string | number, panVal?: number): void {
-    // Stub for track stereo panning adjustment
+  public setPadVoice(padIndex: number, voice: Partial<PadVoice>) {
+    const current = this.voices.get(padIndex) || { buffer: null, start: 0, end: 0, gain: 1.0 };
+    this.voices.set(padIndex, { ...current, ...voice });
   }
 
-  public setMasterVolume(val: number): void {
-    this.masterVolume = val;
+  public triggerPad(padIndex: number) {
+    if (!this.ctx || !this.isUnlocked) this.unlock();
+    if (!this.ctx) return;
+
+    const voice = this.voices.get(padIndex);
+    if (!voice || !voice.buffer) {
+      // Fallback synthesizer click/ping if no sample loaded yet for testing
+      this.triggerTestSynth(padIndex);
+      return;
+    }
+
+    // Stop existing node on this pad if re-triggered (one-shot polyphonic guard)
+    this.stopPad(padIndex);
+
+    const source = this.ctx.createBufferSource();
+    const padGain = this.ctx.createGain();
+    
+    source.buffer = voice.buffer;
+    padGain.gain.setValueAtTime(voice.gain, this.ctx.currentTime);
+
+    source.connect(padGain);
+    padGain.connect(this.masterGain!);
+
+    const duration = voice.end > voice.start ? voice.end - voice.start : voice.buffer.duration - voice.start;
+    source.start(this.ctx.currentTime, voice.start, Math.max(0.01, duration));
+    
+    this.activeSources.set(padIndex, source);
   }
 
-  public setPlaybackRate(rateOrKey?: number | string, rate?: number): void {
-    const targetRate = typeof rateOrKey === 'number' ? rateOrKey : rate;
-    if (!targetRate) return;
-
-    const context = this.getContext();
-    this.activeSources.forEach((source) => {
-      if (source.playbackRate) {
-        source.playbackRate.setValueAtTime(targetRate, context.currentTime);
+  public stopPad(padIndex: number) {
+    const existing = this.activeSources.get(padIndex);
+    if (existing) {
+      try {
+        existing.stop();
+        existing.disconnect();
+      } catch {
+        // Node already stopped naturally
       }
-    });
+      this.activeSources.delete(padIndex);
+    }
   }
 
-  public getCurrentTime(key?: string): number {
-    const context = this.ctx;
-    if (!context) return 0;
-    const targetKey = key || Array.from(this.startTimeMap.keys())[0];
-    if (!targetKey) return 0;
-    const startTime = this.startTimeMap.get(targetKey);
-    if (startTime === undefined) return 0;
-    return context.currentTime - startTime;
-  }
+  private triggerTestSynth(padIndex: number) {
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
 
-  public getDuration(key?: string): number {
-    const targetKey = key || Array.from(this.bufferMap.keys())[0];
-    if (!targetKey) return 0;
-    const buffer = this.bufferMap.get(targetKey);
-    return buffer ? buffer.duration : 0;
+    // Map 16 pads across a simple chromatic pitch scale for testing
+    const baseFreq = 130.81; // C3
+    osc.frequency.setValueAtTime(baseFreq * Math.pow(2, padIndex / 12), this.ctx.currentTime);
+    osc.type = 'sine';
+
+    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.3);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain!);
+
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.3);
   }
 }
 
-export const audioEngine = new AudioEngine();
+export const AudioEngine = new AudioEngineService();
