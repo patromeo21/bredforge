@@ -1,38 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { initialSessionState } from './stateSchema';
 import { DAWEventBus } from './EventBus';
+import { SampleManager } from './services/audio/SampleManager';
 
 import WaveformChopperAddon from '../addons-and-alterations/WaveformChopperAddon';
 import FilterRoutingAddon from '../addons-and-alterations/FilterRoutingAddon';
 import TouchTrackerAddon from '../addons-and-alterations/TouchTrackerAddon';
-
-// In-memory audio buffer cache for zero-latency sample playback
-const sampleBufferCache = {};
 
 export default function App() {
   const [session, setSession] = useState(initialSessionState);
   const [activeBank, setActiveBank] = useState('A');
   const [currentStep, setCurrentStep] = useState(0);
   const [activeVoices, setActiveVoices] = useState(new Set());
-  const [audioCtx, setAudioCtx] = useState(null);
 
-  // Initialize unified AudioContext on first user interaction
-  const getAudioContext = () => {
-    if (!audioCtx) {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      setAudioCtx(ctx);
-      return ctx;
-    }
-    if (audioCtx.state === 'suspended') {
-      audioCtx.resume();
-    }
-    return audioCtx;
-  };
-
-  // Unified Audio & Sequencer Engine (Sample Buffers + Fallback Synthesis)
+  // Unified Audio & Sequencer Engine linked to SampleManager
   useEffect(() => {
     const handleBusTrigger = ({ bank, padIndex, sample, timestamp }) => {
-      // Visual feedback state tracking
+      // Visual feedback triggering
       setActiveVoices(prev => new Set(prev).add(padIndex));
       setTimeout(() => {
         setActiveVoices(prev => {
@@ -43,25 +27,22 @@ export default function App() {
       }, 120);
 
       try {
-        const ctx = getAudioContext();
-        if (!ctx) return;
+        const ctx = SampleManager.getContext();
+        const buffer = SampleManager.getBuffer(bank, padIndex);
 
-        const padKey = `${bank}_${padIndex}`;
-        const cachedBuffer = sampleBufferCache[padKey];
-
-        if (cachedBuffer) {
-          // Path 1: Play decoded AudioBuffer (Real Sample Playback)
-          const bufferSource = ctx.createBufferSource();
+        if (buffer) {
+          // Route A1: Play loaded AudioBuffer via AudioBufferSourceNode
+          const source = ctx.createBufferSource();
           const gainNode = ctx.createGain();
-          bufferSource.buffer = cachedBuffer;
-          gainNode.gain.setValueAtTime(0.8, ctx.currentTime);
+          source.buffer = buffer;
+          gainNode.gain.setValueAtTime(0.85, ctx.currentTime);
 
-          bufferSource.connect(gainNode);
+          source.connect(gainNode);
           gainNode.connect(ctx.destination);
-          bufferSource.start(0);
-          console.log(`[BredForge Engine] Playing Sample Buffer for Bank ${bank} Pad ${padIndex + 1}`);
+          source.start(0);
+          console.log(`[BredForge Audio] Sample Playback | Bank ${bank} Pad ${padIndex + 1}`);
         } else {
-          // Path 2: Hardware-emulated transient fallback synthesis
+          // Route A2: Hardware-emulated transient fallback synthesis
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
 
@@ -76,13 +57,13 @@ export default function App() {
 
           osc.start();
           osc.stop(ctx.currentTime + 0.15);
-          console.log(`[BredForge Engine] Transient Synth Fallback for Bank ${bank} Pad ${padIndex + 1}`);
+          console.log(`[BredForge Audio] Synth Transient Fallback | Bank ${bank} Pad ${padIndex + 1}`);
         }
 
-        // Sequencer Route B logging
+        // Route B: Sequencer timeline staging log
         console.log(`[BredForge Tracker Staging] Step recorded | Bank: ${bank} | Pad: ${padIndex + 1} | Time: ${timestamp.toFixed(2)}ms`);
       } catch (err) {
-        console.warn('AudioContext playback error:', err);
+        console.warn('AudioContext execution block:', err);
       }
     };
 
@@ -90,7 +71,7 @@ export default function App() {
     return () => {
       DAWEventBus.off('PAD_TRIGGER', handleBusTrigger);
     };
-  }, [audioCtx]);
+  }, []);
 
   const handlePadTrigger = (padIndex) => {
     const padData = session.sampleBanks[activeBank][padIndex];
@@ -103,25 +84,19 @@ export default function App() {
     });
   };
 
-  // Sample file import handler for populating pad audio buffers
-  const handleFileUpload = async (padIndex, file) => {
-    if (!file) return;
-    try {
-      const ctx = getAudioContext();
-      const arrayBuffer = await file.arrayBuffer();
-      const decodedBuffer = await ctx.decodeAudioData(arrayBuffer);
-      const padKey = `${activeBank}_${padIndex}`;
-      sampleBufferCache[padKey] = decodedBuffer;
-      console.log(`[SampleManager] Loaded custom sample into Bank ${activeBank} Pad ${padIndex + 1}`);
-    } catch (err) {
-      console.error('Failed to decode audio file:', err);
+  const handleFileImport = async (padIndex, event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      await SampleManager.loadSample(activeBank, padIndex, file);
+      // Force trigger re-render visual update if necessary
+      setSession({ ...session });
     }
   };
 
   return (
     <div className="bredforge-app" style={{ background: '#0a0a0c', color: '#f0f0f5', minHeight: '100vh', padding: '1rem', fontFamily: 'system-ui, sans-serif', touchAction: 'manipulation' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #222', paddingBottom: '0.75rem' }}>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: '700', letterSpacing: '0.05em' }}>BredForge <span style={{ fontSize: '0.75rem', color: '#888', fontWeight: '400' }}>Mobile DAW v1.0</span></h1>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: '700', letterSpacing: '0.05em' }}>BredForge <span style={{ fontSize: '0.75rem', color: '#888', fontWeight: '400' }}>Mobile DAW v1.1</span></h1>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {['A', 'B', 'C', 'D'].map(bank => (
             <button
@@ -144,6 +119,7 @@ export default function App() {
       </header>
 
       <main style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+        {/* Pad Matrix with Sample Upload Handles */}
         <section style={{ background: '#121216', border: '1px solid #26262b', borderRadius: '8px', padding: '1rem' }}>
           <h2 style={{ fontSize: '0.9rem', color: '#a1a1aa', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Performance Pads (Bank {activeBank})
@@ -151,32 +127,48 @@ export default function App() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
             {Array.from({ length: 16 }).map((_, i) => {
               const isActive = activeVoices.has(i);
+              const hasSample = SampleManager.hasBuffer(activeBank, i);
               return (
-                <button
-                  key={i}
-                  onTouchStart={(e) => { e.preventDefault(); handlePadTrigger(i); }}
-                  onMouseDown={() => handlePadTrigger(i)}
-                  style={{
-                    aspectRatio: '1',
-                    background: isActive ? '#3b82f6' : '#1e1e24',
-                    border: `1px solid ${isActive ? '#60a5fa' : '#33333d'}`,
-                    borderRadius: '6px',
-                    color: '#e4e4e7',
-                    fontSize: '0.85rem',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    touchAction: 'manipulation',
-                    userSelect: 'none',
-                    WebkitUserSelect: 'none',
-                    transform: isActive ? 'scale(0.96)' : 'scale(1)',
-                    transition: 'background 0.05s, transform 0.05s, border-color 0.05s'
-                  }}
-                >
-                  {i + 1}
-                </button>
+                <div key={i} style={{ position: 'relative', aspectRatio: '1' }}>
+                  <button
+                    onTouchStart={(e) => { e.preventDefault(); handlePadTrigger(i); }}
+                    onMouseDown={() => handlePadTrigger(i)}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      background: isActive ? '#3b82f6' : (hasSample ? '#1e3a5f' : '#1e1e24'),
+                      border: `1px solid ${isActive ? '#60a5fa' : (hasSample ? '#3b82f6' : '#33333d')}`,
+                      borderRadius: '6px',
+                      color: '#e4e4e7',
+                      fontSize: '0.85rem',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      touchAction: 'manipulation',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      transform: isActive ? 'scale(0.96)' : 'scale(1)',
+                      transition: 'background 0.05s, transform 0.05s, border-color 0.05s'
+                    }}
+                  >
+                    <span>{i + 1}</span>
+                    <span style={{ fontSize: '0.6rem', color: hasSample ? '#93c5fd' : '#666', marginTop: '2px' }}>
+                      {hasSample ? 'WAV' : 'SYNTH'}
+                    </span>
+                  </button>
+                  <label style={{ position: 'absolute', bottom: '2px', right: '2px', cursor: 'pointer', opacity: 0.6 }}>
+                    <span style={{ fontSize: '0.6rem', background: '#000', padding: '1px 3px', borderRadius: '3px' }}>+</span>
+                    <input
+                      type="file"
+                      accept="audio/*"
+                      onChange={(e) => handleFileImport(i, e)}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                </div>
               );
             })}
           </div>
