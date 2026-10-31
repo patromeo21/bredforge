@@ -6,13 +6,30 @@ import WaveformChopperAddon from '../addons-and-alterations/WaveformChopperAddon
 import FilterRoutingAddon from '../addons-and-alterations/FilterRoutingAddon';
 import TouchTrackerAddon from '../addons-and-alterations/TouchTrackerAddon';
 
+// In-memory audio buffer cache for zero-latency sample playback
+const sampleBufferCache = {};
+
 export default function App() {
   const [session, setSession] = useState(initialSessionState);
   const [activeBank, setActiveBank] = useState('A');
   const [currentStep, setCurrentStep] = useState(0);
   const [activeVoices, setActiveVoices] = useState(new Set());
+  const [audioCtx, setAudioCtx] = useState(null);
 
-  // Unified Audio & Sequencer Engine (Route A + Route B + Touch Optimization)
+  // Initialize unified AudioContext on first user interaction
+  const getAudioContext = () => {
+    if (!audioCtx) {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      setAudioCtx(ctx);
+      return ctx;
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    return audioCtx;
+  };
+
+  // Unified Audio & Sequencer Engine (Sample Buffers + Fallback Synthesis)
   useEffect(() => {
     const handleBusTrigger = ({ bank, padIndex, sample, timestamp }) => {
       // Visual feedback state tracking
@@ -26,31 +43,46 @@ export default function App() {
       }, 120);
 
       try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') {
-          audioCtx.resume();
+        const ctx = getAudioContext();
+        if (!ctx) return;
+
+        const padKey = `${bank}_${padIndex}`;
+        const cachedBuffer = sampleBufferCache[padKey];
+
+        if (cachedBuffer) {
+          // Path 1: Play decoded AudioBuffer (Real Sample Playback)
+          const bufferSource = ctx.createBufferSource();
+          const gainNode = ctx.createGain();
+          bufferSource.buffer = cachedBuffer;
+          gainNode.gain.setValueAtTime(0.8, ctx.currentTime);
+
+          bufferSource.connect(gainNode);
+          gainNode.connect(ctx.destination);
+          bufferSource.start(0);
+          console.log(`[BredForge Engine] Playing Sample Buffer for Bank ${bank} Pad ${padIndex + 1}`);
+        } else {
+          // Path 2: Hardware-emulated transient fallback synthesis
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(110 + padIndex * 28, ctx.currentTime);
+          
+          gain.gain.setValueAtTime(0.4, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.start();
+          osc.stop(ctx.currentTime + 0.15);
+          console.log(`[BredForge Engine] Transient Synth Fallback for Bank ${bank} Pad ${padIndex + 1}`);
         }
 
-        // Hardware-emulated transient synthesis for zero-latency preview
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(110 + padIndex * 28, audioCtx.currentTime);
-        
-        gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
-
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.15);
-
-        // Route B: Staging event to tracker timeline history log
+        // Sequencer Route B logging
         console.log(`[BredForge Tracker Staging] Step recorded | Bank: ${bank} | Pad: ${padIndex + 1} | Time: ${timestamp.toFixed(2)}ms`);
       } catch (err) {
-        console.warn('Audio context restriction or gesture lock:', err);
+        console.warn('AudioContext playback error:', err);
       }
     };
 
@@ -58,7 +90,7 @@ export default function App() {
     return () => {
       DAWEventBus.off('PAD_TRIGGER', handleBusTrigger);
     };
-  }, []);
+  }, [audioCtx]);
 
   const handlePadTrigger = (padIndex) => {
     const padData = session.sampleBanks[activeBank][padIndex];
@@ -71,10 +103,25 @@ export default function App() {
     });
   };
 
+  // Sample file import handler for populating pad audio buffers
+  const handleFileUpload = async (padIndex, file) => {
+    if (!file) return;
+    try {
+      const ctx = getAudioContext();
+      const arrayBuffer = await file.arrayBuffer();
+      const decodedBuffer = await ctx.decodeAudioData(arrayBuffer);
+      const padKey = `${activeBank}_${padIndex}`;
+      sampleBufferCache[padKey] = decodedBuffer;
+      console.log(`[SampleManager] Loaded custom sample into Bank ${activeBank} Pad ${padIndex + 1}`);
+    } catch (err) {
+      console.error('Failed to decode audio file:', err);
+    }
+  };
+
   return (
     <div className="bredforge-app" style={{ background: '#0a0a0c', color: '#f0f0f5', minHeight: '100vh', padding: '1rem', fontFamily: 'system-ui, sans-serif', touchAction: 'manipulation' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid #222', paddingBottom: '0.75rem' }}>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: '700', letterSpacing: '0.05em' }}>BredForge <span style={{ fontSize: '0.75rem', color: '#888', fontWeight: '400' }}>Mobile DAW v0.95</span></h1>
+        <h1 style={{ fontSize: '1.25rem', fontWeight: '700', letterSpacing: '0.05em' }}>BredForge <span style={{ fontSize: '0.75rem', color: '#888', fontWeight: '400' }}>Mobile DAW v1.0</span></h1>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {['A', 'B', 'C', 'D'].map(bank => (
             <button
