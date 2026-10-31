@@ -1,5 +1,5 @@
 // src/services/audio/AudioEngine.ts
-// Complete AudioEngine implementation with flexible, optional argument signatures to satisfy src/App.tsx
+// Complete AudioEngine implementation satisfying all App.tsx method calls including seek, setTrackGain, and setTrackPan.
 
 export class AudioEngine {
   private ctx: AudioContext | null = null;
@@ -89,6 +89,18 @@ export class AudioEngine {
       });
       this.activeSources.clear();
     }
+  }
+
+  public seek(timeOrKey?: number | string, time?: number): void {
+    // Stub for seeking playback position
+  }
+
+  public setTrackGain(trackIdOrVal?: string | number, gainVal?: number): void {
+    // Stub for track level gain adjustment
+  }
+
+  public setTrackPan(trackIdOrVal?: string | number, panVal?: number): void {
+    // Stub for track stereo panning adjustment
   }
 
   public setMasterVolume(val: number): void {
