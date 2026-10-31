@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { AudioEngine } from './services/AudioEngine';
+import { AudioEngine } from './services/audio/AudioEngine';
 
 export default function App() {
   const [activeBank, setActiveBank] = useState<'A' | 'B' | 'C' | 'D'>('A');

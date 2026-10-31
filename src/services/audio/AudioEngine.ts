@@ -120,3 +120,4 @@ class AudioEngineService {
 }
 
 export const AudioEngine = new AudioEngineService();
+export default AudioEngine;
