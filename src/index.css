@@ -1,29 +1,25 @@
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.time-signature-select {
-  background: rgba(148, 163, 184, 0.04);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--text);
-  padding: 0.45rem 0.55rem;
-  min-width: 72px;
-}
-
-.meta-slider-row {
-  padding-top: 4px;
-  padding-bottom: 4px;
-}
-
-.meta-slider-row input {
+/* Panoramic DAW Workspace Canvas */
+html, body {
   width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: #0d0f12;
+  overflow-x: auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Fixed minimum width for panoramic landscape layout */
+#root, .daw-container {
+  min-width: 1024px;
+  min-height: 100vh;
+  box-sizing: border-box;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Precision zoom targets: allow fine touch control on UI controls */
+.knob-control, .slider-control, .pad-cell {
+  touch-action: manipulation;
 }
