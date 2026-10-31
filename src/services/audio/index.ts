@@ -1,7 +1,7 @@
-export { AudioEngine, audioEngine } from './AudioEngine';
+export { AudioEngine } from './AudioEngine';
 export { AudioGraph } from './AudioGraph';
-export { AudioTransport } from './Transport';
 export { SampleManager } from './SampleManager';
+export { Transport } from './Transport';
 export type {
   TrackKey,
   EngineTrackState,
