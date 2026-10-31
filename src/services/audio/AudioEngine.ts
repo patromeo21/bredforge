@@ -1,5 +1,5 @@
 // src/services/audio/AudioEngine.ts
-// Complete AudioEngine implementation satisfying all App.tsx method calls.
+// Complete AudioEngine implementation with flexible, optional argument signatures to satisfy src/App.tsx
 
 export class AudioEngine {
   private ctx: AudioContext | null = null;
@@ -19,12 +19,16 @@ export class AudioEngine {
     return this.ctx;
   }
 
-  public async loadFile(key: string, file: File): Promise<AudioBuffer | null> {
+  public async loadFile(key?: string | File, file?: File): Promise<AudioBuffer | null> {
     try {
+      const targetFile = file || (key instanceof File ? key : undefined);
+      const targetKey = typeof key === 'string' ? key : 'default';
+      if (!targetFile) return null;
+
       const context = this.getContext();
-      const arrayBuffer = await file.arrayBuffer();
+      const arrayBuffer = await targetFile.arrayBuffer();
       const decoded = await context.decodeAudioData(arrayBuffer);
-      this.bufferMap.set(key, decoded);
+      this.bufferMap.set(targetKey, decoded);
       return decoded;
     } catch (err) {
       console.error('[AudioEngine] Failed to load file:', err);
@@ -32,49 +36,58 @@ export class AudioEngine {
     }
   }
 
-  public isLoaded(key: string): boolean {
-    return this.bufferMap.has(key);
+  public isLoaded(key?: string): boolean {
+    const targetKey = key || 'default';
+    return this.bufferMap.has(targetKey) || this.bufferMap.size > 0;
   }
 
-  public play(key: string, options?: { rate?: number; volume?: number }): void {
+  public play(key?: string | { rate?: number; volume?: number }, options?: { rate?: number; volume?: number }): void {
     const context = this.getContext();
-    const buffer = this.bufferMap.get(key);
+    const targetKey = typeof key === 'string' ? key : Array.from(this.bufferMap.keys())[0] || 'default';
+    const opts = typeof key === 'object' ? key : options;
+
+    const buffer = this.bufferMap.get(targetKey);
     if (!buffer) return;
 
     try {
-      this.pause(key);
+      this.pause(targetKey);
       const source = context.createBufferSource();
       source.buffer = buffer;
-      
-      if (options?.rate) {
-        source.playbackRate.setValueAtTime(options.rate, context.currentTime);
+
+      if (opts?.rate) {
+        source.playbackRate.setValueAtTime(opts.rate, context.currentTime);
       }
 
       const gain = context.createGain();
-      gain.gain.setValueAtTime(options?.volume ?? this.masterVolume, context.currentTime);
+      gain.gain.setValueAtTime(opts?.volume ?? this.masterVolume, context.currentTime);
 
       source.connect(gain);
       gain.connect(context.destination);
-      
+
       source.start(0);
-      this.activeSources.set(key, source);
-      this.startTimeMap.set(key, context.currentTime);
+      this.activeSources.set(targetKey, source);
+      this.startTimeMap.set(targetKey, context.currentTime);
 
       source.onended = () => {
-        this.activeSources.delete(key);
+        this.activeSources.delete(targetKey);
       };
     } catch (err) {
       console.error('[AudioEngine] Playback error:', err);
     }
   }
 
-  public pause(key: string): void {
-    const source = this.activeSources.get(key);
-    if (source) {
-      try {
-        source.stop();
-      } catch {}
-      this.activeSources.delete(key);
+  public pause(key?: string): void {
+    if (key) {
+      const source = this.activeSources.get(key);
+      if (source) {
+        try { source.stop(); } catch {}
+        this.activeSources.delete(key);
+      }
+    } else {
+      this.activeSources.forEach((source) => {
+        try { source.stop(); } catch {}
+      });
+      this.activeSources.clear();
     }
   }
 
@@ -82,24 +95,32 @@ export class AudioEngine {
     this.masterVolume = val;
   }
 
-  public setPlaybackRate(key: string, rate: number): void {
-    const source = this.activeSources.get(key);
-    if (source && source.playbackRate) {
-      const context = this.getContext();
-      source.playbackRate.setValueAtTime(rate, context.currentTime);
-    }
+  public setPlaybackRate(rateOrKey?: number | string, rate?: number): void {
+    const targetRate = typeof rateOrKey === 'number' ? rateOrKey : rate;
+    if (!targetRate) return;
+
+    const context = this.getContext();
+    this.activeSources.forEach((source) => {
+      if (source.playbackRate) {
+        source.playbackRate.setValueAtTime(targetRate, context.currentTime);
+      }
+    });
   }
 
-  public getCurrentTime(key: string): number {
+  public getCurrentTime(key?: string): number {
     const context = this.ctx;
     if (!context) return 0;
-    const startTime = this.startTimeMap.get(key);
+    const targetKey = key || Array.from(this.startTimeMap.keys())[0];
+    if (!targetKey) return 0;
+    const startTime = this.startTimeMap.get(targetKey);
     if (startTime === undefined) return 0;
     return context.currentTime - startTime;
   }
 
-  public getDuration(key: string): number {
-    const buffer = this.bufferMap.get(key);
+  public getDuration(key?: string): number {
+    const targetKey = key || Array.from(this.bufferMap.keys())[0];
+    if (!targetKey) return 0;
+    const buffer = this.bufferMap.get(targetKey);
     return buffer ? buffer.duration : 0;
   }
 }
