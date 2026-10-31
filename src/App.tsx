@@ -1,6 +1,27 @@
-import React from 'react';
+import React, { useRef } from 'react';
 
 export default function App() {
+  // Guard to filter micro-second duplicate triggers on Chrome on iPadOS
+  const lastTriggerRef = useRef<number>(0);
+
+  const handlePadDown = (padIndex: number, e: React.PointerEvent) => {
+    // Prevent synthetic mouse clicks & page scrolling
+    e.preventDefault();
+
+    const now = performance.now();
+    if (now - lastTriggerRef.current < 30) return; // 30ms debounce guard
+    lastTriggerRef.current = now;
+
+    console.log(`Pad ${padIndex + 1} Triggered (Attack)`);
+    // Web Audio synth oscillator or sample buffer attack hooks here
+  };
+
+  const handlePadUp = (padIndex: number, e: React.PointerEvent) => {
+    e.preventDefault();
+    console.log(`Pad ${padIndex + 1} Released (Stop/Decay)`);
+    // Web Audio voice stop or envelope release hooks here
+  };
+
   return (
     <div className="daw-container" style={{ minWidth: '1600px', width: '100vw', minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#0d0f12', color: '#fff', boxSizing: 'border-box' }}>
       {/* Header */}
@@ -22,7 +43,25 @@ export default function App() {
             <h2 style={{ margin: '0 0 16px 0', fontSize: '16px', color: '#9ca3af', letterSpacing: '0.5px' }}>PERFORMANCE PADS (BANK A)</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', height: 'calc(100% - 40px)' }}>
               {[...Array(16)].map((_, i) => (
-                <div key={i} style={{ background: '#1f2430', borderRadius: '8px', border: '1px solid #333a4d', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '16px', minHeight: '110px' }}>
+                <div
+                  key={i}
+                  onPointerDown={(e) => handlePadDown(i, e)}
+                  onPointerUp={(e) => handlePadUp(i, e)}
+                  onPointerLeave={(e) => handlePadUp(i, e)}
+                  style={{
+                    background: '#1f2430',
+                    borderRadius: '8px',
+                    border: '1px solid #333a4d',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justify: 'space-between',
+                    padding: '16px',
+                    minHeight: '110px',
+                    userSelect: 'none',
+                    touchAction: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
                   <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#60a5fa' }}>{i + 1}</span>
                   <span style={{ fontSize: '12px', color: '#9ca3af', textAlign: 'center' }}>SYNTH</span>
                   <span style={{ fontSize: '10px', color: '#4b5563', textAlign: 'right' }}>+</span>
