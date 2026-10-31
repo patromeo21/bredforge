@@ -54,7 +54,7 @@ export default function App() {
                     border: '1px solid #333a4d',
                     display: 'flex',
                     flexDirection: 'column',
-                    justify: 'space-between',
+                    justifyContent: 'space-between',
                     padding: '16px',
                     minHeight: '110px',
                     userSelect: 'none',
