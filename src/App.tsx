@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Volume2, Play, Square, RefreshCw, Upload, Layers, Zap } from 'lucide-react';
+import { Volume2, Play, Square, Upload, Zap } from 'lucide-react';
 
 interface PadState {
   id: number;
