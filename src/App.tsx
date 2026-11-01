@@ -2,38 +2,49 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Volume2, Play, Square, Upload, Zap } from 'lucide-react';
 
 interface PadState {
-  id: number;
+  id: number;          // 1 - 16
+  bank: 'A' | 'B' | 'C' | 'D';
   label: string;
-  bank: string;
   sampleName: string | null;
   sampleBuffer: AudioBuffer | null;
   playMode: 'oneshot' | 'gate';
-  chokeGroup: number; // 0 = off, 1-4
+  chokeGroup: number;  // 0 = off, 1-4
 }
+
+// Generate 64 discrete pads across 4 banks
+const createInitialPads = (): PadState[] => {
+  const banks: ('A' | 'B' | 'C' | 'D')[] = ['A', 'B', 'C', 'D'];
+  const allPads: PadState[] = [];
+
+  banks.forEach(bank => {
+    for (let i = 1; i <= 16; i++) {
+      allPads.push({
+        id: i,
+        bank,
+        label: `PAD ${i}`,
+        sampleName: null,
+        sampleBuffer: null,
+        playMode: 'oneshot',
+        chokeGroup: 0,
+      });
+    }
+  });
+
+  return allPads;
+};
 
 export default function App() {
   const [activeBank, setActiveBank] = useState<'A' | 'B' | 'C' | 'D'>('A');
-  const [selectedPad, setSelectedPad] = useState<number>(1);
-  const [triggeredVisualPad, setTriggeredVisualPad] = useState<number | null>(null);
+  const [selectedPadId, setSelectedPadId] = useState<number>(1);
+  const [triggeredVisualKey, setTriggeredVisualKey] = useState<string | null>(null);
 
-  // Core Pad State initialization for Bank A-D (16 pads each)
-  const [pads, setPads] = useState<PadState[]>(() => 
-    Array.from({ length: 16 }, (_, i) => ({
-      id: i + 1,
-      label: `PAD ${i + 1}`,
-      bank: 'A',
-      sampleName: null,
-      sampleBuffer: null,
-      playMode: 'oneshot',
-      chokeGroup: 0,
-    }))
-  );
+  // 64-Pad Master Storage State
+  const [allPads, setAllPads] = useState<PadState[]>(createInitialPads);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
-  // Type inference avoids TSX angle-bracket parsing conflicts
-  const activeSourcesRef = useRef(new Map<number, AudioBufferSourceNode[]>());
+  const activeSourcesRef = useRef(new Map<string, AudioBufferSourceNode[]>());
 
-  // Initialize Web Audio API context safely
+  // Initialize Web Audio API context on first touch/click
   useEffect(() => {
     const initAudio = () => {
       if (!audioCtxRef.current) {
@@ -53,16 +64,22 @@ export default function App() {
     };
   }, []);
 
-  const currentPad = pads.find(p => p.id === selectedPad) || pads[0];
+  // Unique identifier key per pad: e.g. "A-1", "B-12"
+  const getPadKey = (bank: string, id: number) => `${bank}-${id}`;
 
-  // Polyphonic trigger handler with choke group execution
-  const triggerPadAudio = (padId: number) => {
-    const pad = pads.find(p => p.id === padId);
-    if (!pad) return;
+  // Currently Active Selected Pad Object
+  const currentPad = allPads.find(p => p.bank === activeBank && p.id === selectedPadId) || allPads[0];
 
-    // Visual trigger feedback (decoupled from audio context execution)
-    setTriggeredVisualPad(padId);
-    setTimeout(() => setTriggeredVisualPad(null), 120);
+  // Current Bank's 16 Pads
+  const bankPads = allPads.filter(p => p.bank === activeBank);
+
+  // Polyphonic Audio Trigger Engine
+  const triggerPadAudio = (targetPad: PadState) => {
+    const padKey = getPadKey(targetPad.bank, targetPad.id);
+
+    // Instant decoupled UI visual flash
+    setTriggeredVisualKey(padKey);
+    setTimeout(() => setTriggeredVisualKey(null), 120);
 
     const ctx = audioCtxRef.current;
     if (!ctx) return;
@@ -70,48 +87,55 @@ export default function App() {
 
     const sourcesMap = activeSourcesRef.current;
 
-    // Choke Group Execution: Cut off playing pads in the same choke group
-    if (pad.chokeGroup > 0) {
-      pads.forEach(otherPad => {
-        if (otherPad.chokeGroup === pad.chokeGroup && otherPad.id !== pad.id) {
-          const playingSources = sourcesMap.get(otherPad.id);
+    // Choke Group Execution within same bank context
+    if (targetPad.chokeGroup > 0) {
+      allPads.forEach(otherPad => {
+        if (
+          otherPad.bank === targetPad.bank &&
+          otherPad.chokeGroup === targetPad.chokeGroup &&
+          otherPad.id !== targetPad.id
+        ) {
+          const otherKey = getPadKey(otherPad.bank, otherPad.id);
+          const playingSources = sourcesMap.get(otherKey);
           if (playingSources) {
-            playingSources.forEach((src: AudioBufferSourceNode) => {
+            playingSources.forEach(src => {
               try { src.stop(); } catch (e) {}
             });
-            sourcesMap.set(otherPad.id, []);
+            sourcesMap.set(otherKey, []);
           }
         }
       });
     }
 
-    // Polyphonic Voice Stacking Node Creation
-    if (pad.sampleBuffer) {
+    // Polyphonic Buffer Node Generation
+    if (targetPad.sampleBuffer) {
       const source = ctx.createBufferSource();
-      source.buffer = pad.sampleBuffer;
+      source.buffer = targetPad.sampleBuffer;
       source.connect(ctx.destination);
       source.start(0);
 
-      const currentSources = sourcesMap.get(pad.id) || [];
-      sourcesMap.set(pad.id, [...currentSources, source]);
+      const currentSources = sourcesMap.get(padKey) || [];
+      sourcesMap.set(padKey, [...currentSources, source]);
 
       source.onended = () => {
-        const active = sourcesMap.get(pad.id) || [];
-        sourcesMap.set(pad.id, active.filter((s: AudioBufferSourceNode) => s !== source));
+        const active = sourcesMap.get(padKey) || [];
+        sourcesMap.set(padKey, active.filter(s => s !== source));
       };
     }
   };
 
-  // Immediate Parameter State Updates
+  // Immediate Parameter State Updates strictly targeting the selected bank & pad slot
   const updatePadParam = (key: keyof PadState, value: any) => {
-    setPads(prevPads =>
+    setAllPads(prevPads =>
       prevPads.map(pad =>
-        pad.id === selectedPad ? { ...pad, [key]: value } : pad
+        pad.bank === activeBank && pad.id === selectedPadId
+          ? { ...pad, [key]: value }
+          : pad
       )
     );
   };
 
-  // Handle local sample file upload
+  // Sample File Loader Handler
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -121,9 +145,9 @@ export default function App() {
       const arrayBuffer = event.target?.result as ArrayBuffer;
       if (audioCtxRef.current && arrayBuffer) {
         audioCtxRef.current.decodeAudioData(arrayBuffer, (buffer) => {
-          setPads(prev =>
+          setAllPads(prev =>
             prev.map(p =>
-              p.id === selectedPad
+              p.bank === activeBank && p.id === selectedPadId
                 ? { ...p, sampleName: file.name, sampleBuffer: buffer }
                 : p
             )
@@ -137,15 +161,15 @@ export default function App() {
   return (
     <div className="flex h-screen w-screen bg-neutral-950 text-white select-none overflow-hidden font-sans">
       
-      {/* LEFT PANE: Workspace & Waveform Canvas */}
-      <div className="w-1/2 h-full border-r border-neutral-800 flex flex-col p-4 bg-neutral-900/50">
-        <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
+      {/* LEFT PANE: Workspace & Sample Manager */}
+      <div className="w-1/2 h-full border-r border-neutral-800 flex flex-col p-4 bg-neutral-900/40 min-h-0">
+        <div className="flex items-center justify-between pb-3 border-b border-neutral-800 shrink-0">
           <h1 className="text-xl font-bold tracking-widest text-amber-500 uppercase">BredForge</h1>
           <span className="text-xs bg-neutral-800 px-2.5 py-1 rounded-full text-neutral-400 font-mono">Layer 4 Active</span>
         </div>
 
         {/* Selected Pad Sample Details Header */}
-        <div className="my-4 p-4 bg-neutral-900 border border-neutral-800 rounded-lg">
+        <div className="my-3 p-4 bg-neutral-900 border border-neutral-800 rounded-lg shrink-0">
           <div className="text-xs text-neutral-500 uppercase font-semibold">Active Selection</div>
           <div className="text-lg font-bold text-neutral-200 mt-1">
             Bank {activeBank} - Pad {currentPad.id}
@@ -155,17 +179,17 @@ export default function App() {
           </div>
         </div>
 
-        {/* Waveform Canvas Area */}
-        <div className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg flex items-center justify-center relative overflow-hidden">
+        {/* Waveform Canvas Placeholder */}
+        <div className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg flex items-center justify-center relative overflow-hidden min-h-0">
           <div className="text-neutral-600 text-sm font-mono flex flex-col items-center gap-2">
             <Volume2 className="w-8 h-8 opacity-40 animate-pulse" />
             <span>Waveform Chopper & Slice Canvas</span>
           </div>
         </div>
 
-        {/* Action Controls */}
-        <div className="mt-4 flex gap-3">
-          <label className="flex-1 flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-500 text-black font-semibold py-3 rounded-lg cursor-pointer transition">
+        {/* Explicit File Loader Button Bar */}
+        <div className="mt-3 shrink-0">
+          <label className="w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-500 text-black font-semibold py-3 rounded-lg cursor-pointer transition">
             <Upload className="w-4 h-4" />
             <span>{currentPad.sampleName ? 'Replace Sample' : 'Load Audio File'}</span>
             <input type="file" accept="audio/*" onChange={handleFileUpload} className="hidden" />
@@ -173,11 +197,11 @@ export default function App() {
         </div>
       </div>
 
-      {/* RIGHT PANE: Hardware MPC Pads & Dynamic Controls */}
-      <div className="w-1/2 h-full flex flex-col p-4 bg-neutral-950">
+      {/* RIGHT PANE: Hardware MPC Pads & Parameters */}
+      <div className="w-1/2 h-full flex flex-col p-4 bg-neutral-950 min-h-0">
         
-        {/* Bank Selection */}
-        <div className="flex gap-2 mb-4">
+        {/* Bank Selection Tabs */}
+        <div className="flex gap-2 mb-3 shrink-0">
           {(['A', 'B', 'C', 'D'] as const).map(bank => (
             <button
               key={bank}
@@ -193,8 +217,8 @@ export default function App() {
           ))}
         </div>
 
-        {/* Dynamic Parameter Switching Buttons */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        {/* Dynamic Parameter Switching Controls */}
+        <div className="grid grid-cols-2 gap-3 mb-3 shrink-0">
           <button
             onClick={() => updatePadParam('playMode', currentPad.playMode === 'oneshot' ? 'gate' : 'oneshot')}
             className={`flex items-center justify-center gap-2 py-2.5 rounded-lg border text-xs font-bold uppercase transition ${
@@ -220,20 +244,21 @@ export default function App() {
           </button>
         </div>
 
-        {/* 4x4 MPC Tactile Pad Matrix */}
-        <div className="flex-1 grid grid-cols-4 gap-3">
-          {pads.map(pad => {
-            const isSelected = selectedPad === pad.id;
-            const isTriggered = triggeredVisualPad === pad.id;
+        {/* 4x4 MPC Tactile Pad Matrix (Bounded Container to Prevent iPad Clipping) */}
+        <div className="flex-1 grid grid-cols-4 grid-rows-4 gap-3 min-h-0">
+          {bankPads.map(pad => {
+            const padKey = getPadKey(pad.bank, pad.id);
+            const isSelected = selectedPadId === pad.id;
+            const isTriggered = triggeredVisualKey === padKey;
 
             return (
               <button
-                key={pad.id}
+                key={padKey}
                 onPointerDown={() => {
-                  setSelectedPad(pad.id);
-                  triggerPadAudio(pad.id);
+                  setSelectedPadId(pad.id);
+                  triggerPadAudio(pad);
                 }}
-                className={`pad-target relative rounded-xl border-2 flex flex-col items-center justify-between p-3 transition-all transform active:scale-95 ${
+                className={`pad-target relative rounded-xl border-2 flex flex-col items-center justify-between p-2 transition-all transform active:scale-95 h-full w-full min-h-0 overflow-hidden ${
                   isTriggered
                     ? 'bg-amber-400 border-amber-300 shadow-xl shadow-amber-400/50 scale-95'
                     : isSelected
@@ -241,16 +266,16 @@ export default function App() {
                     : 'bg-neutral-900 border-neutral-800 hover:border-neutral-700'
                 }`}
               >
-                <div className="w-full flex justify-between items-center text-[10px] font-mono text-neutral-400">
-                  <span>{activeBank}{pad.id}</span>
+                <div className="w-full flex justify-between items-center text-[10px] font-mono text-neutral-400 shrink-0">
+                  <span>{pad.bank}{pad.id}</span>
                   {pad.chokeGroup > 0 && <span className="text-amber-500 font-bold">C{pad.chokeGroup}</span>}
                 </div>
 
-                <div className="text-xs font-bold tracking-wider text-center truncate max-w-full px-1">
+                <div className="text-xs font-bold tracking-wider text-center truncate max-w-full px-1 my-auto">
                   {pad.sampleName ? pad.sampleName : pad.label}
                 </div>
 
-                <div className="w-full flex justify-center">
+                <div className="w-full flex justify-center shrink-0">
                   <span className={`w-2 h-2 rounded-full ${pad.sampleBuffer ? 'bg-emerald-500' : 'bg-neutral-700'}`} />
                 </div>
               </button>
