@@ -1,121 +1,170 @@
-// src/services/AudioEngine.ts
-
-export interface PadVoice {
-  buffer: AudioBuffer | null;
-  start: number; // in seconds
-  end: number;   // in seconds
-  gain: number;  // 0.0 to 1.0
-}
+import { PlayMode, ChokeGroup, PadConfig, ActiveVoice } from './types';
 
 class AudioEngineService {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
-  private voices: Map<number, PadVoice> = new Map();
-  private activeSources: Map<number, AudioBufferSourceNode> = new Map();
-  private isUnlocked: boolean = false;
+  private activeVoices: Map<string, ActiveVoice> = new Map();
+
+  // Map pad indices (0-15) to their configuration parameters
+  private padConfigs: Map<number, PadConfig> = new Map();
 
   constructor() {
-    // Lazy init to satisfy browser autoplay policies
+    this.initializeDefaultConfigs();
   }
 
-  public init() {
-    if (this.ctx) return;
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    this.ctx = new AudioCtx();
-    this.masterGain = this.ctx.createGain();
-    this.masterGain.gain.setValueAtTime(0.85, this.ctx.currentTime);
-    this.masterGain.connect(this.ctx.destination);
-
-    // Initialize 16 default pad configs
+  private initializeDefaultConfigs() {
     for (let i = 0; i < 16; i++) {
-      this.voices.set(i, {
-        buffer: null,
-        start: 0,
-        end: 0,
+      this.padConfigs.set(i, {
+        padIndex: i,
+        playMode: 'oneShot',
+        chokeGroup: 0,
         gain: 1.0,
+        pitchSemiTones: 0,
       });
     }
   }
 
+  private getContext(): AudioContext {
+    if (!this.ctx) {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      this.ctx = new AudioCtx();
+      this.masterGain = this.ctx.createGain();
+      this.masterGain.gain.setValueAtTime(0.8, this.ctx.currentTime);
+      this.masterGain.connect(this.ctx.destination);
+    }
+    return this.ctx;
+  }
+
   public async unlock(): Promise<void> {
-    this.init();
-    if (this.ctx && this.ctx.state === 'suspended') {
-      await this.ctx.resume();
-    }
-    this.isUnlocked = true;
-  }
-
-  public async decodeAudioFile(file: File): Promise<AudioBuffer> {
-    this.init();
-    const arrayBuffer = await file.arrayBuffer();
-    return await this.ctx!.decodeAudioData(arrayBuffer);
-  }
-
-  public setPadVoice(padIndex: number, voice: Partial<PadVoice>) {
-    const current = this.voices.get(padIndex) || { buffer: null, start: 0, end: 0, gain: 1.0 };
-    this.voices.set(padIndex, { ...current, ...voice });
-  }
-
-  public triggerPad(padIndex: number) {
-    if (!this.ctx || !this.isUnlocked) this.unlock();
-    if (!this.ctx) return;
-
-    const voice = this.voices.get(padIndex);
-    if (!voice || !voice.buffer) {
-      // Fallback synthesizer click/ping if no sample loaded yet for testing
-      this.triggerTestSynth(padIndex);
-      return;
-    }
-
-    // Stop existing node on this pad if re-triggered (one-shot polyphonic guard)
-    this.stopPad(padIndex);
-
-    const source = this.ctx.createBufferSource();
-    const padGain = this.ctx.createGain();
-    
-    source.buffer = voice.buffer;
-    padGain.gain.setValueAtTime(voice.gain, this.ctx.currentTime);
-
-    source.connect(padGain);
-    padGain.connect(this.masterGain!);
-
-    const duration = voice.end > voice.start ? voice.end - voice.start : voice.buffer.duration - voice.start;
-    source.start(this.ctx.currentTime, voice.start, Math.max(0.01, duration));
-    
-    this.activeSources.set(padIndex, source);
-  }
-
-  public stopPad(padIndex: number) {
-    const existing = this.activeSources.get(padIndex);
-    if (existing) {
-      try {
-        existing.stop();
-        existing.disconnect();
-      } catch {
-        // Node already stopped naturally
-      }
-      this.activeSources.delete(padIndex);
+    const ctx = this.getContext();
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
     }
   }
 
-  private triggerTestSynth(padIndex: number) {
-    if (!this.ctx) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
+  public getPadConfig(padIndex: number): PadConfig {
+    return this.padConfigs.get(padIndex) || {
+      padIndex,
+      playMode: 'oneShot',
+      chokeGroup: 0,
+      gain: 1.0,
+      pitchSemiTones: 0,
+    };
+  }
 
-    // Map 16 pads across a simple chromatic pitch scale for testing
+  public setPadConfig(padIndex: number, config: Partial<PadConfig>): void {
+    const current = this.getPadConfig(padIndex);
+    this.padConfigs.set(padIndex, { ...current, ...config });
+  }
+
+  /**
+   * Triggers a pad event with full polyphony, choke group resolution, and pointerId binding
+   */
+  public triggerPad(padIndex: number, pointerId?: number): string {
+    const ctx = this.getContext();
+    const config = this.getPadConfig(padIndex);
+
+    // 1. Resolve Choke Groups (mute group killing)
+    if (config.chokeGroup > 0) {
+      this.chokeGroupVoices(config.chokeGroup);
+    }
+
+    // 2. Setup voice nodes
+    const osc = ctx.createOscillator();
+    const voiceGain = ctx.createGain();
+
+    // Map pad Index to distinct pitch frequencies for testing
     const baseFreq = 130.81; // C3
-    osc.frequency.setValueAtTime(baseFreq * Math.pow(2, padIndex / 12), this.ctx.currentTime);
-    osc.type = 'sine';
+    const freq = baseFreq * Math.pow(2, (padIndex + config.pitchSemiTones) / 12);
+    osc.type = padIndex % 2 === 0 ? 'sine' : 'triangle';
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
 
-    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.3);
+    voiceGain.gain.setValueAtTime(config.gain, ctx.currentTime);
+    osc.connect(voiceGain);
+    if (this.masterGain) {
+      voiceGain.connect(this.masterGain);
+    }
 
-    osc.connect(gain);
-    gain.connect(this.masterGain!);
+    const voiceId = `${padIndex}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.3);
+    const activeVoice: ActiveVoice = {
+      id: voiceId,
+      padIndex,
+      pointerId,
+      chokeGroup: config.chokeGroup,
+      sourceNode: osc as unknown as AudioBufferSourceNode,
+      gainNode: voiceGain,
+      startTime: ctx.currentTime,
+    };
+
+    this.activeVoices.set(voiceId, activeVoice);
+
+    // 3. Audio Node Lifecycle & Memory Leak Cleanup
+    osc.onended = () => {
+      voiceGain.disconnect();
+      this.activeVoices.delete(voiceId);
+    };
+
+    osc.start(ctx.currentTime);
+
+    // If one-shot test synth, automatically stop after 0.5s if not released early by gate/choke
+    if (config.playMode === 'oneShot') {
+      osc.stop(ctx.currentTime + 0.5);
+    }
+
+    return voiceId;
+  }
+
+  /**
+   * Releases voices tied to a specific pad or pointerId for Gate mode
+   */
+  public releasePad(padIndex: number, pointerId?: number): void {
+    if (!this.ctx) return;
+    const config = this.getPadConfig(padIndex);
+
+    // Only Gate mode responds to touch release
+    if (config.playMode !== 'gate') return;
+
+    const now = this.ctx.currentTime;
+
+    this.activeVoices.forEach((voice, voiceId) => {
+      const matchesPointer = pointerId !== undefined ? voice.pointerId === pointerId : true;
+      if (voice.padIndex === padIndex && matchesPointer) {
+        // Fast release envelope ramp (15ms) to prevent digital pops
+        voice.gainNode.gain.cancelScheduledValues(now);
+        voice.gainNode.gain.setValueAtTime(voice.gainNode.gain.value, now);
+        voice.gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.015);
+        
+        try {
+          (voice.sourceNode as unknown as OscillatorNode).stop(now + 0.02);
+        } catch {
+          // Node already stopped
+        }
+        this.activeVoices.delete(voiceId);
+      }
+    });
+  }
+
+  /**
+   * Stops all active voices belonging to a specific Choke Group
+   */
+  private chokeGroupVoices(chokeGroup: ChokeGroup): void {
+    if (!this.ctx || chokeGroup === 0) return;
+    const now = this.ctx.currentTime;
+
+    this.activeVoices.forEach((voice, voiceId) => {
+      if (voice.chokeGroup === chokeGroup) {
+        voice.gainNode.gain.cancelScheduledValues(now);
+        voice.gainNode.gain.setValueAtTime(voice.gainNode.gain.value, now);
+        voice.gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.005);
+        try {
+          (voice.sourceNode as unknown as OscillatorNode).stop(now + 0.006);
+        } catch {
+          // Node already stopped
+        }
+        this.activeVoices.delete(voiceId);
+      }
+    });
   }
 }
 
