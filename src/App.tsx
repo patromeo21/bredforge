@@ -1,226 +1,176 @@
-import React, { useRef, useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { AudioEngine } from './services/audio/AudioEngine';
+import { PlayMode, ChokeGroup } from './services/audio/types';
+import './index.css';
 
 export default function App() {
   const [activeBank, setActiveBank] = useState<'A' | 'B' | 'C' | 'D'>('A');
-  const [activePad, setActivePad] = useState<number | null>(null);
+  const [selectedPad, setSelectedPad] = useState<number>(0);
+  const [activePads, setActivePads] = useState<Record<number, boolean>>({});
 
-  // Guard to filter micro-second duplicate triggers on touch devices
   const lastTriggerRef = useRef<number>(0);
 
-  const handlePadDown = (padIndex: number, e: React.PointerEvent) => {
-    // Prevent synthetic mouse clicks and default page scrolling/zooming
-    e.preventDefault();
+  const bankOffset = { A: 0, B: 4, C: 8, D: 12 }[activeBank];
 
+  const handlePadDown = (localPadIndex: number, e: React.PointerEvent) => {
+    e.preventDefault();
+    const globalPadIndex = bankOffset + localPadIndex;
+    
     const now = performance.now();
-    if (now - lastTriggerRef.current < 30) return; // 30ms debounce guard
+    if (now - lastTriggerRef.current < 20) return;
     lastTriggerRef.current = now;
 
-    // Unlock and trigger audio engine buffer or synth voice
     AudioEngine.unlock();
-    AudioEngine.triggerPad(padIndex);
+    AudioEngine.triggerPad(globalPadIndex, e.pointerId);
 
-    setActivePad(padIndex);
+    setSelectedPad(globalPadIndex);
+    setActivePads(prev => ({ ...prev, [globalPadIndex]: true }));
   };
 
-  const handlePadUp = (padIndex: number) => {
-    if (activePad === padIndex) {
-      setActivePad(null);
-    }
+  const handlePadUp = (localPadIndex: number, e: React.PointerEvent) => {
+    e.preventDefault();
+    const globalPadIndex = bankOffset + localPadIndex;
+    AudioEngine.releasePad(globalPadIndex, e.pointerId);
+    setActivePads(prev => ({ ...prev, [globalPadIndex]: false }));
+  };
+
+  const currentConfig = AudioEngine.getPadConfig(selectedPad);
+
+  const updateSelectedConfig = (updates: { playMode?: PlayMode; chokeGroup?: ChokeGroup }) => {
+    AudioEngine.setPadConfig(selectedPad, updates);
+    setSelectedPad((prev) => prev); // trigger re-render
   };
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      width: '100vw',
-      height: '100dvh',
-      backgroundColor: '#0a0b0e',
-      color: '#e2e8f0',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      display: 'flex',
-      flexDirection: 'column',
-      overflow: 'hidden',
-      userSelect: 'none',
-      WebkitUserSelect: 'none',
-      touchAction: 'none'
-    }}>
-      {/* Header Bar */}
-      <header style={{
-        height: '52px',
-        borderBottom: '1px solid #1e293b',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 16px',
-        backgroundColor: '#0f172a',
-        flexShrink: 0
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <h1 style={{ fontSize: '15px', fontWeight: 700, margin: 0, letterSpacing: '0.5px' }}>
-            BredForge Mobile DAW
-          </h1>
-          <span style={{ fontSize: '11px', color: '#64748b', backgroundColor: '#1e293b', padding: '2px 6px', borderRadius: '4px' }}>
-            Panoramic Workstation v1.1
-          </span>
+    <div className="w-screen h-[100dvh] bg-slate-950 text-slate-100 flex flex-col overflow-hidden select-none">
+      {/* TOP HEADER */}
+      <header className="h-12 border-b border-slate-800 bg-slate-900 px-4 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="font-bold text-orange-500 tracking-wider">BREDFORGE</span>
+          <span className="text-xs px-2 py-0.5 bg-slate-800 rounded text-slate-400">Mobile DAW v0.2</span>
         </div>
-        <div style={{ fontSize: '12px', color: '#38bdf8', fontWeight: 500 }}>
-          Audio Engine: Active
+        <div className="flex items-center gap-4 text-xs text-slate-400">
+          <span>Status: <strong className="text-emerald-400">Ready</strong></span>
         </div>
       </header>
 
-      {/* Main Workspace Grid */}
-      <div style={{
-        flex: 1,
-        display: 'grid',
-        gridTemplateColumns: '1fr 320px',
-        gap: '12px',
-        padding: '12px',
-        overflow: 'hidden',
-        boxSizing: 'border-box'
-      }}>
-        {/* Left Section: Performance Pads */}
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          backgroundColor: '#111827',
-          border: '1px solid #1f2937',
-          borderRadius: '8px',
-          padding: '12px',
-          overflow: 'hidden'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 600, color: '#9ca3af', letterSpacing: '0.5px' }}>
-              PERFORMANCE PADS (BANK {activeBank})
-            </span>
-            <div style={{ display: 'flex', gap: '4px' }}>
-              {(['A', 'B', 'C', 'D'] as const).map(bank => (
-                <button
-                  key={bank}
-                  onClick={() => setActiveBank(bank)}
-                  style={{
-                    backgroundColor: activeBank === bank ? '#3b82f6' : '#1f2937',
-                    color: activeBank === bank ? '#ffffff' : '#9ca3af',
-                    border: 'none',
-                    borderRadius: '4px',
-                    padding: '4px 10px',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  {bank}
-                </button>
-              ))}
-            </div>
+      {/* MAIN WORKSPACE (DUAL PANE) */}
+      <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 overflow-hidden">
+        
+        {/* LEFT PANEL: SAMPLE CHOPPER & PAD SETTINGS */}
+        <section className="lg:col-span-7 bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col gap-4 overflow-y-auto">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <h2 className="text-sm font-semibold text-slate-300">Sample Chopper & Workspace</h2>
+            <span className="text-xs text-orange-400 font-mono">Pad {selectedPad + 1} Selected</span>
           </div>
 
-          {/* 16 Pad Matrix */}
-          <div style={{
-            flex: 1,
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gridTemplateRows: 'repeat(4, 1fr)',
-            gap: '8px',
-            minHeight: 0
-          }}>
-            {Array.from({ length: 16 }).map((_, index) => {
-              const isActive = activePad === index;
-              return (
-                <div
-                  key={index}
-                  onPointerDown={(e) => handlePadDown(index, e)}
-                  onPointerUp={() => handlePadUp(index)}
-                  onPointerLeave={() => handlePadUp(index)}
-                  onPointerCancel={() => handlePadUp(index)}
-                  style={{
-                    backgroundColor: isActive ? '#3b82f6' : '#1f2937',
-                    border: `1px solid ${isActive ? '#60a5fa' : '#374151'}`,
-                    borderRadius: '6px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    padding: '10px',
-                    cursor: 'pointer',
-                    transition: 'background-color 0.05s ease, border-color 0.05s ease',
-                    boxShadow: isActive ? '0 0 12px rgba(59, 130, 246, 0.5)' : 'none'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: isActive ? '#e0f2fe' : '#6b7280' }}>
-                    <span>{index + 1}</span>
-                    <span>WAV</span>
-                  </div>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: isActive ? '#ffffff' : '#d1d5db' }}>
-                    SMP {index + 1}
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '10px', color: '#4b5563' }}>
-                    VOL
-                  </div>
+          {/* Waveform Placeholder / Chopper Canvas */}
+          <div className="flex-1 min-h-[160px] bg-slate-950 border border-slate-800 rounded-lg flex flex-col items-center justify-center relative">
+            <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-slate-800" />
+            <span className="text-xs text-slate-500 z-10 font-mono">WAVEFORM PREVIEW & SLICE MARKERS</span>
+            <span className="text-[10px] text-slate-600 mt-1">Local File Picker & Chopper Integration Pending</span>
+          </div>
+
+          {/* Pad Voice Parameters */}
+          <div className="bg-slate-950/50 border border-slate-800/80 rounded-lg p-3 flex flex-col gap-3">
+            <div className="text-xs font-medium text-slate-400">Voice Parameters (Pad {selectedPad + 1})</div>
+            
+            <div className="grid grid-cols-2 gap-3">
+              {/* Play Mode Selector */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-slate-500 uppercase tracking-wider">Play Mode</label>
+                <div className="grid grid-cols-2 gap-1 bg-slate-900 p-1 rounded border border-slate-800">
+                  <button
+                    onClick={() => updateSelectedConfig({ playMode: 'oneShot' })}
+                    className={`text-xs py-1 rounded transition-colors ${currentConfig.playMode === 'oneShot' ? 'bg-orange-600 text-white font-medium' : 'text-slate-400 hover:text-slate-200'}`}
+                  >
+                    One-Shot
+                  </button>
+                  <button
+                    onClick={() => updateSelectedConfig({ playMode: 'gate' })}
+                    className={`text-xs py-1 rounded transition-colors ${currentConfig.playMode === 'gate' ? 'bg-orange-600 text-white font-medium' : 'text-slate-400 hover:text-slate-200'}`}
+                  >
+                    Gate
+                  </button>
                 </div>
+              </div>
+
+              {/* Choke Group Selector */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-slate-500 uppercase tracking-wider">Choke Group</label>
+                <div className="grid grid-cols-5 gap-1 bg-slate-900 p-1 rounded border border-slate-800">
+                  {[0, 1, 2, 3, 4].map(group => (
+                    <button
+                      key={group}
+                      onClick={() => updateSelectedConfig({ chokeGroup: group as ChokeGroup })}
+                      className={`text-xs py-1 rounded transition-colors text-center ${currentConfig.chokeGroup === group ? 'bg-slate-700 text-white font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+                    >
+                      {group === 0 ? 'Off' : group}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* RIGHT PANEL: 4x4 PAD GRID & BANKS */}
+        <section className="lg:col-span-5 bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col gap-3 justify-between">
+          
+          {/* BANK SELECTORS */}
+          <div className="grid grid-cols-4 gap-2">
+            {(['A', 'B', 'C', 'D'] as const).map(bank => (
+              <button
+                key={bank}
+                onClick={() => setActiveBank(bank)}
+                className={`py-2 rounded-lg font-bold text-xs border transition-all ${
+                  activeBank === bank
+                    ? 'bg-orange-600 border-orange-500 text-white shadow-lg shadow-orange-900/40'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                }`}
+              >
+                BANK {bank}
+              </button>
+            ))}
+          </div>
+
+          {/* 4x4 PAD MATRIX */}
+          <div className="grid grid-cols-4 gap-2.5 my-auto aspect-square max-w-[420px] mx-auto w-full">
+            {Array.from({ length: 16 }).map((_, i) => {
+              const mappedIndex = [12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3][i];
+              const globalIdx = bankOffset + mappedIndex;
+              const isActive = activePads[globalIdx];
+              const isSelected = selectedPad === globalIdx;
+
+              return (
+                <button
+                  key={mappedIndex}
+                  onPointerDown={(e) => handlePadDown(mappedIndex, e)}
+                  onPointerUp={(e) => handlePadUp(mappedIndex, e)}
+                  onPointerLeave={(e) => handlePadUp(mappedIndex, e)}
+                  className={`rounded-xl border flex flex-col items-center justify-between p-2.5 transition-all active:scale-95 touch-none select-none relative overflow-hidden ${
+                    isActive
+                      ? 'bg-orange-500 border-orange-400 text-slate-950 shadow-inner shadow-orange-700'
+                      : isSelected
+                      ? 'bg-slate-800 border-orange-500/80 text-slate-100'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                  }`}
+                >
+                  <span className="text-[10px] font-mono opacity-60 self-start">{activeBank}{mappedIndex + 1}</span>
+                  <span className="font-bold text-sm tracking-wide">{mappedIndex + 1}</span>
+                  <div className="w-1.5 h-1.5 rounded-full bg-slate-800 self-end" />
+                </button>
               );
             })}
           </div>
-        </div>
 
-        {/* Right Section: Sample Chopper / Filter Deck */}
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '12px',
-          overflow: 'hidden'
-        }}>
-          {/* Sample Editor Module */}
-          <div style={{
-            flex: 1,
-            backgroundColor: '#111827',
-            border: '1px solid #1f2937',
-            borderRadius: '8px',
-            padding: '12px',
-            display: 'flex',
-            flexDirection: 'column'
-          }}>
-            <span style={{ fontSize: '12px', fontWeight: 600, color: '#9ca3af', marginBottom: '8px' }}>
-              SAMPLE CHOPPER
-            </span>
-            <div style={{
-              flex: 1,
-              backgroundColor: '#030712',
-              border: '1px dashed #374151',
-              borderRadius: '6px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#4b5563',
-              fontSize: '12px',
-              textAlign: 'center',
-              padding: '12px'
-            }}>
-              Waveform Display Area<br/>(Load Audio File)
-            </div>
+          {/* STATUS FOOTER */}
+          <div className="text-center text-[10px] text-slate-500 font-mono">
+            MPC Ergonomic Layout • Polyphonic Touch Active
           </div>
+        </section>
 
-          {/* Filter / FX Deck */}
-          <div style={{
-            height: '140px',
-            backgroundColor: '#111827',
-            border: '1px solid #1f2937',
-            borderRadius: '8px',
-            padding: '12px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px'
-          }}>
-            <span style={{ fontSize: '12px', fontWeight: 600, color: '#9ca3af' }}>
-              FILTER / FX RACK
-            </span>
-            <div style={{ display: 'flex', gap: '8px', fontSize: '11px', color: '#9ca3af' }}>
-              <div style={{ backgroundColor: '#1f2937', padding: '6px 10px', borderRadius: '4px' }}>LPF</div>
-              <div style={{ backgroundColor: '#1f2937', padding: '6px 10px', borderRadius: '4px' }}>HPF</div>
-            </div>
-          </div>
-        </div>
-      </div>
+      </main>
     </div>
   );
 }
