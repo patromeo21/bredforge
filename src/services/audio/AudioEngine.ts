@@ -6,7 +6,6 @@ class AudioEngineService {
   private activeVoices: Map<string, ActiveVoice> = new Map();
   private sampleBuffers: Map<number, AudioBuffer> = new Map();
 
-  // Map pad indices (0-63 for 4 banks of 16) to their configurations
   private padConfigs: Map<number, PadConfig> = new Map();
 
   constructor() {
@@ -64,14 +63,15 @@ class AudioEngineService {
     this.sampleBuffers.set(padIndex, audioBuffer);
   }
 
-  /**
-   * Triggers a pad event using loaded sample AudioBuffers (falls back to test click if empty)
-   */
+  public getSampleBuffer(padIndex: number): AudioBuffer | undefined {
+    return this.sampleBuffers.get(padIndex);
+  }
+
   public triggerPad(padIndex: number, pointerId?: number): string {
     const ctx = this.getContext();
     const config = this.getPadConfig(padIndex);
 
-    // 1. Resolve Choke Groups (mute group killing)
+    // 1. Resolve Choke Groups FIRST before creating the new voice
     if (config.chokeGroup > 0) {
       this.chokeGroupVoices(config.chokeGroup);
     }
@@ -87,7 +87,6 @@ class AudioEngineService {
         ctx.currentTime
       );
     } else {
-      // Fallback click buffer if no sample loaded yet
       const fallbackBuf = ctx.createBuffer(1, ctx.sampleRate * 0.05, ctx.sampleRate);
       const data = fallbackBuf.getChannelData(0);
       for (let i = 0; i < data.length; i++) {
@@ -114,9 +113,9 @@ class AudioEngineService {
       startTime: ctx.currentTime,
     };
 
+    // 2. Register new voice after choke resolution
     this.activeVoices.set(voiceId, activeVoice);
 
-    // Audio Node Lifecycle Cleanup
     sourceNode.onended = () => {
       voiceGain.disconnect();
       this.activeVoices.delete(voiceId);
@@ -124,7 +123,6 @@ class AudioEngineService {
 
     sourceNode.start(ctx.currentTime);
 
-    // If One-Shot and no sample, stop quickly
     if (config.playMode === 'oneShot' && !sampleBuffer) {
       sourceNode.stop(ctx.currentTime + 0.05);
     }

@@ -1,21 +1,14 @@
-/* Panoramic DAW Workspace Canvas */
-html, body {
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  background-color: #0d0f12;
-  overflow-x: auto;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-/* Fixed minimum width for panoramic landscape layout */
-#root, .daw-container {@tailwind base;
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  * {
+    -webkit-touch-callout: none !important;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+  }
+
   body {
     background-color: #020617; /* slate-950 */
     color: #f8fafc; /* slate-50 */
@@ -23,18 +16,8 @@ html, body {
     padding: 0;
     overflow: hidden;
     touch-action: none;
+    -webkit-touch-callout: none;
     -webkit-user-select: none;
     user-select: none;
   }
-}
-  min-width: 1600px;
-  min-height: 100vh;
-  box-sizing: border-box;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-/* Precision zoom targets: allow fine touch control on UI controls */
-.knob-control, .slider-control, .pad-cell {
-  touch-action: manipulation;
 }
