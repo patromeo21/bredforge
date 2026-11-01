@@ -12,7 +12,7 @@ export default function App() {
   const lastTriggerRef = useRef<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const bankOffset = { A: 0, B: 4, C: 8, D: 12 }[activeBank];
+  const bankOffset = { A: 0, B: 16, C: 32, D: 48 }[activeBank];
 
   const handlePadDown = (localPadIndex: number, e: React.PointerEvent) => {
     e.preventDefault();
@@ -161,7 +161,7 @@ export default function App() {
               <button
                 key={bank}
                 onClick={() => setActiveBank(bank)}
-                className={`py-2 rounded-lg font-bold text-xs border transition-all ${
+                className={`py-2 rounded-lg font-bold text-xs border transition-all cursor-pointer ${
                   activeBank === bank
                     ? 'bg-orange-600 border-orange-500 text-white shadow-lg shadow-orange-900/40'
                     : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
@@ -187,7 +187,7 @@ export default function App() {
                   onPointerDown={(e) => handlePadDown(mappedIndex, e)}
                   onPointerUp={(e) => handlePadUp(mappedIndex, e)}
                   onPointerLeave={(e) => handlePadUp(mappedIndex, e)}
-                  className={`rounded-xl border flex flex-col items-center justify-between p-2.5 transition-all active:scale-95 touch-none select-none [-webkit-touch-callout:none] relative overflow-hidden ${
+                  className={`rounded-xl border flex flex-col items-center justify-between p-2.5 transition-all active:scale-95 touch-none select-none [-webkit-touch-callout:none] cursor-pointer relative overflow-hidden ${
                     isActive
                       ? 'bg-orange-500 border-orange-400 text-slate-950 shadow-inner shadow-orange-700'
                       : isSelected
@@ -205,7 +205,7 @@ export default function App() {
 
           {/* STATUS FOOTER */}
           <div className="text-center text-[10px] text-slate-500 font-mono">
-            Layer 5: Touch Callout & File Acceptance Patched
+            Layer 5: Styling Pipeline & Pad Grid Restored
           </div>
         </section>
 
