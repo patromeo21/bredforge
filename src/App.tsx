@@ -30,7 +30,8 @@ export default function App() {
   );
 
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const activeSourcesRef = useRef>(new Map());
+  // Type inference avoids TSX angle-bracket parsing conflicts
+  const activeSourcesRef = useRef(new Map<number, AudioBufferSourceNode[]>());
 
   // Initialize Web Audio API context safely
   useEffect(() => {
