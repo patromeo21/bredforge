@@ -67,16 +67,18 @@ export default function App() {
     if (!ctx) return;
     if (ctx.state === 'suspended') ctx.resume();
 
+    const sourcesMap = activeSourcesRef.current;
+
     // Choke Group Execution: Cut off playing pads in the same choke group
     if (pad.chokeGroup > 0) {
       pads.forEach(otherPad => {
         if (otherPad.chokeGroup === pad.chokeGroup && otherPad.id !== pad.id) {
-          const playingSources = activeSourcesRef.current.get(otherPad.id);
+          const playingSources = sourcesMap.get(otherPad.id);
           if (playingSources) {
-            playingSources.forEach(src => {
+            playingSources.forEach((src: AudioBufferSourceNode) => {
               try { src.stop(); } catch (e) {}
             });
-            activeSourcesRef.current.set(otherPad.id, []);
+            sourcesMap.set(otherPad.id, []);
           }
         }
       });
@@ -89,12 +91,12 @@ export default function App() {
       source.connect(ctx.destination);
       source.start(0);
 
-      const currentSources = activeSourcesRef.current.get(pad.id) || [];
-      activeSourcesRef.current.set(pad.id, [...currentSources, source]);
+      const currentSources = sourcesMap.get(pad.id) || [];
+      sourcesMap.set(pad.id, [...currentSources, source]);
 
       source.onended = () => {
-        const active = activeSourcesRef.current.get(pad.id) || [];
-        activeSourcesRef.current.set(pad.id, active.filter(s => s !== source));
+        const active = sourcesMap.get(pad.id) || [];
+        sourcesMap.set(pad.id, active.filter((s: AudioBufferSourceNode) => s !== source));
       };
     }
   };
