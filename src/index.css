@@ -2,24 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  *, ::before, ::after {
-    -webkit-touch-callout: none !important;
-    -webkit-user-select: none !important;
-    user-select: none !important;
-    -webkit-tap-highlight-color: transparent;
-  }
+/* Disable default iOS browser gestures, touch callouts, and magnifiers globally */
+html, body, #root {
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  overscroll-behavior: none;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
 
-  body {
-    background-color: #020617;
-    color: #f8fafc;
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
-    touch-action: none;
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
-    overscroll-behavior: none;
-  }
+/* Ensure pad elements suppress selection while allowing rapid tap interactions */
+button, .pad-target {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
