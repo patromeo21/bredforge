@@ -47,16 +47,14 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Save file name reference for UI display
     setLoadedSamples(prev => ({ ...prev, [selectedPad]: file.name }));
 
-    // Read and decode audio data for the audio engine
     const arrayBuffer = await file.arrayBuffer();
     await AudioEngine.loadSampleToPad(selectedPad, arrayBuffer);
   };
 
   return (
-    <div className="w-screen h-[100dvh] bg-slate-950 text-slate-100 flex flex-col overflow-hidden select-none">
+    <div className="w-screen h-[100dvh] bg-slate-950 text-slate-100 flex flex-col overflow-hidden select-none [-webkit-touch-callout:none]">
       {/* TOP HEADER */}
       <header className="h-12 border-b border-slate-800 bg-slate-900 px-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
@@ -84,7 +82,7 @@ export default function App() {
               type="file" 
               ref={fileInputRef} 
               onChange={handleFileSelected} 
-              accept="audio/*" 
+              accept="audio/*,.wav,.mp3,.m4a,.aiff,.flac" 
               className="hidden" 
             />
             
@@ -93,7 +91,7 @@ export default function App() {
                 <span className="text-xs text-emerald-400 font-mono">Loaded: {loadedSamples[selectedPad]}</span>
                 <button 
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-xs rounded text-slate-200 transition-colors"
+                  className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-xs rounded text-slate-200 transition-colors cursor-pointer"
                 >
                   Replace Sample
                 </button>
@@ -103,7 +101,7 @@ export default function App() {
                 <span className="text-xs text-slate-400 font-mono">No sample loaded on Pad {selectedPad + 1}</span>
                 <button 
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-4 py-2 bg-orange-600 hover:bg-orange-500 font-medium text-xs rounded-lg text-white shadow-lg shadow-orange-900/40 transition-colors"
+                  className="px-4 py-2 bg-orange-600 hover:bg-orange-500 font-medium text-xs rounded-lg text-white shadow-lg shadow-orange-900/40 transition-colors cursor-pointer"
                 >
                   Load Audio File (.wav / .mp3)
                 </button>
@@ -189,7 +187,7 @@ export default function App() {
                   onPointerDown={(e) => handlePadDown(mappedIndex, e)}
                   onPointerUp={(e) => handlePadUp(mappedIndex, e)}
                   onPointerLeave={(e) => handlePadUp(mappedIndex, e)}
-                  className={`rounded-xl border flex flex-col items-center justify-between p-2.5 transition-all active:scale-95 touch-none select-none relative overflow-hidden ${
+                  className={`rounded-xl border flex flex-col items-center justify-between p-2.5 transition-all active:scale-95 touch-none select-none [-webkit-touch-callout:none] relative overflow-hidden ${
                     isActive
                       ? 'bg-orange-500 border-orange-400 text-slate-950 shadow-inner shadow-orange-700'
                       : isSelected
@@ -207,7 +205,7 @@ export default function App() {
 
           {/* STATUS FOOTER */}
           <div className="text-center text-[10px] text-slate-500 font-mono">
-            Layer 5: File Ingestion Active
+            Layer 5: Touch Callout & File Acceptance Patched
           </div>
         </section>
 
