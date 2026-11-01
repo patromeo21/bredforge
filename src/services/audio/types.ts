@@ -1,44 +1,64 @@
-export type TrackKey = 'vocals' | 'drums' | 'bass' | 'other';
+export type PlayMode = 'oneShot' | 'gate';
+export type ChokeGroup = 0 | 1 | 2 | 3 | 4;
+
+export type TrackKey = string; // e.g. "A1", "A2", "D16"
+
+export interface PadConfig {
+  padIndex: number;
+  playMode: PlayMode;
+  chokeGroup: ChokeGroup;
+  sampleId?: string;
+  gain: number;
+  pitchSemiTones: number;
+}
+
+export interface ActiveVoice {
+  id: string;
+  padIndex: number;
+  pointerId?: number;
+  chokeGroup: ChokeGroup;
+  sourceNode: AudioBufferSourceNode;
+  gainNode: GainNode;
+  startTime: number;
+}
 
 export interface EngineTrackState {
-  key: TrackKey;
-  enabled: boolean;
-  gain: number;
+  id: string;
+  name: string;
+  volume: number;
   pan: number;
-  mute: boolean;
-  solo: boolean;
+  isMuted: boolean;
+  isSoloed: boolean;
 }
 
 export interface AudioBufferMetadata {
+  id: string;
+  name: string;
   duration: number;
   sampleRate: number;
-  numberOfChannels: number;
-  fileName?: string;
+  channels: number;
 }
 
 export interface TransportSnapshot {
   isPlaying: boolean;
-  currentTime: number;
-  duration: number;
+  bpm: number;
+  currentStep: number;
 }
 
 export interface PatternStep {
-  index: number;
-  note: string | null;
-  sampleId: string | null;
+  stepIndex: number;
+  active: boolean;
   velocity: number;
 }
 
 export interface PatternState {
   id: string;
-  name: string;
   length: number;
   steps: PatternStep[];
 }
 
 export interface MasterEffectState {
-  drive: number;
-  cutoff: number;
-  resonance: number;
-  limiter: number;
+  reverbMix: number;
+  delayMix: number;
+  masterFilterCutoff: number;
 }
