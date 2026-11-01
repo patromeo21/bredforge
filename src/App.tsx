@@ -7,8 +7,10 @@ export default function App() {
   const [activeBank, setActiveBank] = useState<'A' | 'B' | 'C' | 'D'>('A');
   const [selectedPad, setSelectedPad] = useState<number>(0);
   const [activePads, setActivePads] = useState<Record<number, boolean>>({});
+  const [loadedSamples, setLoadedSamples] = useState<Record<number, string>>({});
 
   const lastTriggerRef = useRef<number>(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const bankOffset = { A: 0, B: 4, C: 8, D: 12 }[activeBank];
 
@@ -38,7 +40,19 @@ export default function App() {
 
   const updateSelectedConfig = (updates: { playMode?: PlayMode; chokeGroup?: ChokeGroup }) => {
     AudioEngine.setPadConfig(selectedPad, updates);
-    setSelectedPad((prev) => prev); // trigger re-render
+    setSelectedPad((prev) => prev);
+  };
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Save file name reference for UI display
+    setLoadedSamples(prev => ({ ...prev, [selectedPad]: file.name }));
+
+    // Read and decode audio data for the audio engine
+    const arrayBuffer = await file.arrayBuffer();
+    await AudioEngine.loadSampleToPad(selectedPad, arrayBuffer);
   };
 
   return (
@@ -57,18 +71,44 @@ export default function App() {
       {/* MAIN WORKSPACE (DUAL PANE) */}
       <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 overflow-hidden">
         
-        {/* LEFT PANEL: SAMPLE CHOPPER & PAD SETTINGS */}
+        {/* LEFT PANEL: SAMPLE CHOPPER & WORKSPACE */}
         <section className="lg:col-span-7 bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col gap-4 overflow-y-auto">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <h2 className="text-sm font-semibold text-slate-300">Sample Chopper & Workspace</h2>
             <span className="text-xs text-orange-400 font-mono">Pad {selectedPad + 1} Selected</span>
           </div>
 
-          {/* Waveform Placeholder / Chopper Canvas */}
-          <div className="flex-1 min-h-[160px] bg-slate-950 border border-slate-800 rounded-lg flex flex-col items-center justify-center relative">
-            <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-slate-800" />
-            <span className="text-xs text-slate-500 z-10 font-mono">WAVEFORM PREVIEW & SLICE MARKERS</span>
-            <span className="text-[10px] text-slate-600 mt-1">Local File Picker & Chopper Integration Pending</span>
+          {/* Waveform Preview & File Loader */}
+          <div className="flex-1 min-h-[160px] bg-slate-950 border border-slate-800 rounded-lg flex flex-col items-center justify-center p-4 relative">
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleFileSelected} 
+              accept="audio/*" 
+              className="hidden" 
+            />
+            
+            {loadedSamples[selectedPad] ? (
+              <div className="flex flex-col items-center gap-2">
+                <span className="text-xs text-emerald-400 font-mono">Loaded: {loadedSamples[selectedPad]}</span>
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-xs rounded text-slate-200 transition-colors"
+                >
+                  Replace Sample
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2">
+                <span className="text-xs text-slate-400 font-mono">No sample loaded on Pad {selectedPad + 1}</span>
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-4 py-2 bg-orange-600 hover:bg-orange-500 font-medium text-xs rounded-lg text-white shadow-lg shadow-orange-900/40 transition-colors"
+                >
+                  Load Audio File (.wav / .mp3)
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Pad Voice Parameters */}
@@ -141,6 +181,7 @@ export default function App() {
               const globalIdx = bankOffset + mappedIndex;
               const isActive = activePads[globalIdx];
               const isSelected = selectedPad === globalIdx;
+              const hasSample = !!loadedSamples[globalIdx];
 
               return (
                 <button
@@ -158,7 +199,7 @@ export default function App() {
                 >
                   <span className="text-[10px] font-mono opacity-60 self-start">{activeBank}{mappedIndex + 1}</span>
                   <span className="font-bold text-sm tracking-wide">{mappedIndex + 1}</span>
-                  <div className="w-1.5 h-1.5 rounded-full bg-slate-800 self-end" />
+                  <div className={`w-1.5 h-1.5 rounded-full ${hasSample ? 'bg-emerald-400' : 'bg-slate-800'} self-end`} />
                 </button>
               );
             })}
@@ -166,7 +207,7 @@ export default function App() {
 
           {/* STATUS FOOTER */}
           <div className="text-center text-[10px] text-slate-500 font-mono">
-            MPC Ergonomic Layout • Polyphonic Touch Active
+            Layer 5: File Ingestion Active
           </div>
         </section>
 

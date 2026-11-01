@@ -4,8 +4,9 @@ class AudioEngineService {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private activeVoices: Map<string, ActiveVoice> = new Map();
+  private sampleBuffers: Map<number, AudioBuffer> = new Map();
 
-  // Map pad indices (0-15) to their configuration parameters
+  // Map pad indices (0-63 for 4 banks of 16) to their configurations
   private padConfigs: Map<number, PadConfig> = new Map();
 
   constructor() {
@@ -13,7 +14,7 @@ class AudioEngineService {
   }
 
   private initializeDefaultConfigs() {
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < 64; i++) {
       this.padConfigs.set(i, {
         padIndex: i,
         playMode: 'oneShot',
@@ -57,8 +58,14 @@ class AudioEngineService {
     this.padConfigs.set(padIndex, { ...current, ...config });
   }
 
+  public async loadSampleToPad(padIndex: number, arrayBuffer: ArrayBuffer): Promise<void> {
+    const ctx = this.getContext();
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+    this.sampleBuffers.set(padIndex, audioBuffer);
+  }
+
   /**
-   * Triggers a pad event with full polyphony, choke group resolution, and pointerId binding
+   * Triggers a pad event using loaded sample AudioBuffers (falls back to test click if empty)
    */
   public triggerPad(padIndex: number, pointerId?: number): string {
     const ctx = this.getContext();
@@ -69,18 +76,28 @@ class AudioEngineService {
       this.chokeGroupVoices(config.chokeGroup);
     }
 
-    // 2. Setup voice nodes
-    const osc = ctx.createOscillator();
+    const sampleBuffer = this.sampleBuffers.get(padIndex);
+    const sourceNode = ctx.createBufferSource();
     const voiceGain = ctx.createGain();
 
-    // Map pad Index to distinct pitch frequencies for testing
-    const baseFreq = 130.81; // C3
-    const freq = baseFreq * Math.pow(2, (padIndex + config.pitchSemiTones) / 12);
-    osc.type = padIndex % 2 === 0 ? 'sine' : 'triangle';
-    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    if (sampleBuffer) {
+      sourceNode.buffer = sampleBuffer;
+      sourceNode.playbackRate.setValueAtTime(
+        Math.pow(2, config.pitchSemiTones / 12),
+        ctx.currentTime
+      );
+    } else {
+      // Fallback click buffer if no sample loaded yet
+      const fallbackBuf = ctx.createBuffer(1, ctx.sampleRate * 0.05, ctx.sampleRate);
+      const data = fallbackBuf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        data[i] = Math.sin(i / 10) * Math.exp(-i / (ctx.sampleRate * 0.02));
+      }
+      sourceNode.buffer = fallbackBuf;
+    }
 
     voiceGain.gain.setValueAtTime(config.gain, ctx.currentTime);
-    osc.connect(voiceGain);
+    sourceNode.connect(voiceGain);
     if (this.masterGain) {
       voiceGain.connect(this.masterGain);
     }
@@ -92,37 +109,33 @@ class AudioEngineService {
       padIndex,
       pointerId,
       chokeGroup: config.chokeGroup,
-      sourceNode: osc as unknown as AudioBufferSourceNode,
+      sourceNode,
       gainNode: voiceGain,
       startTime: ctx.currentTime,
     };
 
     this.activeVoices.set(voiceId, activeVoice);
 
-    // 3. Audio Node Lifecycle & Memory Leak Cleanup
-    osc.onended = () => {
+    // Audio Node Lifecycle Cleanup
+    sourceNode.onended = () => {
       voiceGain.disconnect();
       this.activeVoices.delete(voiceId);
     };
 
-    osc.start(ctx.currentTime);
+    sourceNode.start(ctx.currentTime);
 
-    // If one-shot test synth, automatically stop after 0.5s if not released early by gate/choke
-    if (config.playMode === 'oneShot') {
-      osc.stop(ctx.currentTime + 0.5);
+    // If One-Shot and no sample, stop quickly
+    if (config.playMode === 'oneShot' && !sampleBuffer) {
+      sourceNode.stop(ctx.currentTime + 0.05);
     }
 
     return voiceId;
   }
 
-  /**
-   * Releases voices tied to a specific pad or pointerId for Gate mode
-   */
   public releasePad(padIndex: number, pointerId?: number): void {
     if (!this.ctx) return;
     const config = this.getPadConfig(padIndex);
 
-    // Only Gate mode responds to touch release
     if (config.playMode !== 'gate') return;
 
     const now = this.ctx.currentTime;
@@ -130,13 +143,12 @@ class AudioEngineService {
     this.activeVoices.forEach((voice, voiceId) => {
       const matchesPointer = pointerId !== undefined ? voice.pointerId === pointerId : true;
       if (voice.padIndex === padIndex && matchesPointer) {
-        // Fast release envelope ramp (15ms) to prevent digital pops
         voice.gainNode.gain.cancelScheduledValues(now);
         voice.gainNode.gain.setValueAtTime(voice.gainNode.gain.value, now);
         voice.gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.015);
         
         try {
-          (voice.sourceNode as unknown as OscillatorNode).stop(now + 0.02);
+          voice.sourceNode.stop(now + 0.02);
         } catch {
           // Node already stopped
         }
@@ -145,9 +157,6 @@ class AudioEngineService {
     });
   }
 
-  /**
-   * Stops all active voices belonging to a specific Choke Group
-   */
   private chokeGroupVoices(chokeGroup: ChokeGroup): void {
     if (!this.ctx || chokeGroup === 0) return;
     const now = this.ctx.currentTime;
@@ -158,7 +167,7 @@ class AudioEngineService {
         voice.gainNode.gain.setValueAtTime(voice.gainNode.gain.value, now);
         voice.gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.005);
         try {
-          (voice.sourceNode as unknown as OscillatorNode).stop(now + 0.006);
+          voice.sourceNode.stop(now + 0.006);
         } catch {
           // Node already stopped
         }
