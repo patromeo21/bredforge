@@ -54,7 +54,7 @@ export default function App() {
   };
 
   return (
-    <div className="w-screen h-[100dvh] bg-slate-950 text-slate-100 flex flex-col overflow-hidden select-none [-webkit-touch-callout:none]">
+    <div className="w-screen h-[100dvh] bg-slate-950 text-slate-100 flex flex-col overflow-hidden select-none">
       {/* TOP HEADER */}
       <header className="h-12 border-b border-slate-800 bg-slate-900 px-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
@@ -120,13 +120,13 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-1 bg-slate-900 p-1 rounded border border-slate-800">
                   <button
                     onClick={() => updateSelectedConfig({ playMode: 'oneShot' })}
-                    className={`text-xs py-1 rounded transition-colors ${currentConfig.playMode === 'oneShot' ? 'bg-orange-600 text-white font-medium' : 'text-slate-400 hover:text-slate-200'}`}
+                    className={`text-xs py-1 rounded transition-colors cursor-pointer ${currentConfig.playMode === 'oneShot' ? 'bg-orange-600 text-white font-medium' : 'text-slate-400 hover:text-slate-200'}`}
                   >
                     One-Shot
                   </button>
                   <button
                     onClick={() => updateSelectedConfig({ playMode: 'gate' })}
-                    className={`text-xs py-1 rounded transition-colors ${currentConfig.playMode === 'gate' ? 'bg-orange-600 text-white font-medium' : 'text-slate-400 hover:text-slate-200'}`}
+                    className={`text-xs py-1 rounded transition-colors cursor-pointer ${currentConfig.playMode === 'gate' ? 'bg-orange-600 text-white font-medium' : 'text-slate-400 hover:text-slate-200'}`}
                   >
                     Gate
                   </button>
@@ -141,7 +141,7 @@ export default function App() {
                     <button
                       key={group}
                       onClick={() => updateSelectedConfig({ chokeGroup: group as ChokeGroup })}
-                      className={`text-xs py-1 rounded transition-colors text-center ${currentConfig.chokeGroup === group ? 'bg-slate-700 text-white font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+                      className={`text-xs py-1 rounded transition-colors text-center cursor-pointer ${currentConfig.chokeGroup === group ? 'bg-slate-700 text-white font-bold' : 'text-slate-400 hover:text-slate-200'}`}
                     >
                       {group === 0 ? 'Off' : group}
                     </button>
@@ -172,8 +172,8 @@ export default function App() {
             ))}
           </div>
 
-          {/* 4x4 PAD MATRIX */}
-          <div className="grid grid-cols-4 gap-2.5 my-auto aspect-square max-w-[420px] mx-auto w-full">
+          {/* 4x4 PAD MATRIX (TACTILE MPC HARDWARE DESIGN) */}
+          <div className="grid grid-cols-4 gap-3 my-auto aspect-square max-w-[420px] mx-auto w-full bg-slate-950 p-3 rounded-2xl border border-slate-800/80 shadow-2xl">
             {Array.from({ length: 16 }).map((_, i) => {
               const mappedIndex = [12, 13, 14, 15, 8, 9, 10, 11, 4, 5, 6, 7, 0, 1, 2, 3][i];
               const globalIdx = bankOffset + mappedIndex;
@@ -187,17 +187,22 @@ export default function App() {
                   onPointerDown={(e) => handlePadDown(mappedIndex, e)}
                   onPointerUp={(e) => handlePadUp(mappedIndex, e)}
                   onPointerLeave={(e) => handlePadUp(mappedIndex, e)}
-                  className={`rounded-xl border flex flex-col items-center justify-between p-2.5 transition-all active:scale-95 touch-none select-none [-webkit-touch-callout:none] cursor-pointer relative overflow-hidden ${
+                  className={`rounded-xl border flex flex-col items-center justify-between p-3 transition-transform duration-75 active:scale-95 touch-none select-none cursor-pointer relative overflow-hidden shadow-md ${
                     isActive
-                      ? 'bg-orange-500 border-orange-400 text-slate-950 shadow-inner shadow-orange-700'
+                      ? 'bg-gradient-to-t from-orange-600 to-orange-500 border-orange-400 text-slate-950 shadow-orange-900/60 scale-[0.98]'
                       : isSelected
-                      ? 'bg-slate-800 border-orange-500/80 text-slate-100'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                      ? 'bg-slate-900 border-orange-500/80 text-slate-100 shadow-inner'
+                      : 'bg-gradient-to-t from-slate-900 to-slate-950 border-slate-800/90 text-slate-400 hover:border-slate-700'
                   }`}
                 >
-                  <span className="text-[10px] font-mono opacity-60 self-start">{activeBank}{mappedIndex + 1}</span>
-                  <span className="font-bold text-sm tracking-wide">{mappedIndex + 1}</span>
-                  <div className={`w-1.5 h-1.5 rounded-full ${hasSample ? 'bg-emerald-400' : 'bg-slate-800'} self-end`} />
+                  <div className="w-full flex items-center justify-between">
+                    <span className="text-[10px] font-mono font-bold opacity-50">{activeBank}{mappedIndex + 1}</span>
+                    <div className={`w-2 h-2 rounded-full transition-colors ${hasSample ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]' : 'bg-slate-800'}`} />
+                  </div>
+
+                  <span className="font-extrabold text-base tracking-wider font-mono opacity-90">{mappedIndex + 1}</span>
+
+                  <div className="w-6 h-1 rounded-full bg-slate-800/60 self-center" />
                 </button>
               );
             })}
@@ -205,7 +210,7 @@ export default function App() {
 
           {/* STATUS FOOTER */}
           <div className="text-center text-[10px] text-slate-500 font-mono">
-            Layer 5: Styling Pipeline & Pad Grid Restored
+            Layer 5: Tactical MPC Pad Hardware Styling Active
           </div>
         </section>
 
