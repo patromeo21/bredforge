@@ -8,7 +8,7 @@ interface PadState {
   sampleName: string | null;
   sampleBuffer: AudioBuffer | null;
   playMode: 'oneshot' | 'gate';
-  chokeGroup: number;
+  chokeGroup: number; // 0 = off, 1-4 corresponding to Banks A-D
 }
 
 const createInitialPads = (): PadState[] => {
@@ -41,10 +41,8 @@ export default function App() {
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const activeSourcesRef = useRef(new Map<string, AudioBufferSourceNode[]>());
-  // Tracks active gate sources per pad key for instant release stopping
   const gateSourcesRef = useRef(new Map<string, AudioBufferSourceNode[]>());
 
-  // Initialize Web Audio API context and handle tab visibility/idle lifecycle resume
   useEffect(() => {
     const initAudio = () => {
       if (!audioCtxRef.current) {
@@ -80,14 +78,12 @@ export default function App() {
   const currentPad = allPads.find(p => p.bank === activeBank && p.id === selectedPadId) || allPads[0];
   const bankPads = allPads.filter(p => p.bank === activeBank);
 
-  // Trigger Audio on Pointer Down
   const handlePadPointerDown = (targetPad: PadState, e: React.PointerEvent<HTMLButtonElement>) => {
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch (err) {}
 
     const padKey = getPadKey(targetPad.bank, targetPad.id);
-
     setTriggeredVisualKeys(prev => ({ ...prev, [padKey]: true }));
 
     const ctx = audioCtxRef.current;
@@ -96,7 +92,7 @@ export default function App() {
 
     const sourcesMap = activeSourcesRef.current;
 
-    // Choke Group Execution within bank context
+    // Choke Group Execution (Scoped strictly to matching Bank choke configuration)
     if (targetPad.chokeGroup > 0) {
       allPads.forEach(otherPad => {
         if (
@@ -116,7 +112,6 @@ export default function App() {
       });
     }
 
-    // Polyphonic Buffer Node Generation
     if (targetPad.sampleBuffer) {
       const source = ctx.createBufferSource();
       source.buffer = targetPad.sampleBuffer;
@@ -138,18 +133,14 @@ export default function App() {
     }
   };
 
-  // Stop Audio on Pointer Up / Release (Specifically for Gate mode)
   const handlePadPointerUp = (targetPad: PadState) => {
     const padKey = getPadKey(targetPad.bank, targetPad.id);
-
     setTriggeredVisualKeys(prev => ({ ...prev, [padKey]: false }));
 
     if (targetPad.playMode === 'gate') {
       const gateList = gateSourcesRef.current.get(padKey) || [];
       gateList.forEach(src => {
-        try {
-          src.stop(0);
-        } catch (err) {}
+        try { src.stop(0); } catch (err) {}
       });
       gateSourcesRef.current.set(padKey, []);
     }
@@ -187,55 +178,64 @@ export default function App() {
     reader.readAsArrayBuffer(file);
   };
 
+  // Map Choke Group integer to Bank letter representation
+  const getChokeLabel = (group: number) => {
+    if (group === 0) return 'OFF';
+    const bankMap = ['', 'BANK A', 'BANK B', 'BANK C', 'BANK D'];
+    return bankMap[group] || `GRP ${group}`;
+  };
+
   return (
-    <div className="flex flex-col md:flex-row h-screen w-screen bg-neutral-950 text-white select-none overflow-hidden font-sans [touch-action:none] [-webkit-touch-callout:none]">
+    <div className="flex flex-col md:flex-row h-screen w-screen bg-neutral-950 text-white select-none overflow-hidden font-sans">
       
-      {/* LEFT PANE: Workspace & File Uploader */}
+      {/* LEFT PANE: Workspace & Integrated File Uploader */}
       <div className="w-full md:w-1/2 h-1/2 md:h-full border-b md:border-b-0 md:border-r border-neutral-800 flex flex-col p-4 bg-neutral-900/40 shrink-0">
-        <div className="flex items-center justify-between pb-3 border-b border-neutral-800 shrink-0">
+        <div className="flex items-center justify-between pb-2 border-b border-neutral-800 shrink-0">
           <h1 className="text-xl font-bold tracking-widest text-amber-500 uppercase">BredForge</h1>
           <span className="text-xs bg-neutral-800 px-2.5 py-1 rounded-full text-neutral-400 font-mono">Layer 4 Active</span>
         </div>
 
-        {/* Selected Pad Sample Details Header */}
-        <div className="my-3 p-3 md:p-4 bg-neutral-900 border border-neutral-800 rounded-lg shrink-0">
-          <div className="text-xs text-neutral-500 uppercase font-semibold">Active Selection</div>
-          <div className="text-base md:text-lg font-bold text-neutral-200 mt-1">
-            Bank {activeBank} - Pad {currentPad.id}
+        {/* Selected Pad Sample Details & Integrated File Uploader */}
+        <div className="my-2 p-3 bg-neutral-900 border border-neutral-800 rounded-lg shrink-0 flex flex-col gap-2.5">
+          <div className="flex justify-between items-center">
+            <div>
+              <div className="text-[10px] text-neutral-500 uppercase font-semibold">Active Selection</div>
+              <div className="text-sm md:text-base font-bold text-neutral-200">
+                Bank {activeBank} - Pad {currentPad.id}
+              </div>
+            </div>
+            {/* Integrated File Upload Button inside Active Selection Header */}
+            <label className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-black text-xs font-semibold px-3 py-2 rounded-md cursor-pointer transition shadow-md shrink-0">
+              <Upload className="w-3.5 h-3.5" />
+              <span>{currentPad.sampleName ? 'Replace' : 'Load Sample'}</span>
+              <input type="file" accept="audio/*" onChange={handleFileUpload} className="hidden" />
+            </label>
           </div>
-          <div className="mt-2 text-sm text-amber-400/90 font-mono truncate">
+
+          <div className="text-xs text-amber-400/90 font-mono truncate bg-neutral-950 p-2 rounded border border-neutral-800/80">
             {currentPad.sampleName ? `[Loaded] ${currentPad.sampleName}` : '[ Empty Slot ]'}
           </div>
         </div>
 
-        {/* Waveform Canvas Placeholder */}
-        <div className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg flex items-center justify-center relative overflow-hidden min-h-[80px]">
-          <div className="text-neutral-600 text-xs md:text-sm font-mono flex flex-col items-center gap-2">
-            <Volume2 className="w-6 h-6 md:w-8 md:h-8 opacity-40 animate-pulse" />
+        {/* Waveform Canvas Placeholder (Flex filling remaining left space) */}
+        <div className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg flex items-center justify-center relative overflow-hidden min-h-[60px]">
+          <div className="text-neutral-600 text-xs md:text-sm font-mono flex flex-col items-center gap-1.5">
+            <Volume2 className="w-6 h-6 md:w-7 md:h-7 opacity-40 animate-pulse" />
             <span>Waveform Chopper & Slice Canvas</span>
           </div>
-        </div>
-
-        {/* Permanent File Uploader Button Bar */}
-        <div className="mt-3 shrink-0">
-          <label className="w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-500 text-black font-semibold py-3 rounded-lg cursor-pointer transition shadow-lg">
-            <Upload className="w-4 h-4" />
-            <span>{currentPad.sampleName ? 'Replace Sample' : 'Load Audio File'}</span>
-            <input type="file" accept="audio/*" onChange={handleFileUpload} className="hidden" />
-          </label>
         </div>
       </div>
 
       {/* RIGHT PANE: Hardware MPC Pads & Parameters */}
-      <div className="w-full md:w-1/2 h-1/2 md:h-full flex flex-col p-4 bg-neutral-950 overflow-y-auto">
+      <div className="w-full md:w-1/2 h-1/2 md:h-full flex flex-col p-4 bg-neutral-950 overflow-hidden">
         
         {/* Bank Selection Tabs */}
-        <div className="flex gap-2 mb-3 shrink-0">
+        <div className="flex gap-2 mb-2.5 shrink-0">
           {(['A', 'B', 'C', 'D'] as const).map(bank => (
             <button
               key={bank}
               onClick={() => setActiveBank(bank)}
-              className={`flex-1 py-2 font-bold text-xs md:text-sm rounded-md transition ${
+              className={`flex-1 py-1.5 font-bold text-xs md:text-sm rounded-md transition ${
                 activeBank === bank
                   ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20'
                   : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
@@ -247,10 +247,10 @@ export default function App() {
         </div>
 
         {/* Dynamic Parameter Switching Controls */}
-        <div className="grid grid-cols-2 gap-3 mb-3 shrink-0">
+        <div className="grid grid-cols-2 gap-2.5 mb-2.5 shrink-0">
           <button
             onClick={() => updatePadParam('playMode', currentPad.playMode === 'oneshot' ? 'gate' : 'oneshot')}
-            className={`flex items-center justify-center gap-2 py-2.5 rounded-lg border text-xs font-bold uppercase transition ${
+            className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-bold uppercase transition ${
               currentPad.playMode === 'oneshot'
                 ? 'bg-neutral-800 border-amber-500 text-amber-400'
                 : 'bg-neutral-900 border-neutral-800 text-neutral-400'
@@ -262,19 +262,19 @@ export default function App() {
 
           <button
             onClick={() => updatePadParam('chokeGroup', (currentPad.chokeGroup + 1) % 5)}
-            className={`flex items-center justify-center gap-2 py-2.5 rounded-lg border text-xs font-bold uppercase transition ${
+            className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-bold uppercase transition ${
               currentPad.chokeGroup > 0
                 ? 'bg-neutral-800 border-amber-500 text-amber-400'
                 : 'bg-neutral-900 border-neutral-800 text-neutral-400'
             }`}
           >
             <Zap className="w-3.5 h-3.5" />
-            Choke: {currentPad.chokeGroup === 0 ? 'OFF' : `GRP ${currentPad.chokeGroup}`}
+            Choke: {getChokeLabel(currentPad.chokeGroup)}
           </button>
         </div>
 
-        {/* 4x4 MPC Tactile Pad Matrix with Strict Touch Action Protection */}
-        <div className="grid grid-cols-4 grid-rows-4 gap-2.5 md:gap-3 pb-6 flex-1 min-h-[320px]">
+        {/* 4x4 MPC Tactile Pad Matrix (Strictly fitted to viewport without scrolling) */}
+        <div className="grid grid-cols-4 grid-rows-4 gap-2 md:gap-2.5 flex-1 min-h-0">
           {bankPads.map(pad => {
             const padKey = getPadKey(pad.bank, pad.id);
             const isSelected = selectedPadId === pad.id;
@@ -290,7 +290,7 @@ export default function App() {
                 onPointerUp={() => handlePadPointerUp(pad)}
                 onPointerCancel={() => handlePadPointerUp(pad)}
                 onLostPointerCapture={() => handlePadPointerUp(pad)}
-                className={`pad-target relative rounded-xl border-2 flex flex-col items-center justify-between p-2 transition-all transform active:scale-95 w-full h-full min-h-[70px] overflow-hidden [touch-action:none] [-webkit-touch-callout:none] [user-select:none] ${
+                className={`pad-target relative rounded-xl border-2 flex flex-col items-center justify-between p-1.5 transition-all transform active:scale-95 w-full h-full min-h-[50px] overflow-hidden [touch-action:none] [-webkit-touch-callout:none] [user-select:none] ${
                   isTriggered
                     ? 'bg-amber-400 border-amber-300 shadow-xl shadow-amber-400/50 scale-95'
                     : isSelected
@@ -303,12 +303,12 @@ export default function App() {
                   {pad.chokeGroup > 0 && <span className="text-amber-500 font-bold">C{pad.chokeGroup}</span>}
                 </div>
 
-                <div className="text-[11px] md:text-xs font-bold tracking-wider text-center truncate max-w-full px-1 my-auto">
+                <div className="text-[10px] md:text-xs font-bold tracking-wider text-center truncate max-w-full px-1 my-auto">
                   {pad.sampleName ? pad.sampleName : pad.label}
                 </div>
 
                 <div className="w-full flex justify-center shrink-0">
-                  <span className={`w-2 h-2 rounded-full ${pad.sampleBuffer ? 'bg-emerald-500' : 'bg-neutral-700'}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full ${pad.sampleBuffer ? 'bg-emerald-500' : 'bg-neutral-700'}`} />
                 </div>
               </button>
             );
