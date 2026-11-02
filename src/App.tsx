@@ -45,8 +45,10 @@ export default function App() {
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const masterLimiterRef = useRef<DynamicsCompressorNode | null>(null);
-  const activeSourcesRef = useRef>(new Map());
-  const gateSourcesRef = useRef>(new Map());
+  
+  // Using type inference to avoid TSX angle-bracket parser conflicts (> operator error)
+  const activeSourcesRef = useRef(new Map<string, AudioBufferSourceNode[]>());
+  const gateSourcesRef = useRef(new Map<string, AudioBufferSourceNode[]>());
   const gridRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
