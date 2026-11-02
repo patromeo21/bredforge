@@ -8,7 +8,7 @@ interface PadState {
   sampleName: string | null;
   sampleBuffer: AudioBuffer | null;
   playMode: 'oneshot' | 'gate';
-  chokeGroup: number; // 0 = off, 1-4 global choke groups
+  chokeGroup: number;
 }
 
 const createInitialPads = (): PadState[] => {
@@ -35,7 +35,7 @@ const createInitialPads = (): PadState[] => {
 export default function App() {
   const [activeBank, setActiveBank] = useState<'A' | 'B' | 'C' | 'D'>('A');
   const [selectedPadId, setSelectedPadId] = useState<number>(1);
-  const [activeTouches, setActiveTouches] = useState<Record<number, number>>({}); // pointerId -> padId
+  const [activeTouches, setActiveTouches] = useState<Record<number, number>>({});
   
   const [copyMode, setCopyMode] = useState<boolean>(false);
   const [sourcePadForCopy, setSourcePadForCopy] = useState<PadState | null>(null);
@@ -318,7 +318,7 @@ export default function App() {
               )
             );
           },
-          (err) => {
+          (err: DOMException) => {
             console.error("Audio decoding error:", err);
           }
         );
