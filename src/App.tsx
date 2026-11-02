@@ -9,8 +9,8 @@ interface PadState {
   sampleBuffer: AudioBuffer | null;
   playMode: 'oneshot' | 'gate';
   chokeGroup: number;
-  sliceStart?: number; // normalized 0 to 1
-  sliceEnd?: number;   // normalized 0 to 1
+  sliceStart: number; // normalized 0 to 1
+  sliceEnd: number;   // normalized 0 to 1
 }
 
 const createInitialPads = (): PadState[] => {
@@ -25,7 +25,7 @@ const createInitialPads = (): PadState[] => {
         label: `PAD ${i}`,
         sampleName: null,
         sampleBuffer: null,
-        playMode: 'gate',
+        playMode: 'oneshot',
         chokeGroup: 0,
         sliceStart: 0,
         sliceEnd: 1,
@@ -50,11 +50,11 @@ export default function App() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const masterLimiterRef = useRef<DynamicsCompressorNode | null>(null);
   
-  // Type inference maps to prevent TSX angle bracket parser collisions
   const activeSourcesRef = useRef(new Map<string, AudioBufferSourceNode[]>());
   const gateSourcesRef = useRef(new Map<string, AudioBufferSourceNode[]>());
   const gridRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isDraggingCanvasRef = useRef<'start' | 'end' | null>(null);
 
   useEffect(() => {
     const initAudio = () => {
@@ -101,38 +101,44 @@ export default function App() {
   const currentPad = allPads.find((p: PadState) => p.bank === activeBank && p.id === selectedPadId) || allPads[0];
   const bankPads = allPads.filter((p: PadState) => p.bank === activeBank);
 
-  // Render Waveform Canvas whenever selected pad or buffer changes
+  // Hi-DPI Crystal Clear Canvas Waveform Rendering
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const width = canvas.width;
-    const height = canvas.height;
-    ctx.clearRect(0, 0, width, height);
+    const dpr = window.devicePixelRatio || 1;
+    const displayWidth = canvas.clientWidth || 300;
+    const displayHeight = canvas.clientHeight || 150;
+
+    canvas.width = displayWidth * dpr;
+    canvas.height = displayHeight * dpr;
+    ctx.scale(dpr, dpr);
+
+    ctx.clearRect(0, 0, displayWidth, displayHeight);
 
     // Background
     ctx.fillStyle = '#09090b';
-    ctx.fillRect(0, 0, width, height);
+    ctx.fillRect(0, 0, displayWidth, displayHeight);
 
     if (!currentPad.sampleBuffer) {
       ctx.fillStyle = '#52525b';
       ctx.font = '11px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('NO SAMPLE LOADED', width / 2, height / 2);
+      ctx.fillText('NO SAMPLE LOADED', displayWidth / 2, displayHeight / 2);
       return;
     }
 
     const rawData = currentPad.sampleBuffer.getChannelData(0);
-    const step = Math.ceil(rawData.length / width);
-    const amp = height / 2;
+    const step = Math.ceil(rawData.length / displayWidth);
+    const amp = displayHeight / 2;
 
-    ctx.strokeStyle = '#f59e0b'; // Amber-500
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 1; // Ultra-fine crisp lines
     ctx.beginPath();
 
-    for (let i = 0; i < width; i++) {
+    for (let i = 0; i < displayWidth; i++) {
       let min = 1.0;
       let max = -1.0;
       for (let j = 0; j < step; j++) {
@@ -148,51 +154,77 @@ export default function App() {
     ctx.stroke();
 
     // Draw Slice Markers
-    const startX = (currentPad.sliceStart ?? 0) * width;
-    const endX = (currentPad.sliceEnd ?? 1) * width;
+    const startX = currentPad.sliceStart * displayWidth;
+    const endX = currentPad.sliceEnd * displayWidth;
 
-    ctx.fillStyle = 'rgba(245, 158, 11, 0.2)';
-    ctx.fillRect(startX, 0, endX - startX, height);
+    ctx.fillStyle = 'rgba(245, 158, 11, 0.15)';
+    ctx.fillRect(startX, 0, endX - startX, displayHeight);
 
-    ctx.strokeStyle = '#ef4444'; // Red start marker
+    ctx.strokeStyle = '#ef4444'; // Red Start Marker
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(startX, 0);
-    ctx.lineTo(startX, height);
+    ctx.lineTo(startX, displayHeight);
     ctx.stroke();
 
-    ctx.strokeStyle = '#22c55e'; // Green end marker
+    ctx.strokeStyle = '#22c55e'; // Green End Marker
     ctx.beginPath();
     ctx.moveTo(endX, 0);
-    ctx.lineTo(endX, height);
+    ctx.lineTo(endX, displayHeight);
     ctx.stroke();
 
   }, [currentPad.sampleBuffer, currentPad.sliceStart, currentPad.sliceEnd]);
 
+  // Touch/Pointer Trimming on Canvas
+  const handleCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !currentPad.sampleBuffer) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const normX = Math.max(0, Math.min(1, x / rect.width));
+
+    const startDist = Math.abs(normX - currentPad.sliceStart);
+    const endDist = Math.abs(normX - currentPad.sliceEnd);
+
+    if (startDist < endDist) {
+      isDraggingCanvasRef.current = 'start';
+      updatePadParam('sliceStart', Math.min(normX, currentPad.sliceEnd - 0.01));
+    } else {
+      isDraggingCanvasRef.current = 'end';
+      updatePadParam('sliceEnd', Math.max(normX, currentPad.sliceStart + 0.01));
+    }
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
+  };
+
+  const handleCanvasPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDraggingCanvasRef.current || !canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const normX = Math.max(0, Math.min(1, x / rect.width));
+
+    if (isDraggingCanvasRef.current === 'start') {
+      updatePadParam('sliceStart', Math.min(normX, currentPad.sliceEnd - 0.01));
+    } else {
+      updatePadParam('sliceEnd', Math.max(normX, currentPad.sliceStart + 0.01));
+    }
+  };
+
+  const handleCanvasPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    isDraggingCanvasRef.current = null;
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) {}
+  };
+
   const getPadIdFromCoordinates = (clientX: number, clientY: number): number | null => {
     if (!gridRef.current) return null;
     const rect = gridRef.current.getBoundingClientRect();
-    
-    if (
-      clientX < rect.left ||
-      clientX > rect.right ||
-      clientY < rect.top ||
-      clientY > rect.bottom
-    ) {
+    if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
       return null;
     }
-
     const relX = clientX - rect.left;
     const relY = clientY - rect.top;
-
-    const colWidth = rect.width / 4;
-    const rowHeight = rect.height / 4;
-
-    const col = Math.floor(relX / colWidth);
-    const row = Math.floor(relY / rowHeight);
-
+    const col = Math.floor(relX / (rect.width / 4));
+    const row = Math.floor(relY / (rect.height / 4));
     if (col < 0 || col > 3 || row < 0 || row > 3) return null;
-
     return row * 4 + col + 1;
   };
 
@@ -201,7 +233,7 @@ export default function App() {
       setAllPads((prev: PadState[]) =>
         prev.map((p: PadState) =>
           p.bank === targetPad.bank && p.id === targetPad.id
-            ? { ...p, sampleName: null, sampleBuffer: null, playMode: 'gate', chokeGroup: 0, sliceStart: 0, sliceEnd: 1 }
+            ? { ...p, sampleName: null, sampleBuffer: null, playMode: 'oneshot', chokeGroup: 0, sliceStart: 0, sliceEnd: 1 }
             : p
         )
       );
@@ -242,34 +274,32 @@ export default function App() {
     const sourcesMap = activeSourcesRef.current;
     const gateMap = gateSourcesRef.current;
 
-    if (targetPad.playMode === 'gate') {
-      const existingGateVoices = gateMap.get(padKey) || [];
-      existingGateVoices.forEach((src: AudioBufferSourceNode) => {
+    // Monophonic Self-Choke for One-Shot (Instant Retrigger) or Gate
+    if (targetPad.playMode === 'oneshot' || targetPad.playMode === 'gate') {
+      const existingVoices = sourcesMap.get(padKey) || [];
+      existingVoices.forEach((src: AudioBufferSourceNode) => {
+        try { src.stop(0); } catch (err) {}
+      });
+      sourcesMap.set(padKey, []);
+
+      const existingGates = gateMap.get(padKey) || [];
+      existingGates.forEach((src: AudioBufferSourceNode) => {
         try { src.stop(0); } catch (err) {}
       });
       gateMap.set(padKey, []);
     }
 
+    // Choke Group Logic
     if (targetPad.chokeGroup > 0) {
       allPads.forEach((otherPad: PadState) => {
-        if (
-          otherPad.chokeGroup === targetPad.chokeGroup &&
-          !(otherPad.bank === targetPad.bank && otherPad.id === targetPad.id)
-        ) {
+        if (otherPad.chokeGroup === targetPad.chokeGroup && !(otherPad.bank === targetPad.bank && otherPad.id === targetPad.id)) {
           const otherKey = getPadKey(otherPad.bank, otherPad.id);
           const playingSources = sourcesMap.get(otherKey);
           if (playingSources) {
             playingSources.forEach((src: AudioBufferSourceNode) => {
-              try { src.stop(); } catch (err) {}
-            });
-            sourcesMap.set(otherKey, []);
-          }
-          const otherGates = gateMap.get(otherKey);
-          if (otherGates) {
-            otherGates.forEach((src: AudioBufferSourceNode) => {
               try { src.stop(0); } catch (err) {}
             });
-            gateMap.set(otherKey, []);
+            sourcesMap.set(otherKey, []);
           }
         }
       });
@@ -281,8 +311,8 @@ export default function App() {
       source.connect(masterLimiterRef.current);
 
       const bufferDuration = targetPad.sampleBuffer.duration;
-      const sStart = (targetPad.sliceStart ?? 0) * bufferDuration;
-      const sEnd = (targetPad.sliceEnd ?? 1) * bufferDuration;
+      const sStart = targetPad.sliceStart * bufferDuration;
+      const sEnd = targetPad.sliceEnd * bufferDuration;
       const sDuration = Math.max(0.05, sEnd - sStart);
 
       source.start(0, sStart, sDuration);
@@ -318,19 +348,13 @@ export default function App() {
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch (err) {}
-
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
     const padId = getPadIdFromCoordinates(e.clientX, e.clientY);
     if (padId === null) return;
 
     setActiveTouches((prev: Record<number, number>) => ({ ...prev, [e.pointerId]: padId }));
-
     const targetPad = allPads.find((p: PadState) => p.bank === activeBank && p.id === padId);
-    if (targetPad) {
-      triggerPadAction(targetPad);
-    }
+    if (targetPad) triggerPadAction(targetPad);
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -338,15 +362,11 @@ export default function App() {
     const prevPadId = activeTouches[e.pointerId];
 
     if (padId !== prevPadId) {
-      if (prevPadId !== undefined) {
-        releasePadAction(prevPadId);
-      }
+      if (prevPadId !== undefined) releasePadAction(prevPadId);
       if (padId !== null) {
         setActiveTouches((prev: Record<number, number>) => ({ ...prev, [e.pointerId]: padId }));
         const targetPad = allPads.find((p: PadState) => p.bank === activeBank && p.id === padId);
-        if (targetPad) {
-          triggerPadAction(targetPad);
-        }
+        if (targetPad) triggerPadAction(targetPad);
       } else {
         setActiveTouches((prev: Record<number, number>) => {
           const updated = { ...prev };
@@ -367,10 +387,15 @@ export default function App() {
         return updated;
       });
     }
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch (err) {}
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) {}
   };
+
+  // Ghost Touch Safety Cleanup on Pointer Cancel / Window Blur
+  useEffect(() => {
+    const clearTouches = () => setActiveTouches({});
+    window.addEventListener('blur', clearTouches);
+    return () => window.removeEventListener('blur', clearTouches);
+  }, []);
 
   const updatePadParam = (key: keyof PadState, value: any) => {
     setAllPads((prevPads: PadState[]) =>
@@ -419,11 +444,11 @@ export default function App() {
   return (
     <div className="fixed inset-0 flex flex-col md:flex-row h-[100dvh] w-screen bg-neutral-950 text-white select-none overflow-hidden font-sans m-0 p-0 touch-none">
       
-      {/* LEFT PANE: Workspace & Waveform Chopper Canvas */}
+      {/* LEFT PANE: Workspace & Hi-DPI Crystal Clear Waveform Chopper Canvas */}
       <div className="w-full md:w-1/2 h-1/2 md:h-full border-b md:border-b-0 md:border-r border-neutral-800 flex flex-col p-2.5 bg-neutral-900/40 shrink-0">
         <div className="flex items-center justify-between pb-1.5 border-b border-neutral-800 shrink-0">
           <h1 className="text-lg font-bold tracking-widest text-amber-500 uppercase">BredForge</h1>
-          <span className="text-[10px] bg-neutral-800 px-2 py-0.5 rounded-full text-amber-400 font-mono">Layer 5 Active</span>
+          <span className="text-[10px] bg-neutral-800 px-2 py-0.5 rounded-full text-amber-400 font-mono">Layer 6 Active</span>
         </div>
 
         {/* Selected Pad Details & File Input */}
@@ -452,58 +477,22 @@ export default function App() {
           </div>
         </div>
 
-        {/* Layer 5: Waveform Canvas & Slice Controls */}
+        {/* Crystal-Clear Hi-DPI Waveform Canvas & Touch Trimming */}
         <div className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg flex flex-col p-2 relative overflow-hidden min-h-[50px]">
           <div className="flex justify-between items-center mb-1 shrink-0">
             <span className="text-[10px] font-mono text-neutral-400 flex items-center gap-1">
-              <Scissors className="w-3 h-3 text-amber-500" /> Waveform Chopper
+              <Scissors className="w-3 h-3 text-amber-500" /> Waveform Trimmer (Drag markers on canvas)
             </span>
-            <div className="flex gap-2">
-              <button 
-                onClick={() => {
-                  const s = Math.max(0, (currentPad.sliceStart ?? 0) - 0.05);
-                  updatePadParam('sliceStart', s);
-                }}
-                className="px-1.5 py-0.5 bg-neutral-800 hover:bg-neutral-700 rounded text-[9px] font-mono text-amber-400 border border-neutral-700"
-              >
-                [ Start -
-              </button>
-              <button 
-                onClick={() => {
-                  const s = Math.min((currentPad.sliceEnd ?? 1) - 0.05, (currentPad.sliceStart ?? 0) + 0.05);
-                  updatePadParam('sliceStart', s);
-                }}
-                className="px-1.5 py-0.5 bg-neutral-800 hover:bg-neutral-700 rounded text-[9px] font-mono text-amber-400 border border-neutral-700"
-              >
-                Start + ]
-              </button>
-              <button 
-                onClick={() => {
-                  const e = Math.max((currentPad.sliceStart ?? 0) + 0.05, (currentPad.sliceEnd ?? 1) - 0.05);
-                  updatePadParam('sliceEnd', e);
-                }}
-                className="px-1.5 py-0.5 bg-neutral-800 hover:bg-neutral-700 rounded text-[9px] font-mono text-emerald-400 border border-neutral-700"
-              >
-                [ End -
-              </button>
-              <button 
-                onClick={() => {
-                  const e = Math.min(1, (currentPad.sliceEnd ?? 1) + 0.05);
-                  updatePadParam('sliceEnd', e);
-                }}
-                className="px-1.5 py-0.5 bg-neutral-800 hover:bg-neutral-700 rounded text-[9px] font-mono text-emerald-400 border border-neutral-700"
-              >
-                End + ]
-              </button>
-            </div>
           </div>
 
-          <div className="flex-1 w-full bg-neutral-950 rounded border border-neutral-900 relative overflow-hidden">
+          <div className="flex-1 w-full bg-neutral-950 rounded border border-neutral-900 relative overflow-hidden touch-none">
             <canvas 
               ref={canvasRef} 
-              width={500} 
-              height={150} 
-              className="w-full h-full object-fill"
+              onPointerDown={handleCanvasPointerDown}
+              onPointerMove={handleCanvasPointerMove}
+              onPointerUp={handleCanvasPointerUp}
+              onPointerCancel={handleCanvasPointerUp}
+              className="w-full h-full block cursor-ew-resize touch-none"
             />
           </div>
         </div>
