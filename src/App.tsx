@@ -23,7 +23,7 @@ const createInitialPads = (): PadState[] => {
         label: `PAD ${i}`,
         sampleName: null,
         sampleBuffer: null,
-        playMode: 'gate', // Default to Gate mode
+        playMode: 'gate',
         chokeGroup: 0,
       });
     }
@@ -87,7 +87,7 @@ export default function App() {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch (err) {}
 
-    // Handle Delete Mode Workflow
+    // LATCHED DELETE MODE: Clears target pad without disarming Delete mode
     if (deleteMode) {
       setAllPads(prev =>
         prev.map(p =>
@@ -96,16 +96,14 @@ export default function App() {
             : p
         )
       );
-      setDeleteMode(false);
       return;
     }
 
-    // Handle Copy / Duplicate Mode Workflow (Ignores empty source pads)
+    // LATCHED COPY MODE: Allows continuous copying to multiple target pads
     if (copyMode) {
       if (!sourcePadForCopy) {
         if (!targetPad.sampleBuffer) {
-          // Ignore empty source pads with subtle visual feedback
-          return;
+          return; // Ignore empty source pads
         }
         setSourcePadForCopy(targetPad);
       } else {
@@ -122,8 +120,6 @@ export default function App() {
               : p
           )
         );
-        setSourcePadForCopy(null);
-        setCopyMode(false);
       }
       return;
     }
@@ -139,7 +135,6 @@ export default function App() {
     const sourcesMap = activeSourcesRef.current;
     const gateMap = gateSourcesRef.current;
 
-    // MICRO-DEBOUNCE VOICE CLEANUP: Instantly purge lingering gate voices on rapid alternation
     if (targetPad.playMode === 'gate') {
       const existingGateVoices = gateMap.get(padKey) || [];
       existingGateVoices.forEach(src => {
@@ -148,7 +143,6 @@ export default function App() {
       gateMap.set(padKey, []);
     }
 
-    // GLOBAL CHOKE GROUP EXECUTION
     if (targetPad.chokeGroup > 0) {
       allPads.forEach(otherPad => {
         if (
@@ -252,14 +246,14 @@ export default function App() {
   return (
     <div className="flex flex-col md:flex-row h-[100dvh] w-screen bg-neutral-950 text-white select-none overflow-hidden font-sans m-0 p-0">
       
-      {/* LEFT PANE: Workspace & File Uploader */}
+      {/* LEFT PANE: Workspace & Integrated File Uploader */}
       <div className="w-full md:w-1/2 h-1/2 md:h-full border-b md:border-b-0 md:border-r border-neutral-800 flex flex-col p-2.5 bg-neutral-900/40 shrink-0">
         <div className="flex items-center justify-between pb-1.5 border-b border-neutral-800 shrink-0">
           <h1 className="text-lg font-bold tracking-widest text-amber-500 uppercase">BredForge</h1>
           <span className="text-[10px] bg-neutral-800 px-2 py-0.5 rounded-full text-neutral-400 font-mono">Layer 4 Active</span>
         </div>
 
-        {/* Selected Pad Sample Details & Integrated File Uploader */}
+        {/* Selected Pad Details & File Input */}
         <div className="my-2 p-2.5 bg-neutral-900 border border-neutral-800 rounded-lg shrink-0 flex flex-col gap-2">
           <div className="flex justify-between items-center">
             <div>
@@ -268,7 +262,6 @@ export default function App() {
                 Bank {activeBank} - Pad {currentPad.id}
               </div>
             </div>
-            {/* Unrestricted iOS Audio & Waveform File Input */}
             <label className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-black text-[11px] font-semibold px-2.5 py-1.5 rounded-md cursor-pointer transition shadow-md shrink-0">
               <Upload className="w-3 h-3" />
               <span>{currentPad.sampleName ? 'Replace' : 'Load Sample'}</span>
@@ -315,7 +308,7 @@ export default function App() {
           ))}
         </div>
 
-        {/* Dynamic Parameter Switching, Copy, & Delete Controls */}
+        {/* Dynamic Parameter Controls */}
         <div className="grid grid-cols-4 gap-1.5 mb-2 shrink-0">
           <button
             onClick={() => updatePadParam('playMode', currentPad.playMode === 'oneshot' ? 'gate' : 'oneshot')}
@@ -341,6 +334,7 @@ export default function App() {
             {getChokeLabel(currentPad.chokeGroup)}
           </button>
 
+          {/* Latched COPY Button */}
           <button
             onClick={() => {
               setCopyMode(!copyMode);
@@ -354,9 +348,10 @@ export default function App() {
             }`}
           >
             <Copy className="w-3 h-3" />
-            {copyMode ? (sourcePadForCopy ? 'Target' : 'Source') : 'Copy'}
+            {copyMode ? (sourcePadForCopy ? 'Copying...' : 'Select Source') : 'Copy'}
           </button>
 
+          {/* Latched DELETE Button */}
           <button
             onClick={() => {
               setDeleteMode(!deleteMode);
@@ -370,11 +365,11 @@ export default function App() {
             }`}
           >
             <Trash2 className="w-3 h-3" />
-            {deleteMode ? 'Arm/Tap' : 'Delete'}
+            {deleteMode ? 'Deleting...' : 'Delete'}
           </button>
         </div>
 
-        {/* 4x4 MPC Tactile Pad Matrix */}
+        {/* 4x4 MPC Matrix Grid */}
         <div className="grid grid-cols-4 grid-rows-4 gap-2 flex-1 min-h-0">
           {bankPads.map(pad => {
             const padKey = getPadKey(pad.bank, pad.id);
