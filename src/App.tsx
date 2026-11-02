@@ -41,7 +41,10 @@ export default function App() {
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const activeSourcesRef = useRef(new Map<string, AudioBufferSourceNode[]>());
+  // Tracks active gate sources per pad key for instant release stopping
+  const gateSourcesRef = useRef(new Map<string, AudioBufferSourceNode[]>());
 
+  // Initialize Web Audio API context and handle tab visibility/idle lifecycle resume
   useEffect(() => {
     const initAudio = () => {
       if (!audioCtxRef.current) {
@@ -53,11 +56,22 @@ export default function App() {
       }
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && audioCtxRef.current) {
+        if (audioCtxRef.current.state === 'suspended') {
+          audioCtxRef.current.resume();
+        }
+      }
+    };
+
     window.addEventListener('touchstart', initAudio, { once: true });
     window.addEventListener('click', initAudio, { once: true });
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       window.removeEventListener('touchstart', initAudio);
       window.removeEventListener('click', initAudio);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
@@ -66,7 +80,8 @@ export default function App() {
   const currentPad = allPads.find(p => p.bank === activeBank && p.id === selectedPadId) || allPads[0];
   const bankPads = allPads.filter(p => p.bank === activeBank);
 
-  const triggerPadAudio = (targetPad: PadState, e: React.PointerEvent<HTMLButtonElement>) => {
+  // Trigger Audio on Pointer Down
+  const handlePadPointerDown = (targetPad: PadState, e: React.PointerEvent<HTMLButtonElement>) => {
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch (err) {}
@@ -74,9 +89,6 @@ export default function App() {
     const padKey = getPadKey(targetPad.bank, targetPad.id);
 
     setTriggeredVisualKeys(prev => ({ ...prev, [padKey]: true }));
-    setTimeout(() => {
-      setTriggeredVisualKeys(prev => ({ ...prev, [padKey]: false }));
-    }, 120);
 
     const ctx = audioCtxRef.current;
     if (!ctx) return;
@@ -84,6 +96,7 @@ export default function App() {
 
     const sourcesMap = activeSourcesRef.current;
 
+    // Choke Group Execution within bank context
     if (targetPad.chokeGroup > 0) {
       allPads.forEach(otherPad => {
         if (
@@ -103,6 +116,7 @@ export default function App() {
       });
     }
 
+    // Polyphonic Buffer Node Generation
     if (targetPad.sampleBuffer) {
       const source = ctx.createBufferSource();
       source.buffer = targetPad.sampleBuffer;
@@ -112,10 +126,32 @@ export default function App() {
       const currentSources = sourcesMap.get(padKey) || [];
       sourcesMap.set(padKey, [...currentSources, source]);
 
+      if (targetPad.playMode === 'gate') {
+        const gateList = gateSourcesRef.current.get(padKey) || [];
+        gateSourcesRef.current.set(padKey, [...gateList, source]);
+      }
+
       source.onended = () => {
         const active = sourcesMap.get(padKey) || [];
         sourcesMap.set(padKey, active.filter(s => s !== source));
       };
+    }
+  };
+
+  // Stop Audio on Pointer Up / Release (Specifically for Gate mode)
+  const handlePadPointerUp = (targetPad: PadState) => {
+    const padKey = getPadKey(targetPad.bank, targetPad.id);
+
+    setTriggeredVisualKeys(prev => ({ ...prev, [padKey]: false }));
+
+    if (targetPad.playMode === 'gate') {
+      const gateList = gateSourcesRef.current.get(padKey) || [];
+      gateList.forEach(src => {
+        try {
+          src.stop(0);
+        } catch (err) {}
+      });
+      gateSourcesRef.current.set(padKey, []);
     }
   };
 
@@ -152,7 +188,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-screen w-screen bg-neutral-950 text-white select-none overflow-hidden font-sans">
+    <div className="flex flex-col md:flex-row h-screen w-screen bg-neutral-950 text-white select-none overflow-hidden font-sans [touch-action:none] [-webkit-touch-callout:none]">
       
       {/* LEFT PANE: Workspace & File Uploader */}
       <div className="w-full md:w-1/2 h-1/2 md:h-full border-b md:border-b-0 md:border-r border-neutral-800 flex flex-col p-4 bg-neutral-900/40 shrink-0">
@@ -237,7 +273,7 @@ export default function App() {
           </button>
         </div>
 
-        {/* 4x4 MPC Tactile Pad Matrix */}
+        {/* 4x4 MPC Tactile Pad Matrix with Strict Touch Action Protection */}
         <div className="grid grid-cols-4 grid-rows-4 gap-2.5 md:gap-3 pb-6 flex-1 min-h-[320px]">
           {bankPads.map(pad => {
             const padKey = getPadKey(pad.bank, pad.id);
@@ -249,9 +285,12 @@ export default function App() {
                 key={padKey}
                 onPointerDown={(e) => {
                   setSelectedPadId(pad.id);
-                  triggerPadAudio(pad, e);
+                  handlePadPointerDown(pad, e);
                 }}
-                className={`pad-target relative rounded-xl border-2 flex flex-col items-center justify-between p-2 transition-all transform active:scale-95 w-full h-full min-h-[70px] overflow-hidden ${
+                onPointerUp={() => handlePadPointerUp(pad)}
+                onPointerCancel={() => handlePadPointerUp(pad)}
+                onLostPointerCapture={() => handlePadPointerUp(pad)}
+                className={`pad-target relative rounded-xl border-2 flex flex-col items-center justify-between p-2 transition-all transform active:scale-95 w-full h-full min-h-[70px] overflow-hidden [touch-action:none] [-webkit-touch-callout:none] [user-select:none] ${
                   isTriggered
                     ? 'bg-amber-400 border-amber-300 shadow-xl shadow-amber-400/50 scale-95'
                     : isSelected
