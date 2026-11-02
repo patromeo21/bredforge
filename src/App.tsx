@@ -15,7 +15,7 @@ const createInitialPads = (): PadState[] => {
   const banks: ('A' | 'B' | 'C' | 'D')[] = ['A', 'B', 'C', 'D'];
   const allPads: PadState[] = [];
 
-  banks.forEach(bank => {
+  banks.forEach((bank: 'A' | 'B' | 'C' | 'D') => {
     for (let i = 1; i <= 16; i++) {
       allPads.push({
         id: i,
@@ -35,7 +35,7 @@ const createInitialPads = (): PadState[] => {
 export default function App() {
   const [activeBank, setActiveBank] = useState<'A' | 'B' | 'C' | 'D'>('A');
   const [selectedPadId, setSelectedPadId] = useState<number>(1);
-  const [triggeredVisualKeys, setTriggeredVisualKeys] = useState<Record<string, boolean>>({});
+  const [activeTouches, setActiveTouches] = useState<Record<number, number>>({}); // pointerId -> padId
   
   const [copyMode, setCopyMode] = useState<boolean>(false);
   const [sourcePadForCopy, setSourcePadForCopy] = useState<PadState | null>(null);
@@ -44,14 +44,26 @@ export default function App() {
   const [allPads, setAllPads] = useState<PadState[]>(createInitialPads);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const activeSourcesRef = useRef(new Map<string, AudioBufferSourceNode[]>());
-  const gateSourcesRef = useRef(new Map<string, AudioBufferSourceNode[]>());
+  const masterLimiterRef = useRef<DynamicsCompressorNode | null>(null);
+  const activeSourcesRef = useRef>(new Map());
+  const gateSourcesRef = useRef>(new Map());
+  const gridRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const initAudio = () => {
       if (!audioCtxRef.current) {
         const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        audioCtxRef.current = new AudioContextClass();
+        const ctx = new AudioContextClass();
+        audioCtxRef.current = ctx;
+
+        const limiter = ctx.createDynamicsCompressor();
+        limiter.threshold.setValueAtTime(-3, ctx.currentTime);
+        limiter.knee.setValueAtTime(0, ctx.currentTime);
+        limiter.ratio.setValueAtTime(20, ctx.currentTime);
+        limiter.attack.setValueAtTime(0.001, ctx.currentTime);
+        limiter.release.setValueAtTime(0.1, ctx.currentTime);
+        limiter.connect(ctx.destination);
+        masterLimiterRef.current = limiter;
       }
       if (audioCtxRef.current.state === 'suspended') {
         audioCtxRef.current.resume();
@@ -77,20 +89,42 @@ export default function App() {
     };
   }, []);
 
-  const getPadKey = (bank: string, id: number) => `${bank}-${id}`;
+  const getPadKey = (bank: string, id: number): string => `${bank}-${id}`;
 
-  const currentPad = allPads.find(p => p.bank === activeBank && p.id === selectedPadId) || allPads[0];
-  const bankPads = allPads.filter(p => p.bank === activeBank);
+  const currentPad = allPads.find((p: PadState) => p.bank === activeBank && p.id === selectedPadId) || allPads[0];
+  const bankPads = allPads.filter((p: PadState) => p.bank === activeBank);
 
-  const handlePadInteraction = (targetPad: PadState, e: React.PointerEvent<HTMLButtonElement>) => {
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch (err) {}
+  const getPadIdFromCoordinates = (clientX: number, clientY: number): number | null => {
+    if (!gridRef.current) return null;
+    const rect = gridRef.current.getBoundingClientRect();
+    
+    if (
+      clientX < rect.left ||
+      clientX > rect.right ||
+      clientY < rect.top ||
+      clientY > rect.bottom
+    ) {
+      return null;
+    }
 
-    // LATCHED DELETE MODE: Clears target pad without disarming Delete mode
+    const relX = clientX - rect.left;
+    const relY = clientY - rect.top;
+
+    const colWidth = rect.width / 4;
+    const rowHeight = rect.height / 4;
+
+    const col = Math.floor(relX / colWidth);
+    const row = Math.floor(relY / rowHeight);
+
+    if (col < 0 || col > 3 || row < 0 || row > 3) return null;
+
+    return row * 4 + col + 1;
+  };
+
+  const triggerPadAction = (targetPad: PadState) => {
     if (deleteMode) {
-      setAllPads(prev =>
-        prev.map(p =>
+      setAllPads((prev: PadState[]) =>
+        prev.map((p: PadState) =>
           p.bank === targetPad.bank && p.id === targetPad.id
             ? { ...p, sampleName: null, sampleBuffer: null, playMode: 'gate', chokeGroup: 0 }
             : p
@@ -99,16 +133,13 @@ export default function App() {
       return;
     }
 
-    // LATCHED COPY MODE: Allows continuous copying to multiple target pads
     if (copyMode) {
       if (!sourcePadForCopy) {
-        if (!targetPad.sampleBuffer) {
-          return; // Ignore empty source pads
-        }
+        if (!targetPad.sampleBuffer) return;
         setSourcePadForCopy(targetPad);
       } else {
-        setAllPads(prev =>
-          prev.map(p =>
+        setAllPads((prev: PadState[]) =>
+          prev.map((p: PadState) =>
             p.bank === targetPad.bank && p.id === targetPad.id
               ? {
                   ...p,
@@ -126,10 +157,9 @@ export default function App() {
 
     setSelectedPadId(targetPad.id);
     const padKey = getPadKey(targetPad.bank, targetPad.id);
-    setTriggeredVisualKeys(prev => ({ ...prev, [padKey]: true }));
 
     const ctx = audioCtxRef.current;
-    if (!ctx) return;
+    if (!ctx || !masterLimiterRef.current) return;
     if (ctx.state === 'suspended') ctx.resume();
 
     const sourcesMap = activeSourcesRef.current;
@@ -137,14 +167,14 @@ export default function App() {
 
     if (targetPad.playMode === 'gate') {
       const existingGateVoices = gateMap.get(padKey) || [];
-      existingGateVoices.forEach(src => {
+      existingGateVoices.forEach((src: AudioBufferSourceNode) => {
         try { src.stop(0); } catch (err) {}
       });
       gateMap.set(padKey, []);
     }
 
     if (targetPad.chokeGroup > 0) {
-      allPads.forEach(otherPad => {
+      allPads.forEach((otherPad: PadState) => {
         if (
           otherPad.chokeGroup === targetPad.chokeGroup &&
           !(otherPad.bank === targetPad.bank && otherPad.id === targetPad.id)
@@ -152,14 +182,14 @@ export default function App() {
           const otherKey = getPadKey(otherPad.bank, otherPad.id);
           const playingSources = sourcesMap.get(otherKey);
           if (playingSources) {
-            playingSources.forEach(src => {
+            playingSources.forEach((src: AudioBufferSourceNode) => {
               try { src.stop(); } catch (err) {}
             });
             sourcesMap.set(otherKey, []);
           }
           const otherGates = gateMap.get(otherKey);
           if (otherGates) {
-            otherGates.forEach(src => {
+            otherGates.forEach((src: AudioBufferSourceNode) => {
               try { src.stop(0); } catch (err) {}
             });
             gateMap.set(otherKey, []);
@@ -171,7 +201,7 @@ export default function App() {
     if (targetPad.sampleBuffer) {
       const source = ctx.createBufferSource();
       source.buffer = targetPad.sampleBuffer;
-      source.connect(ctx.destination);
+      source.connect(masterLimiterRef.current);
       source.start(0);
 
       const currentSources = sourcesMap.get(padKey) || [];
@@ -184,30 +214,84 @@ export default function App() {
 
       source.onended = () => {
         const active = sourcesMap.get(padKey) || [];
-        sourcesMap.set(padKey, active.filter(s => s !== source));
+        sourcesMap.set(padKey, active.filter((s: AudioBufferSourceNode) => s !== source));
       };
     }
   };
 
-  const handlePadPointerUp = (targetPad: PadState) => {
+  const releasePadAction = (padId: number) => {
     if (copyMode || deleteMode) return;
-    const padKey = getPadKey(targetPad.bank, targetPad.id);
-    setTriggeredVisualKeys(prev => ({ ...prev, [padKey]: false }));
+    const targetPad = allPads.find((p: PadState) => p.bank === activeBank && p.id === padId);
+    if (!targetPad) return;
 
+    const padKey = getPadKey(targetPad.bank, targetPad.id);
     if (targetPad.playMode === 'gate') {
       const gateList = gateSourcesRef.current.get(padKey) || [];
-      gateList.forEach(src => {
-        try {
-          src.stop(0);
-        } catch (err) {}
+      gateList.forEach((src: AudioBufferSourceNode) => {
+        try { src.stop(0); } catch (err) {}
       });
       gateSourcesRef.current.set(padKey, []);
     }
   };
 
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch (err) {}
+
+    const padId = getPadIdFromCoordinates(e.clientX, e.clientY);
+    if (padId === null) return;
+
+    setActiveTouches((prev: Record<number, number>) => ({ ...prev, [e.pointerId]: padId }));
+
+    const targetPad = allPads.find((p: PadState) => p.bank === activeBank && p.id === padId);
+    if (targetPad) {
+      triggerPadAction(targetPad);
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const padId = getPadIdFromCoordinates(e.clientX, e.clientY);
+    const prevPadId = activeTouches[e.pointerId];
+
+    if (padId !== prevPadId) {
+      if (prevPadId !== undefined) {
+        releasePadAction(prevPadId);
+      }
+      if (padId !== null) {
+        setActiveTouches((prev: Record<number, number>) => ({ ...prev, [e.pointerId]: padId }));
+        const targetPad = allPads.find((p: PadState) => p.bank === activeBank && p.id === padId);
+        if (targetPad) {
+          triggerPadAction(targetPad);
+        }
+      } else {
+        setActiveTouches((prev: Record<number, number>) => {
+          const updated = { ...prev };
+          delete updated[e.pointerId];
+          return updated;
+        });
+      }
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const padId = activeTouches[e.pointerId];
+    if (padId !== undefined) {
+      releasePadAction(padId);
+      setActiveTouches((prev: Record<number, number>) => {
+        const updated = { ...prev };
+        delete updated[e.pointerId];
+        return updated;
+      });
+    }
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch (err) {}
+  };
+
   const updatePadParam = (key: keyof PadState, value: any) => {
-    setAllPads(prevPads =>
-      prevPads.map(pad =>
+    setAllPads((prevPads: PadState[]) =>
+      prevPads.map((pad: PadState) =>
         pad.bank === activeBank && pad.id === selectedPadId
           ? { ...pad, [key]: value }
           : pad
@@ -220,33 +304,39 @@ export default function App() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = (event: ProgressEvent<FileReader>) => {
       const arrayBuffer = event.target?.result as ArrayBuffer;
       if (audioCtxRef.current && arrayBuffer) {
-        audioCtxRef.current.decodeAudioData(arrayBuffer, (buffer) => {
-          setAllPads(prev =>
-            prev.map(p =>
-              p.bank === activeBank && p.id === selectedPadId
-                ? { ...p, sampleName: file.name, sampleBuffer: buffer }
-                : p
-            )
-          );
-        });
+        audioCtxRef.current.decodeAudioData(
+          arrayBuffer, 
+          (buffer: AudioBuffer) => {
+            setAllPads((prev: PadState[]) =>
+              prev.map((p: PadState) =>
+                p.bank === activeBank && p.id === selectedPadId
+                  ? { ...p, sampleName: file.name, sampleBuffer: buffer }
+                  : p
+              )
+            );
+          },
+          (err) => {
+            console.error("Audio decoding error:", err);
+          }
+        );
       }
     };
     reader.readAsArrayBuffer(file);
     e.target.value = '';
   };
 
-  const getChokeLabel = (group: number) => {
+  const getChokeLabel = (group: number): string => {
     if (group === 0) return 'OFF';
     return `GROUP ${group}`;
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-[100dvh] w-screen bg-neutral-950 text-white select-none overflow-hidden font-sans m-0 p-0">
+    <div className="fixed inset-0 flex flex-col md:flex-row h-[100dvh] w-screen bg-neutral-950 text-white select-none overflow-hidden font-sans m-0 p-0 touch-none">
       
-      {/* LEFT PANE: Workspace & Integrated File Uploader */}
+      {/* LEFT PANE: Workspace & File Uploader */}
       <div className="w-full md:w-1/2 h-1/2 md:h-full border-b md:border-b-0 md:border-r border-neutral-800 flex flex-col p-2.5 bg-neutral-900/40 shrink-0">
         <div className="flex items-center justify-between pb-1.5 border-b border-neutral-800 shrink-0">
           <h1 className="text-lg font-bold tracking-widest text-amber-500 uppercase">BredForge</h1>
@@ -293,7 +383,7 @@ export default function App() {
         
         {/* Bank Selection Tabs */}
         <div className="flex gap-2 mb-2 shrink-0">
-          {(['A', 'B', 'C', 'D'] as const).map(bank => (
+          {(['A', 'B', 'C', 'D'] as const).map((bank: 'A' | 'B' | 'C' | 'D') => (
             <button
               key={bank}
               onClick={() => setActiveBank(bank)}
@@ -369,31 +459,34 @@ export default function App() {
           </button>
         </div>
 
-        {/* 4x4 MPC Matrix Grid */}
-        <div className="grid grid-cols-4 grid-rows-4 gap-2 flex-1 min-h-0">
-          {bankPads.map(pad => {
+        {/* Unified Touch Matrix Container (Zero Dead-Space Canvas Grid) */}
+        <div
+          ref={gridRef}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          className="grid grid-cols-4 grid-rows-4 gap-1.5 flex-1 min-h-0 bg-neutral-900 p-1.5 rounded-2xl border border-neutral-800 [touch-action:none] [-webkit-touch-callout:none] [user-select:none]"
+        >
+          {bankPads.map((pad: PadState) => {
             const padKey = getPadKey(pad.bank, pad.id);
             const isSelected = selectedPadId === pad.id;
-            const isTriggered = triggeredVisualKeys[padKey];
+            const isTriggered = Object.values(activeTouches).includes(pad.id);
             const isCopySource = sourcePadForCopy?.bank === pad.bank && sourcePadForCopy?.id === pad.id;
 
             return (
-              <button
+              <div
                 key={padKey}
-                onPointerDown={(e) => handlePadInteraction(pad, e)}
-                onPointerUp={() => handlePadPointerUp(pad)}
-                onPointerCancel={() => handlePadPointerUp(pad)}
-                onLostPointerCapture={() => handlePadPointerUp(pad)}
-                className={`pad-target relative rounded-xl border-2 flex flex-col items-center justify-between p-1.5 transition-all transform active:scale-95 w-full h-full min-h-[45px] overflow-hidden [touch-action:none] [-webkit-touch-callout:none] [user-select:none] ${
+                className={`relative rounded-xl border-2 flex flex-col items-center justify-between p-1.5 transition-all w-full h-full min-h-[45px] overflow-hidden pointer-events-none ${
                   deleteMode
-                    ? 'border-red-500 bg-red-950/20 hover:bg-red-900/30 animate-pulse'
+                    ? 'border-red-500 bg-red-950/20 animate-pulse'
                     : isCopySource
                     ? 'bg-amber-600 border-amber-300 animate-bounce shadow-xl'
                     : isTriggered
                     ? 'bg-amber-400 border-amber-300 shadow-xl shadow-amber-400/50 scale-95'
                     : isSelected
                     ? 'bg-neutral-800 border-amber-500 shadow-lg'
-                    : 'bg-neutral-900 border-neutral-800 hover:border-neutral-700'
+                    : 'bg-neutral-950 border-neutral-800'
                 }`}
               >
                 <div className="w-full flex justify-between items-center text-[9px] font-mono text-neutral-400 shrink-0">
@@ -408,7 +501,7 @@ export default function App() {
                 <div className="w-full flex justify-center shrink-0">
                   <span className={`w-1.5 h-1.5 rounded-full ${pad.sampleBuffer ? 'bg-emerald-500' : 'bg-neutral-700'}`} />
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
