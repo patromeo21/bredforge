@@ -8,7 +8,7 @@ interface PadState {
   sampleName: string | null;
   sampleBuffer: AudioBuffer | null;
   playMode: 'oneshot' | 'gate';
-  chokeGroup: number; // 0 = off, 1-4 corresponding to Banks A-D
+  chokeGroup: number; // 0 = off, 1-4 global choke groups
 }
 
 const createInitialPads = (): PadState[] => {
@@ -92,13 +92,12 @@ export default function App() {
 
     const sourcesMap = activeSourcesRef.current;
 
-    // Choke Group Execution (Scoped strictly to matching Bank choke configuration)
+    // GLOBAL CHOKE GROUP EXECUTION (Hardware-accurate across all banks A-D)
     if (targetPad.chokeGroup > 0) {
       allPads.forEach(otherPad => {
         if (
-          otherPad.bank === targetPad.bank &&
           otherPad.chokeGroup === targetPad.chokeGroup &&
-          otherPad.id !== targetPad.id
+          !(otherPad.bank === targetPad.bank && otherPad.id === targetPad.id)
         ) {
           const otherKey = getPadKey(otherPad.bank, otherPad.id);
           const playingSources = sourcesMap.get(otherKey);
@@ -140,7 +139,9 @@ export default function App() {
     if (targetPad.playMode === 'gate') {
       const gateList = gateSourcesRef.current.get(padKey) || [];
       gateList.forEach(src => {
-        try { src.stop(0); } catch (err) {}
+        try {
+          src.stop(0);
+        } catch (err) {}
       });
       gateSourcesRef.current.set(padKey, []);
     }
@@ -178,11 +179,9 @@ export default function App() {
     reader.readAsArrayBuffer(file);
   };
 
-  // Map Choke Group integer to Bank letter representation
   const getChokeLabel = (group: number) => {
     if (group === 0) return 'OFF';
-    const bankMap = ['', 'BANK A', 'BANK B', 'BANK C', 'BANK D'];
-    return bankMap[group] || `GRP ${group}`;
+    return `GROUP ${group}`;
   };
 
   return (
@@ -204,7 +203,7 @@ export default function App() {
                 Bank {activeBank} - Pad {currentPad.id}
               </div>
             </div>
-            {/* Integrated File Upload Button inside Active Selection Header */}
+            {/* Integrated File Upload Button */}
             <label className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-black text-xs font-semibold px-3 py-2 rounded-md cursor-pointer transition shadow-md shrink-0">
               <Upload className="w-3.5 h-3.5" />
               <span>{currentPad.sampleName ? 'Replace' : 'Load Sample'}</span>
@@ -217,7 +216,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Waveform Canvas Placeholder (Flex filling remaining left space) */}
+        {/* Waveform Canvas Placeholder */}
         <div className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg flex items-center justify-center relative overflow-hidden min-h-[60px]">
           <div className="text-neutral-600 text-xs md:text-sm font-mono flex flex-col items-center gap-1.5">
             <Volume2 className="w-6 h-6 md:w-7 md:h-7 opacity-40 animate-pulse" />
@@ -273,8 +272,8 @@ export default function App() {
           </button>
         </div>
 
-        {/* 4x4 MPC Tactile Pad Matrix (Strictly fitted to viewport without scrolling) */}
-        <div className="grid grid-cols-4 grid-rows-4 gap-2 md:gap-2.5 flex-1 min-h-0">
+        {/* 4x4 MPC Tactile Pad Matrix (Optimized Pro Sizing & Proportions) */}
+        <div className="grid grid-cols-4 grid-rows-4 gap-2 md:gap-3 flex-1 min-h-0">
           {bankPads.map(pad => {
             const padKey = getPadKey(pad.bank, pad.id);
             const isSelected = selectedPadId === pad.id;
@@ -290,7 +289,7 @@ export default function App() {
                 onPointerUp={() => handlePadPointerUp(pad)}
                 onPointerCancel={() => handlePadPointerUp(pad)}
                 onLostPointerCapture={() => handlePadPointerUp(pad)}
-                className={`pad-target relative rounded-xl border-2 flex flex-col items-center justify-between p-1.5 transition-all transform active:scale-95 w-full h-full min-h-[50px] overflow-hidden [touch-action:none] [-webkit-touch-callout:none] [user-select:none] ${
+                className={`pad-target relative rounded-xl border-2 flex flex-col items-center justify-between p-2 transition-all transform active:scale-95 w-full h-full min-h-[65px] overflow-hidden [touch-action:none] [-webkit-touch-callout:none] [user-select:none] ${
                   isTriggered
                     ? 'bg-amber-400 border-amber-300 shadow-xl shadow-amber-400/50 scale-95'
                     : isSelected
