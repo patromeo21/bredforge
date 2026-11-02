@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Volume2, Play, Square, Upload, Zap } from 'lucide-react';
+import { Volume2, Play, Square, Upload, Zap, Copy } from 'lucide-react';
 
 interface PadState {
   id: number;
@@ -36,6 +36,8 @@ export default function App() {
   const [activeBank, setActiveBank] = useState<'A' | 'B' | 'C' | 'D'>('A');
   const [selectedPadId, setSelectedPadId] = useState<number>(1);
   const [triggeredVisualKeys, setTriggeredVisualKeys] = useState<Record<string, boolean>>({});
+  const [copyMode, setCopyMode] = useState<boolean>(false);
+  const [sourcePadForCopy, setSourcePadForCopy] = useState<PadState | null>(null);
 
   const [allPads, setAllPads] = useState<PadState[]>(createInitialPads);
 
@@ -78,11 +80,37 @@ export default function App() {
   const currentPad = allPads.find(p => p.bank === activeBank && p.id === selectedPadId) || allPads[0];
   const bankPads = allPads.filter(p => p.bank === activeBank);
 
-  const handlePadPointerDown = (targetPad: PadState, e: React.PointerEvent<HTMLButtonElement>) => {
+  const handlePadInteraction = (targetPad: PadState, e: React.PointerEvent<HTMLButtonElement>) => {
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch (err) {}
 
+    // Handle Copy / Duplicate Workflow Mode
+    if (copyMode) {
+      if (!sourcePadForCopy) {
+        setSourcePadForCopy(targetPad);
+      } else {
+        // Apply copy to target pad
+        setAllPads(prev =>
+          prev.map(p =>
+            p.bank === targetPad.bank && p.id === targetPad.id
+              ? {
+                  ...p,
+                  sampleName: sourcePadForCopy.sampleName,
+                  sampleBuffer: sourcePadForCopy.sampleBuffer,
+                  playMode: sourcePadForCopy.playMode,
+                  chokeGroup: sourcePadForCopy.chokeGroup,
+                }
+              : p
+          )
+        );
+        setSourcePadForCopy(null);
+        setCopyMode(false);
+      }
+      return;
+    }
+
+    setSelectedPadId(targetPad.id);
     const padKey = getPadKey(targetPad.bank, targetPad.id);
     setTriggeredVisualKeys(prev => ({ ...prev, [padKey]: true }));
 
@@ -92,7 +120,7 @@ export default function App() {
 
     const sourcesMap = activeSourcesRef.current;
 
-    // GLOBAL CHOKE GROUP EXECUTION (Hardware-accurate across all banks A-D)
+    // GLOBAL CHOKE GROUP EXECUTION
     if (targetPad.chokeGroup > 0) {
       allPads.forEach(otherPad => {
         if (
@@ -133,6 +161,7 @@ export default function App() {
   };
 
   const handlePadPointerUp = (targetPad: PadState) => {
+    if (copyMode) return;
     const padKey = getPadKey(targetPad.bank, targetPad.id);
     setTriggeredVisualKeys(prev => ({ ...prev, [padKey]: false }));
 
@@ -177,6 +206,8 @@ export default function App() {
       }
     };
     reader.readAsArrayBuffer(file);
+    // Reset input value so reloading the same file works consistently
+    e.target.value = '';
   };
 
   const getChokeLabel = (group: number) => {
@@ -185,56 +216,56 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-screen w-screen bg-neutral-950 text-white select-none overflow-hidden font-sans">
+    <div className="flex flex-col md:flex-row h-[100dvh] w-screen bg-neutral-950 text-white select-none overflow-hidden font-sans m-0 p-0">
       
       {/* LEFT PANE: Workspace & Integrated File Uploader */}
-      <div className="w-full md:w-1/2 h-1/2 md:h-full border-b md:border-b-0 md:border-r border-neutral-800 flex flex-col p-4 bg-neutral-900/40 shrink-0">
-        <div className="flex items-center justify-between pb-2 border-b border-neutral-800 shrink-0">
-          <h1 className="text-xl font-bold tracking-widest text-amber-500 uppercase">BredForge</h1>
-          <span className="text-xs bg-neutral-800 px-2.5 py-1 rounded-full text-neutral-400 font-mono">Layer 4 Active</span>
+      <div className="w-full md:w-1/2 h-1/2 md:h-full border-b md:border-b-0 md:border-r border-neutral-800 flex flex-col p-2.5 bg-neutral-900/40 shrink-0">
+        <div className="flex items-center justify-between pb-1.5 border-b border-neutral-800 shrink-0">
+          <h1 className="text-lg font-bold tracking-widest text-amber-500 uppercase">BredForge</h1>
+          <span className="text-[10px] bg-neutral-800 px-2 py-0.5 rounded-full text-neutral-400 font-mono">Layer 4 Active</span>
         </div>
 
         {/* Selected Pad Sample Details & Integrated File Uploader */}
-        <div className="my-2 p-3 bg-neutral-900 border border-neutral-800 rounded-lg shrink-0 flex flex-col gap-2.5">
+        <div className="my-2 p-2.5 bg-neutral-900 border border-neutral-800 rounded-lg shrink-0 flex flex-col gap-2">
           <div className="flex justify-between items-center">
             <div>
-              <div className="text-[10px] text-neutral-500 uppercase font-semibold">Active Selection</div>
-              <div className="text-sm md:text-base font-bold text-neutral-200">
+              <div className="text-[9px] text-neutral-500 uppercase font-semibold">Active Selection</div>
+              <div className="text-xs md:text-sm font-bold text-neutral-200">
                 Bank {activeBank} - Pad {currentPad.id}
               </div>
             </div>
-            {/* Integrated File Upload Button */}
-            <label className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-black text-xs font-semibold px-3 py-2 rounded-md cursor-pointer transition shadow-md shrink-0">
-              <Upload className="w-3.5 h-3.5" />
+            {/* Integrated File Upload Button with Camera Roll / Media Support */}
+            <label className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-black text-[11px] font-semibold px-2.5 py-1.5 rounded-md cursor-pointer transition shadow-md shrink-0">
+              <Upload className="w-3 h-3" />
               <span>{currentPad.sampleName ? 'Replace' : 'Load Sample'}</span>
-              <input type="file" accept="audio/*" onChange={handleFileUpload} className="hidden" />
+              <input type="file" accept="audio/*,video/*" onChange={handleFileUpload} className="hidden" />
             </label>
           </div>
 
-          <div className="text-xs text-amber-400/90 font-mono truncate bg-neutral-950 p-2 rounded border border-neutral-800/80">
+          <div className="text-[11px] text-amber-400/90 font-mono truncate bg-neutral-950 p-1.5 rounded border border-neutral-800/80">
             {currentPad.sampleName ? `[Loaded] ${currentPad.sampleName}` : '[ Empty Slot ]'}
           </div>
         </div>
 
         {/* Waveform Canvas Placeholder */}
-        <div className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg flex items-center justify-center relative overflow-hidden min-h-[60px]">
-          <div className="text-neutral-600 text-xs md:text-sm font-mono flex flex-col items-center gap-1.5">
-            <Volume2 className="w-6 h-6 md:w-7 md:h-7 opacity-40 animate-pulse" />
+        <div className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg flex items-center justify-center relative overflow-hidden min-h-[50px]">
+          <div className="text-neutral-600 text-xs font-mono flex flex-col items-center gap-1">
+            <Volume2 className="w-5 h-5 opacity-40 animate-pulse" />
             <span>Waveform Chopper & Slice Canvas</span>
           </div>
         </div>
       </div>
 
       {/* RIGHT PANE: Hardware MPC Pads & Parameters */}
-      <div className="w-full md:w-1/2 h-1/2 md:h-full flex flex-col p-4 bg-neutral-950 overflow-hidden">
+      <div className="w-full md:w-1/2 h-1/2 md:h-full flex flex-col p-2.5 bg-neutral-950 overflow-hidden">
         
         {/* Bank Selection Tabs */}
-        <div className="flex gap-2 mb-2.5 shrink-0">
+        <div className="flex gap-2 mb-2 shrink-0">
           {(['A', 'B', 'C', 'D'] as const).map(bank => (
             <button
               key={bank}
               onClick={() => setActiveBank(bank)}
-              className={`flex-1 py-1.5 font-bold text-xs md:text-sm rounded-md transition ${
+              className={`flex-1 py-1 font-bold text-xs rounded-md transition ${
                 activeBank === bank
                   ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20'
                   : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
@@ -245,59 +276,74 @@ export default function App() {
           ))}
         </div>
 
-        {/* Dynamic Parameter Switching Controls */}
-        <div className="grid grid-cols-2 gap-2.5 mb-2.5 shrink-0">
+        {/* Dynamic Parameter Switching & Copy Controls */}
+        <div className="grid grid-cols-3 gap-2 mb-2 shrink-0">
           <button
             onClick={() => updatePadParam('playMode', currentPad.playMode === 'oneshot' ? 'gate' : 'oneshot')}
-            className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-bold uppercase transition ${
+            className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-[11px] font-bold uppercase transition ${
               currentPad.playMode === 'oneshot'
                 ? 'bg-neutral-800 border-amber-500 text-amber-400'
                 : 'bg-neutral-900 border-neutral-800 text-neutral-400'
             }`}
           >
-            {currentPad.playMode === 'oneshot' ? <Play className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
-            Mode: {currentPad.playMode}
+            {currentPad.playMode === 'oneshot' ? <Play className="w-3 h-3" /> : <Square className="w-3 h-3" />}
+            {currentPad.playMode}
           </button>
 
           <button
             onClick={() => updatePadParam('chokeGroup', (currentPad.chokeGroup + 1) % 5)}
-            className={`flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-bold uppercase transition ${
+            className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-[11px] font-bold uppercase transition ${
               currentPad.chokeGroup > 0
                 ? 'bg-neutral-800 border-amber-500 text-amber-400'
                 : 'bg-neutral-900 border-neutral-800 text-neutral-400'
             }`}
           >
-            <Zap className="w-3.5 h-3.5" />
-            Choke: {getChokeLabel(currentPad.chokeGroup)}
+            <Zap className="w-3 h-3" />
+            {getChokeLabel(currentPad.chokeGroup)}
+          </button>
+
+          <button
+            onClick={() => {
+              setCopyMode(!copyMode);
+              setSourcePadForCopy(null);
+            }}
+            className={`flex items-center justify-center gap-1.5 py-1.5 rounded-lg border text-[11px] font-bold uppercase transition ${
+              copyMode
+                ? 'bg-amber-500 border-amber-400 text-black shadow-lg shadow-amber-500/30 animate-pulse'
+                : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:bg-neutral-800'
+            }`}
+          >
+            <Copy className="w-3 h-3" />
+            {copyMode ? (sourcePadForCopy ? 'Tap Target' : 'Tap Source') : 'Copy'}
           </button>
         </div>
 
-        {/* 4x4 MPC Tactile Pad Matrix (Optimized Pro Sizing & Proportions) */}
-        <div className="grid grid-cols-4 grid-rows-4 gap-2 md:gap-3 flex-1 min-h-0">
+        {/* 4x4 MPC Tactile Pad Matrix (Edge-to-Edge Optimized) */}
+        <div className="grid grid-cols-4 grid-rows-4 gap-2 flex-1 min-h-0">
           {bankPads.map(pad => {
             const padKey = getPadKey(pad.bank, pad.id);
             const isSelected = selectedPadId === pad.id;
             const isTriggered = triggeredVisualKeys[padKey];
+            const isCopySource = sourcePadForCopy?.bank === pad.bank && sourcePadForCopy?.id === pad.id;
 
             return (
               <button
                 key={padKey}
-                onPointerDown={(e) => {
-                  setSelectedPadId(pad.id);
-                  handlePadPointerDown(pad, e);
-                }}
+                onPointerDown={(e) => handlePadInteraction(pad, e)}
                 onPointerUp={() => handlePadPointerUp(pad)}
                 onPointerCancel={() => handlePadPointerUp(pad)}
                 onLostPointerCapture={() => handlePadPointerUp(pad)}
-                className={`pad-target relative rounded-xl border-2 flex flex-col items-center justify-between p-2 transition-all transform active:scale-95 w-full h-full min-h-[65px] overflow-hidden [touch-action:none] [-webkit-touch-callout:none] [user-select:none] ${
-                  isTriggered
+                className={`pad-target relative rounded-xl border-2 flex flex-col items-center justify-between p-1.5 transition-all transform active:scale-95 w-full h-full min-h-[45px] overflow-hidden [touch-action:none] [-webkit-touch-callout:none] [user-select:none] ${
+                  isCopySource
+                    ? 'bg-amber-600 border-amber-300 animate-bounce shadow-xl'
+                    : isTriggered
                     ? 'bg-amber-400 border-amber-300 shadow-xl shadow-amber-400/50 scale-95'
                     : isSelected
                     ? 'bg-neutral-800 border-amber-500 shadow-lg'
                     : 'bg-neutral-900 border-neutral-800 hover:border-neutral-700'
                 }`}
               >
-                <div className="w-full flex justify-between items-center text-[10px] font-mono text-neutral-400 shrink-0">
+                <div className="w-full flex justify-between items-center text-[9px] font-mono text-neutral-400 shrink-0">
                   <span>{pad.bank}{pad.id}</span>
                   {pad.chokeGroup > 0 && <span className="text-amber-500 font-bold">C{pad.chokeGroup}</span>}
                 </div>
