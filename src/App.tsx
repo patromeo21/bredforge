@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Volume2, Play, Square, Upload, Zap, Copy, Trash2 } from 'lucide-react';
+import { Volume2, Play, Square, Upload, Zap, Copy, Trash2, Scissors } from 'lucide-react';
 
 interface PadState {
   id: number;
@@ -9,6 +9,8 @@ interface PadState {
   sampleBuffer: AudioBuffer | null;
   playMode: 'oneshot' | 'gate';
   chokeGroup: number;
+  sliceStart?: number; // normalized 0 to 1
+  sliceEnd?: number;   // normalized 0 to 1
 }
 
 const createInitialPads = (): PadState[] => {
@@ -25,6 +27,8 @@ const createInitialPads = (): PadState[] => {
         sampleBuffer: null,
         playMode: 'gate',
         chokeGroup: 0,
+        sliceStart: 0,
+        sliceEnd: 1,
       });
     }
   });
@@ -46,10 +50,11 @@ export default function App() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const masterLimiterRef = useRef<DynamicsCompressorNode | null>(null);
   
-  // Using type inference to avoid TSX angle-bracket parser conflicts (> operator error)
+  // Type inference maps to prevent TSX angle bracket parser collisions
   const activeSourcesRef = useRef(new Map<string, AudioBufferSourceNode[]>());
   const gateSourcesRef = useRef(new Map<string, AudioBufferSourceNode[]>());
   const gridRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     const initAudio = () => {
@@ -96,6 +101,74 @@ export default function App() {
   const currentPad = allPads.find((p: PadState) => p.bank === activeBank && p.id === selectedPadId) || allPads[0];
   const bankPads = allPads.filter((p: PadState) => p.bank === activeBank);
 
+  // Render Waveform Canvas whenever selected pad or buffer changes
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const width = canvas.width;
+    const height = canvas.height;
+    ctx.clearRect(0, 0, width, height);
+
+    // Background
+    ctx.fillStyle = '#09090b';
+    ctx.fillRect(0, 0, width, height);
+
+    if (!currentPad.sampleBuffer) {
+      ctx.fillStyle = '#52525b';
+      ctx.font = '11px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('NO SAMPLE LOADED', width / 2, height / 2);
+      return;
+    }
+
+    const rawData = currentPad.sampleBuffer.getChannelData(0);
+    const step = Math.ceil(rawData.length / width);
+    const amp = height / 2;
+
+    ctx.strokeStyle = '#f59e0b'; // Amber-500
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+
+    for (let i = 0; i < width; i++) {
+      let min = 1.0;
+      let max = -1.0;
+      for (let j = 0; j < step; j++) {
+        const datum = rawData[i * step + j];
+        if (datum < min) min = datum;
+        if (datum > max) max = datum;
+      }
+      const yMin = (1 + min) * amp;
+      const yMax = (1 + max) * amp;
+      ctx.moveTo(i, yMin);
+      ctx.lineTo(i, yMax);
+    }
+    ctx.stroke();
+
+    // Draw Slice Markers
+    const startX = (currentPad.sliceStart ?? 0) * width;
+    const endX = (currentPad.sliceEnd ?? 1) * width;
+
+    ctx.fillStyle = 'rgba(245, 158, 11, 0.2)';
+    ctx.fillRect(startX, 0, endX - startX, height);
+
+    ctx.strokeStyle = '#ef4444'; // Red start marker
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(startX, 0);
+    ctx.lineTo(startX, height);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#22c55e'; // Green end marker
+    ctx.beginPath();
+    ctx.moveTo(endX, 0);
+    ctx.lineTo(endX, height);
+    ctx.stroke();
+
+  }, [currentPad.sampleBuffer, currentPad.sliceStart, currentPad.sliceEnd]);
+
   const getPadIdFromCoordinates = (clientX: number, clientY: number): number | null => {
     if (!gridRef.current) return null;
     const rect = gridRef.current.getBoundingClientRect();
@@ -128,7 +201,7 @@ export default function App() {
       setAllPads((prev: PadState[]) =>
         prev.map((p: PadState) =>
           p.bank === targetPad.bank && p.id === targetPad.id
-            ? { ...p, sampleName: null, sampleBuffer: null, playMode: 'gate', chokeGroup: 0 }
+            ? { ...p, sampleName: null, sampleBuffer: null, playMode: 'gate', chokeGroup: 0, sliceStart: 0, sliceEnd: 1 }
             : p
         )
       );
@@ -149,6 +222,8 @@ export default function App() {
                   sampleBuffer: sourcePadForCopy.sampleBuffer,
                   playMode: sourcePadForCopy.playMode,
                   chokeGroup: sourcePadForCopy.chokeGroup,
+                  sliceStart: sourcePadForCopy.sliceStart,
+                  sliceEnd: sourcePadForCopy.sliceEnd,
                 }
               : p
           )
@@ -204,7 +279,13 @@ export default function App() {
       const source = ctx.createBufferSource();
       source.buffer = targetPad.sampleBuffer;
       source.connect(masterLimiterRef.current);
-      source.start(0);
+
+      const bufferDuration = targetPad.sampleBuffer.duration;
+      const sStart = (targetPad.sliceStart ?? 0) * bufferDuration;
+      const sEnd = (targetPad.sliceEnd ?? 1) * bufferDuration;
+      const sDuration = Math.max(0.05, sEnd - sStart);
+
+      source.start(0, sStart, sDuration);
 
       const currentSources = sourcesMap.get(padKey) || [];
       sourcesMap.set(padKey, [...currentSources, source]);
@@ -315,7 +396,7 @@ export default function App() {
             setAllPads((prev: PadState[]) =>
               prev.map((p: PadState) =>
                 p.bank === activeBank && p.id === selectedPadId
-                  ? { ...p, sampleName: file.name, sampleBuffer: buffer }
+                  ? { ...p, sampleName: file.name, sampleBuffer: buffer, sliceStart: 0, sliceEnd: 1 }
                   : p
               )
             );
@@ -338,11 +419,11 @@ export default function App() {
   return (
     <div className="fixed inset-0 flex flex-col md:flex-row h-[100dvh] w-screen bg-neutral-950 text-white select-none overflow-hidden font-sans m-0 p-0 touch-none">
       
-      {/* LEFT PANE: Workspace & File Uploader */}
+      {/* LEFT PANE: Workspace & Waveform Chopper Canvas */}
       <div className="w-full md:w-1/2 h-1/2 md:h-full border-b md:border-b-0 md:border-r border-neutral-800 flex flex-col p-2.5 bg-neutral-900/40 shrink-0">
         <div className="flex items-center justify-between pb-1.5 border-b border-neutral-800 shrink-0">
           <h1 className="text-lg font-bold tracking-widest text-amber-500 uppercase">BredForge</h1>
-          <span className="text-[10px] bg-neutral-800 px-2 py-0.5 rounded-full text-neutral-400 font-mono">Layer 4 Active</span>
+          <span className="text-[10px] bg-neutral-800 px-2 py-0.5 rounded-full text-amber-400 font-mono">Layer 5 Active</span>
         </div>
 
         {/* Selected Pad Details & File Input */}
@@ -371,11 +452,59 @@ export default function App() {
           </div>
         </div>
 
-        {/* Waveform Canvas Placeholder */}
-        <div className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg flex items-center justify-center relative overflow-hidden min-h-[50px]">
-          <div className="text-neutral-600 text-xs font-mono flex flex-col items-center gap-1">
-            <Volume2 className="w-5 h-5 opacity-40 animate-pulse" />
-            <span>Waveform Chopper & Slice Canvas</span>
+        {/* Layer 5: Waveform Canvas & Slice Controls */}
+        <div className="flex-1 bg-neutral-950 border border-neutral-800 rounded-lg flex flex-col p-2 relative overflow-hidden min-h-[50px]">
+          <div className="flex justify-between items-center mb-1 shrink-0">
+            <span className="text-[10px] font-mono text-neutral-400 flex items-center gap-1">
+              <Scissors className="w-3 h-3 text-amber-500" /> Waveform Chopper
+            </span>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => {
+                  const s = Math.max(0, (currentPad.sliceStart ?? 0) - 0.05);
+                  updatePadParam('sliceStart', s);
+                }}
+                className="px-1.5 py-0.5 bg-neutral-800 hover:bg-neutral-700 rounded text-[9px] font-mono text-amber-400 border border-neutral-700"
+              >
+                [ Start -
+              </button>
+              <button 
+                onClick={() => {
+                  const s = Math.min((currentPad.sliceEnd ?? 1) - 0.05, (currentPad.sliceStart ?? 0) + 0.05);
+                  updatePadParam('sliceStart', s);
+                }}
+                className="px-1.5 py-0.5 bg-neutral-800 hover:bg-neutral-700 rounded text-[9px] font-mono text-amber-400 border border-neutral-700"
+              >
+                Start + ]
+              </button>
+              <button 
+                onClick={() => {
+                  const e = Math.max((currentPad.sliceStart ?? 0) + 0.05, (currentPad.sliceEnd ?? 1) - 0.05);
+                  updatePadParam('sliceEnd', e);
+                }}
+                className="px-1.5 py-0.5 bg-neutral-800 hover:bg-neutral-700 rounded text-[9px] font-mono text-emerald-400 border border-neutral-700"
+              >
+                [ End -
+              </button>
+              <button 
+                onClick={() => {
+                  const e = Math.min(1, (currentPad.sliceEnd ?? 1) + 0.05);
+                  updatePadParam('sliceEnd', e);
+                }}
+                className="px-1.5 py-0.5 bg-neutral-800 hover:bg-neutral-700 rounded text-[9px] font-mono text-emerald-400 border border-neutral-700"
+              >
+                End + ]
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 w-full bg-neutral-950 rounded border border-neutral-900 relative overflow-hidden">
+            <canvas 
+              ref={canvasRef} 
+              width={500} 
+              height={150} 
+              className="w-full h-full object-fill"
+            />
           </div>
         </div>
       </div>
