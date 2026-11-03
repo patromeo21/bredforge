@@ -58,7 +58,8 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     forceRender();
   };
 
-  const handlePadTap = (padId: number) => {
+  const handlePadTap = (padId: number, e: React.PointerEvent) => {
+    e.stopPropagation();
     setSelectedPadId(padId);
     if (!sampleManager) return;
     const pad = sampleManager.getPad(padId, currentBank);
@@ -68,7 +69,8 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     }
   };
 
-  const handleLoadSample = (padId: number) => {
+  const handleLoadSample = (padId: number, e: React.PointerEvent) => {
+    e.stopPropagation();
     if (!sampleLoader || !sampleManager) {
       alert('Audio engine initializing... Please tap the screen once and try loading again.');
       return;
@@ -154,22 +156,28 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   return (
     <div
       ref={containerRef}
-      className="w-full h-[100dvh] bg-neutral-900 text-white flex flex-col justify-between p-2.5 select-none overflow-hidden font-mono"
+      className="w-full h-[100dvh] bg-neutral-900 text-white flex flex-col justify-between p-2 select-none overflow-hidden font-mono box-border"
     >
       {/* Header & Tab Bar */}
-      <div className="w-full flex justify-between items-center border-b border-neutral-800 pb-2 flex-shrink-0">
+      <div className="w-full flex justify-between items-center border-b border-neutral-800 pb-1.5 flex-shrink-0">
         <h1 className="text-sm font-bold tracking-wider text-amber-500">BREDFORGE :: DAW</h1>
         <div className="flex gap-2 z-10">
           <button
             type="button"
-            onClick={() => onTabChange && onTabChange(1)}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              onTabChange && onTabChange(1);
+            }}
             className={`px-3 py-1 text-xs rounded transition-colors cursor-pointer ${activeTab === 1 ? 'bg-amber-600 text-white font-bold' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
           >
             Tracker (Tab 1)
           </button>
           <button
             type="button"
-            onClick={() => onTabChange && onTabChange(2)}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              onTabChange && onTabChange(2);
+            }}
             className={`px-3 py-1 text-xs rounded transition-colors cursor-pointer ${activeTab === 2 ? 'bg-amber-600 text-white font-bold' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
           >
             Sampler (Tab 2)
@@ -177,20 +185,20 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         </div>
       </div>
 
-      {/* Main Screen Real-Estate Viewport */}
-      <div className="flex-1 w-full flex flex-col justify-between my-1 overflow-hidden gap-1.5">
+      {/* Main Screen Real-Estate Viewport (Strictly bounded to prevent bottom clipping) */}
+      <div className="flex-1 w-full flex flex-col justify-between my-1 overflow-hidden gap-1 min-h-0">
         {activeTab === 2 ? (
-          <div className="w-full h-full flex flex-col justify-between max-w-2xl mx-auto pb-1">
+          <div className="w-full h-full flex flex-col justify-between max-w-2xl mx-auto">
             
             {/* TOP HUD SCREEN BEZEL */}
-            <div className="w-full bg-neutral-950 border border-amber-500/40 rounded-lg p-2 text-xs flex flex-col gap-1.5 flex-shrink-0 shadow-lg">
+            <div className="w-full bg-neutral-950 border border-amber-500/40 rounded-lg p-2 text-xs flex flex-col gap-1 flex-shrink-0 shadow-lg">
               <div className="flex justify-between items-center border-b border-neutral-800 pb-1">
                 <span className="font-bold text-amber-500 text-[11px] truncate">
                   HUD :: PAD {selectedPadId < 10 ? `0${selectedPadId}` : selectedPadId} [{currentBank}] — {selectedPad?.name || 'Empty'}
                 </span>
                 <button
                   type="button"
-                  onClick={() => handleLoadSample(selectedPadId)}
+                  onPointerDown={(e) => handleLoadSample(selectedPadId, e)}
                   className="px-2 py-0.5 bg-amber-600 hover:bg-amber-500 text-white rounded font-bold text-[10px] cursor-pointer flex-shrink-0"
                 >
                   LOAD / REPLACE
@@ -202,11 +210,11 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                   <canvas
                     ref={waveformCanvasRef}
                     width={500}
-                    height={60}
-                    className="w-full h-12 block"
+                    height={45}
+                    className="w-full h-10 block"
                   />
                 ) : (
-                  <div className="w-full h-12 flex items-center justify-center text-neutral-500 text-[10px]">
+                  <div className="w-full h-10 flex items-center justify-center text-neutral-500 text-[10px]">
                     Tap pad to select, click LOAD / REPLACE to import .wav
                   </div>
                 )}
@@ -258,7 +266,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                       sampleManager?.updatePadSettings(selectedPadId, currentBank, { pitch: parseInt(e.target.value) });
                       forceRender();
                     }}
-                    className="accent-amber-500 cursor-pointer h-2.5"
+                    className="accent-amber-500 cursor-pointer h-2"
                   />
                 </div>
 
@@ -274,23 +282,26 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                       sampleManager?.updatePadSettings(selectedPadId, currentBank, { volume: parseFloat(e.target.value) });
                       forceRender();
                     }}
-                    className="accent-amber-500 cursor-pointer h-2.5"
+                    className="accent-amber-500 cursor-pointer h-2"
                   />
                 </div>
               </div>
             </div>
 
-            {/* BOTTOM PAD PERFORMANCE GRID */}
-            <div className="w-full flex flex-col flex-1 justify-end">
-              <div className="flex justify-between items-center w-full mb-1.5 px-0.5">
+            {/* BOTTOM PAD PERFORMANCE GRID (Sized tightly so the 4th row is never clipped) */}
+            <div className="w-full flex flex-col justify-end mt-1">
+              <div className="flex justify-between items-center w-full mb-1 px-0.5">
                 <span className="text-xs text-neutral-400">BANKS:</span>
                 <div className="flex gap-1.5 z-10">
                   {(['A', 'B', 'C', 'D'] as BankID[]).map((bank) => (
                     <button
                       key={bank}
                       type="button"
-                      onClick={() => handleBankChange(bank)}
-                      className={`px-3 py-1 text-xs font-bold rounded transition-all cursor-pointer ${
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        handleBankChange(bank);
+                      }}
+                      className={`px-3 py-0.5 text-xs font-bold rounded transition-all cursor-pointer ${
                         currentBank === bank ? 'bg-amber-500 text-neutral-950 shadow' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
                       }`}
                     >
@@ -300,7 +311,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-4 gap-2 w-full flex-1 max-h-[220px]">
+              <div className="grid grid-cols-4 gap-1.5 w-full h-[185px]">
                 {Array.from({ length: 16 }, (_, i) => i + 1).map((padId) => {
                   const pad = sampleManager?.getPad(padId, currentBank);
                   const isSelected = selectedPadId === padId;
@@ -308,7 +319,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                     <button
                       key={padId}
                       type="button"
-                      onClick={() => handlePadTap(padId)}
+                      onPointerDown={(e) => handlePadTap(padId, e)}
                       className={`border rounded-lg flex flex-col items-center justify-center p-1 transition-all active:scale-95 cursor-pointer relative ${
                         pad?.buffer
                           ? isSelected
@@ -317,9 +328,9 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                           : 'bg-neutral-900 border-neutral-700 text-neutral-500 hover:bg-neutral-800'
                       }`}
                     >
-                      <span className="text-[9px] text-neutral-500">{currentBank}</span>
+                      <span className="text-[8px] text-neutral-500">{currentBank}</span>
                       <span className="text-sm font-bold">{padId < 10 ? `0${padId}` : padId}</span>
-                      <span className="text-[8px] truncate max-w-[55px] text-neutral-400">{pad?.name || 'Empty'}</span>
+                      <span className="text-[7px] truncate max-w-[55px] text-neutral-400">{pad?.name || 'Empty'}</span>
                     </button>
                   );
                 })}
@@ -328,7 +339,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 
           </div>
         ) : (
-          <div className="w-full max-w-2xl bg-neutral-950 border border-neutral-800 rounded-lg p-4 h-full overflow-y-auto text-xs mx-auto">
+          <div className="w-full max-w-2xl bg-neutral-950 border border-neutral-800 rounded-lg p-3 h-full overflow-y-auto text-xs mx-auto">
             <div className="text-amber-500 mb-2 font-bold">TRACKER PATTERN VIEW (Current Row: {currentRow ?? 0})</div>
             {patternState?.rows.map((row, rIdx) => (
               <div key={rIdx} className={`flex justify-between p-1 ${rIdx === currentRow ? 'bg-amber-500/20 text-amber-300' : 'text-neutral-400'}`}>
@@ -343,18 +354,24 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
       </div>
 
       {/* Transport Footer */}
-      <div className="w-full flex items-center justify-between border-t border-neutral-800 pt-1.5 px-0.5 flex-shrink-0">
+      <div className="w-full flex items-center justify-between border-t border-neutral-800 pt-1 px-0.5 flex-shrink-0">
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={onTogglePlay}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              onTogglePlay && onTogglePlay();
+            }}
             className={`px-3 py-1 rounded font-bold text-xs transition-colors cursor-pointer ${isPlaying ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}
           >
             {isPlaying ? 'PAUSE' : 'PLAY'}
           </button>
           <button
             type="button"
-            onClick={onStop}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              onStop && onStop();
+            }}
             className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded font-bold text-xs transition-colors cursor-pointer"
           >
             STOP

@@ -100,12 +100,12 @@ export const App: React.FC = () => {
 
   return (
     <div
-      className="w-full h-screen overflow-hidden bg-neutral-950 select-none"
+      className="w-full h-[100dvh] overflow-hidden bg-neutral-950 select-none flex flex-col"
       style={{
         WebkitUserSelect: 'none',
+        touchAction: 'manipulation',
       }}
-      onClick={initAudioContext}
-      onTouchStart={initAudioContext}
+      onPointerDown={initAudioContext}
     >
       <BredForgeCanvas
         audioCtx={audioCtx}
