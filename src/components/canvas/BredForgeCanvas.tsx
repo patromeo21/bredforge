@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { SampleLoader } from '../../services/sample/SampleLoader';
-import { SampleManager } from '../../services/sample/SampleManager';
+import { SampleManager, BankID } from '../../services/sample/SampleManager';
 import { TouchIsolationService } from '../../services/touch/TouchIsolationService';
 import { PatternState } from '../../services/tracker/TrackerEngine';
 
@@ -30,6 +30,8 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const sampleManagerRef = useRef<SampleManager | null>(null);
   const sampleLoaderRef = useRef<SampleLoader | null>(null);
+  const [currentBank, setCurrentBank] = useState<BankID>('A');
+  const [, setRefreshState] = useState<number>(0);
 
   useEffect(() => {
     if (!audioCtx) return;
@@ -49,13 +51,23 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     };
   }, [audioCtx]);
 
+  const forceRender = () => setRefreshState((prev) => prev + 1);
+
+  const handleBankChange = (bank: BankID) => {
+    setCurrentBank(bank);
+    if (sampleManagerRef.current) {
+      sampleManagerRef.current.setActiveBank(bank);
+    }
+  };
+
   const handlePadTap = (padId: number) => {
     const manager = sampleManagerRef.current;
     if (!manager) return;
 
-    const pad = manager.getPad(padId);
+    const pad = manager.getPad(padId, currentBank);
     if (pad && pad.buffer) {
-      manager.triggerPad(padId);
+      manager.triggerPad(padId, currentBank);
+      forceRender();
     } else {
       handleLoadSample(padId);
     }
@@ -69,10 +81,11 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     loader.openFilePicker(async (file: File) => {
       try {
         const decodedBuffer = await loader.loadAudioFile(file);
-        manager.assignBufferToPad(padId, decodedBuffer, file.name);
-        console.log(`Successfully loaded ${file.name} onto Pad ${padId}`);
+        manager.assignBufferToPad(padId, currentBank, decodedBuffer, file.name);
+        forceRender();
+        console.log(`Loaded ${file.name} to Bank ${currentBank} Pad ${padId}`);
       } catch (err) {
-        console.error(`Failed to assign sample to Pad ${padId}`, err);
+        console.error(`Failed loading sample to Pad ${padId}`, err);
       }
     });
   };
@@ -101,23 +114,41 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         </div>
       </div>
 
-      {/* Main Content Area */}
+      {/* Main Sampler / Tracker Area */}
       <div className="flex-1 w-full flex flex-col items-center justify-center my-4">
         {activeTab === 2 ? (
           <div className="w-full max-w-md flex flex-col items-center">
-            <div className="text-xs text-neutral-400 mb-2">SP-404 PAD MATRIX (Tap empty to load sample)</div>
+            {/* Bank Selectors */}
+            <div className="flex justify-between items-center w-full mb-3 px-1">
+              <span className="text-xs text-neutral-400">BANK SELECT:</span>
+              <div className="flex gap-2">
+                {(['A', 'B', 'C', 'D'] as BankID[]).map((bank) => (
+                  <button
+                    key={bank}
+                    onClick={() => handleBankChange(bank)}
+                    className={`px-3 py-1 text-xs font-bold rounded ${
+                      currentBank === bank ? 'bg-amber-500 text-neutral-950' : 'bg-neutral-800 text-neutral-400'
+                    }`}
+                  >
+                    BANK {bank}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 4x4 Pad Grid */}
             <div className="grid grid-cols-4 gap-3 w-full aspect-square">
               {Array.from({ length: 16 }, (_, i) => i + 1).map((padId) => {
-                const pad = sampleManagerRef.current?.getPad(padId);
+                const pad = sampleManagerRef.current?.getPad(padId, currentBank);
                 return (
                   <button
                     key={padId}
                     onClick={() => handlePadTap(padId)}
                     className={`border rounded-lg flex flex-col items-center justify-center p-2 transition-all active:scale-95 touch-none ${
-                      pad?.buffer ? 'bg-neutral-800 border-amber-500/50 text-amber-400' : 'bg-neutral-900 border-neutral-700 text-neutral-400 hover:bg-neutral-800'
+                      pad?.buffer ? 'bg-neutral-800 border-amber-500 text-amber-400' : 'bg-neutral-900 border-neutral-700 text-neutral-400 hover:bg-neutral-800'
                     }`}
                   >
-                    <span className="text-[10px] text-neutral-500">PAD</span>
+                    <span className="text-[10px] text-neutral-500">{currentBank}</span>
                     <span className="text-base font-bold">{padId < 10 ? `0${padId}` : padId}</span>
                     <span className="text-[9px] truncate max-w-[60px] text-neutral-400">{pad?.name || 'Empty'}</span>
                   </button>
@@ -140,7 +171,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         )}
       </div>
 
-      {/* Transport & Master Meter Footer */}
+      {/* Transport Footer */}
       <div className="w-full flex items-center justify-between border-t border-neutral-800 pt-3 px-2">
         <div className="flex gap-2">
           <button
