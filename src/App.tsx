@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { BredForgeCanvas } from './components/canvas/BredForgeCanvas';
 import { TrackerEngine, PatternState } from './services/tracker/TrackerEngine';
 import { TransportService } from './services/transport/TransportService';
+import { SampleManager } from './services/sample/SampleManager';
+import { SampleLoader } from './services/sample/SampleLoader';
 
 export const App: React.FC = () => {
   const [audioCtx, setAudioCtx] = useState<AudioContext | null>(null);
@@ -13,6 +15,8 @@ export const App: React.FC = () => {
 
   const trackerRef = useRef<TrackerEngine | null>(null);
   const transportRef = useRef<TransportService | null>(null);
+  const sampleManagerRef = useRef<SampleManager | null>(null);
+  const sampleLoaderRef = useRef<SampleLoader | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -30,7 +34,7 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Unlock AudioContext on first user interaction (iPad requirement)
+  // Unlock AudioContext and initialize persistent managers on first user interaction
   const initAudioContext = () => {
     if (!audioCtx) {
       const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -39,6 +43,10 @@ export const App: React.FC = () => {
         ctx.resume();
       }
       setAudioCtx(ctx);
+      sampleManagerRef.current = new SampleManager(ctx);
+      sampleLoaderRef.current = new SampleLoader(ctx);
+    } else if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
     }
   };
 
@@ -84,8 +92,6 @@ export const App: React.FC = () => {
       const elapsed = transport.getElapsedSeconds();
       const row = tracker.getRowFromAudioTime(elapsed);
       setCurrentRow(row);
-
-      // Simulate a mild live RMS meter fluctuation during playback
       setMasterRmsLevel(0.3 + Math.random() * 0.4);
 
       animationFrameRef.current = requestAnimationFrame(loop);
@@ -106,6 +112,8 @@ export const App: React.FC = () => {
     >
       <BredForgeCanvas
         audioCtx={audioCtx}
+        sampleManager={sampleManagerRef.current}
+        sampleLoader={sampleLoaderRef.current}
         patternState={patternState}
         currentRow={currentRow}
         activeTab={activeTab}
