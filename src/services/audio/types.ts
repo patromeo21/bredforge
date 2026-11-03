@@ -1,7 +1,30 @@
-export type PlayMode = 'oneShot' | 'gate';
-export type ChokeGroup = 0 | 1 | 2 | 3 | 4;
+export type TrackKey = string;
+export type SidechainPresetName = 'soft' | 'medium' | 'hard';
+export type TrackEffectType = 'bitcrush' | 'phaser' | 'looper';
 
-export type TrackKey = string; // e.g. "A1", "A2", "D16"
+export interface EffectMixState {
+  wet: number;
+  dry: number;
+  enabled: boolean;
+}
+
+export interface TrackEffectState {
+  bitcrush: EffectMixState;
+  phaser: EffectMixState;
+  looper: EffectMixState;
+}
+
+export interface TrackGraphState {
+  id: string;
+  gain: number;
+  pan: number;
+  muted: boolean;
+  soloed: boolean;
+  effects: TrackEffectState;
+}
+
+export interface PlayMode = 'oneShot' | 'gate';
+export type ChokeGroup = 0 | 1 | 2 | 3 | 4;
 
 export interface PadConfig {
   padIndex: number;
@@ -61,4 +84,24 @@ export interface MasterEffectState {
   reverbMix: number;
   delayMix: number;
   masterFilterCutoff: number;
+}
+
+export interface SidechainPresetConfig {
+  thresholdDb: number;
+  kneeDb: number;
+  ratio: number;
+  attackMs: number;
+  releaseMs: number;
+}
+
+export interface MasterEQBandState {
+  type: BiquadFilterType;
+  frequency: number;
+  Q: number;
+  gain: number;
+}
+
+export interface MasterEQState {
+  bands: MasterEQBandState[];
+  filterFlipEnabled: boolean;
 }
