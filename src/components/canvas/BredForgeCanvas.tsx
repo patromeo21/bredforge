@@ -7,6 +7,9 @@ interface BredForgeCanvasProps {
   activeTab: 1 | 2;
   onTabChange: (tab: 1 | 2) => void;
   masterRmsLevel?: number;
+  isPlaying?: boolean;
+  onTogglePlay?: () => void;
+  onStop?: () => void;
 }
 
 export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
@@ -15,6 +18,9 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   activeTab,
   onTabChange,
   masterRmsLevel = 0.2,
+  isPlaying = false,
+  onTogglePlay,
+  onStop,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [localTab, setLocalTab] = useState<1 | 2>(activeTab);
@@ -56,18 +62,16 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     ctx.font = '11px monospace';
     for (let r = startRow; r < endRow; r++) {
       const yPos = (r - startRow) * rowHeight + 10;
-      if (yPos < -rowHeight || yPos > 740) continue; // Culling check
+      if (yPos < -rowHeight || yPos > 740) continue;
 
-      // Row highlight if active
       if (r === currentRow) {
-        ctx.fillStyle = 'rgba(217, 119, 6, 0.25);';
+        ctx.fillStyle = 'rgba(217, 119, 6, 0.25)';
         ctx.fillRect(10, yPos - 14, 620, rowHeight);
       }
 
       ctx.fillStyle = r === currentRow ? '#fbbf24' : '#6b7280';
       ctx.fillText(`R${r.toString().padStart(2, '0')}`, 20, yPos);
 
-      // Render step columns
       const rowData = patternState.rows[r];
       if (rowData && rowData.columns) {
         rowData.columns.forEach((step, c) => {
@@ -86,10 +90,26 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     ctx.lineWidth = 1;
     ctx.strokeRect(0, 740, 640, 160);
 
-    // SP-303 Label & Fast LED RMS Meter
     ctx.fillStyle = '#d4d4d8';
     ctx.font = 'bold 12px sans-serif';
     ctx.fillText('SP-303 MASTERING RACK', 20, 770);
+
+    // Render Play Button
+    ctx.fillStyle = isPlaying ? '#22c55e' : '#27272a';
+    ctx.fillRect(230, 775, 75, 34);
+    ctx.strokeStyle = isPlaying ? '#4ade80' : '#52525b';
+    ctx.strokeRect(230, 775, 75, 34);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText(isPlaying ? 'PLAYING' : 'PLAY', 267, 793);
+
+    // Render Stop Button
+    ctx.fillStyle = '#27272a';
+    ctx.fillRect(315, 775, 75, 34);
+    ctx.strokeStyle = '#52525b';
+    ctx.strokeRect(315, 775, 75, 34);
+    ctx.fillStyle = '#ef4444';
+    ctx.fillText('STOP', 352, 793);
 
     // Vertical LED Signal Ladder
     const meterHeight = 100;
@@ -109,7 +129,6 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
       }
       ctx.fillRect(meterX + 2, ledY + 1, meterWidth - 4, 8);
     }
-
 
     // ==========================================
     // 2. RIGHT COLUMN VIEWPORT (Width: 800px, x: 640) - Tabbed Workspace
@@ -134,7 +153,6 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     ctx.fillStyle = '#09090b';
     ctx.fillText('TAB 2: SAMPLER WORKSPACE', 875, 30);
 
-    // Tab Body Content Placeholder
     if (localTab === 1) {
       ctx.fillStyle = '#a1a1aa';
       ctx.font = '14px sans-serif';
@@ -145,11 +163,38 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
       ctx.fillText('Consolidated Waveform Canvas & 4x4 Soft Touch Pad Matrix', 680, 100);
     }
 
-  }, [patternState, currentRow, localTab, masterRmsLevel]);
+  }, [patternState, currentRow, localTab, masterRmsLevel, isPlaying]);
+
+  // Handle Canvas Touch/Click Hit Testing for Transport Buttons
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // Play button bounds: x: 230-305, y: 775-809
+    if (x >= 230 && x <= 305 && y >= 775 && y <= 809) {
+      if (onTogglePlay) onTogglePlay();
+    }
+    // Stop button bounds: x: 315-390, y: 775-809
+    if (x >= 315 && x <= 390 && y >= 775 && y <= 809) {
+      if (onStop) onStop();
+    }
+
+    // Tab 1 bounds: x: 660-840, y: 10-40
+    if (x >= 660 && x <= 840 && y >= 10 && y <= 40) {
+      setLocalTab(1);
+      onTabChange(1);
+    }
+    // Tab 2 bounds: x: 860-1040, y: 10-40
+    if (x >= 860 && x <= 1040 && y >= 10 && y <= 40) {
+      setLocalTab(2);
+      onTabChange(2);
+    }
+  };
 
   return (
     <div style={{ width: '1440px', height: '900px', overflow: 'hidden', touchAction: 'none' }}>
-      <canvas ref={canvasRef} />
+      <canvas ref={canvasRef} onClick={handleCanvasClick} style={{ cursor: 'pointer' }} />
     </div>
   );
 };
