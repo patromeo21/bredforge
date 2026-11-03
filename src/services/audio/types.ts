@@ -43,7 +43,7 @@ export interface AudioGraphRuntimeState {
   tracks: Record<string, TrackGraphState>;
 }
 
-export interface PlayMode = 'oneShot' | 'gate';
+export type PlayMode = 'oneShot' | 'gate';
 export type ChokeGroup = 0 | 1 | 2 | 3 | 4;
 
 export interface PadConfig {
