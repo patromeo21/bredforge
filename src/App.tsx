@@ -1,127 +1,116 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { AudioGraph } from './services/audio/AudioGraph';
-import { MasterDSPController } from './services/audio/MasterDSPController';
+import React, { useState, useEffect, useRef } from 'react';
+import { BredForgeCanvas } from './components/canvas/BredForgeCanvas';
 import { TrackerEngine, PatternState } from './services/tracker/TrackerEngine';
 import { TransportService } from './services/transport/TransportService';
-import { BredForgeCanvas } from './components/canvas/BredForgeCanvas';
-import { TouchIsolationService } from './services/touch/TouchIsolationService';
 
 export const App: React.FC = () => {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  // Core Service Instances
-  const audioGraphRef = useRef<AudioGraph | null>(null);
-  const masterDspRef = useRef<MasterDSPController | null>(null);
-  const trackerEngineRef = useRef<TrackerEngine | null>(null);
-  const transportRef = useRef<TransportService>(new TransportService(120));
-  const touchServiceRef = useRef<TouchIsolationService | null>(null);
-
-  // Reactive UI States
-  const [patternState, setPatternState] = useState<PatternState | null>(null);
+  const [audioCtx, setAudioCtx] = useState<AudioContext | null>(null);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentRow, setCurrentRow] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<1 | 2>(2);
-  const [rmsLevel, setRmsLevel] = useState<number>(0.15);
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [isAudioUnlocked, setIsAudioUnlocked] = useState<boolean>(false);
+  const [masterRmsLevel, setMasterRmsLevel] = useState<number>(0);
+  const [patternState, setPatternState] = useState<PatternState | undefined>(undefined);
+
+  const trackerRef = useRef<TrackerEngine | null>(null);
+  const transportRef = useRef<TransportService | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
-    // 1. Instantiate Core Engine Services
-    const audioGraph = new AudioGraph();
-    const masterDsp = new MasterDSPController(audioGraph);
-    const trackerEngine = new TrackerEngine(120, 64, 4);
-
-    audioGraphRef.current = audioGraph;
-    masterDspRef.current = masterDsp;
-    trackerEngineRef.current = trackerEngine;
-    setPatternState(trackerEngine.pattern);
-
-    // 2. Attach Mobile Pointer Touch Isolation
-    if (containerRef.current) {
-      touchServiceRef.current = new TouchIsolationService(containerRef.current);
-    }
-
-    // 3. Master 60fps Audio/Visual Ticker Loop
-    let animFrameId: number;
-
-    const renderLoop = () => {
-      // If playing, update row position from transport clock
-      if (transportRef.current.isPlaying && trackerEngineRef.current) {
-        const elapsed = transportRef.current.getElapsedSeconds();
-        const row = trackerEngineRef.current.getRowFromAudioTime(elapsed);
-        setCurrentRow(row);
-      }
-
-      // Simulated RMS signal flutter for LED meter testing
-      const baseRms = transportRef.current.isPlaying 
-        ? 0.3 + Math.sin(performance.now() * 0.01) * 0.2 + Math.random() * 0.1 
-        : 0.08;
-      setRmsLevel(Math.max(0, Math.min(1, baseRms)));
-
-      animFrameId = requestAnimationFrame(renderLoop);
-    };
-
-    renderLoop();
+    // Initialize Tracker & Transport engines
+    const tracker = new TrackerEngine(120, 64, 4);
+    const transport = new TransportService(120);
+    trackerRef.current = tracker;
+    transportRef.current = transport;
+    setPatternState(tracker.pattern);
 
     return () => {
-      cancelAnimationFrame(animFrameId);
-      if (touchServiceRef.current) {
-        touchServiceRef.current.destroy();
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
       }
     };
   }, []);
 
-  // Unlock Web Audio Context on First User Touch
-  const handleFirstInteraction = async () => {
-    if (!isAudioUnlocked && masterDspRef.current) {
-      await masterDspRef.current.unlockAudioContext();
-      setIsAudioUnlocked(true);
+  // Unlock AudioContext on first user interaction (iPad requirement)
+  const initAudioContext = () => {
+    if (!audioCtx) {
+      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AudioContextClass();
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+      setAudioCtx(ctx);
     }
   };
 
   const handleTogglePlay = async () => {
-    await handleFirstInteraction();
-    if (transportRef.current.isPlaying) {
-      transportRef.current.pause();
+    initAudioContext();
+    const transport = transportRef.current;
+    if (!transport) return;
+
+    if (transport.isPlaying) {
+      transport.pause();
       setIsPlaying(false);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
     } else {
-      transportRef.current.play();
+      transport.play();
       setIsPlaying(true);
+      startPlaybackLoop();
     }
   };
 
   const handleStop = () => {
-    transportRef.current.stop();
+    const transport = transportRef.current;
+    if (!transport) return;
+
+    transport.stop();
     setIsPlaying(false);
     setCurrentRow(0);
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    setMasterRmsLevel(0);
   };
 
-  if (!patternState) return null;
+  const startPlaybackLoop = () => {
+    const tracker = trackerRef.current;
+    const transport = transportRef.current;
+    if (!tracker || !transport) return;
+
+    const loop = () => {
+      if (!transport.isPlaying) return;
+
+      const elapsed = transport.getElapsedSeconds();
+      const row = tracker.getRowFromAudioTime(elapsed);
+      setCurrentRow(row);
+
+      // Simulate a mild live RMS meter fluctuation during playback
+      setMasterRmsLevel(0.3 + Math.random() * 0.4);
+
+      animationFrameRef.current = requestAnimationFrame(loop);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(loop);
+  };
 
   return (
     <div
-      ref={containerRef}
-      onClick={handleFirstInteraction}
-      onPointerDown={handleFirstInteraction}
+      className="w-full h-screen overflow-hidden bg-neutral-950 select-none"
       style={{
-        width: '1440px',
-        height: '900px',
-        backgroundColor: '#09090b',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        margin: '0 auto',
-        overflow: 'hidden',
-        userSelect: 'none',
         WebkitUserSelect: 'none',
         touchAction: 'none',
       }}
+      onClick={initAudioContext}
+      onTouchStart={initAudioContext}
     >
       <BredForgeCanvas
+        audioCtx={audioCtx}
         patternState={patternState}
         currentRow={currentRow}
         activeTab={activeTab}
         onTabChange={(tab: 1 | 2) => setActiveTab(tab)}
-        masterRmsLevel={rmsLevel}
+        masterRmsLevel={masterRmsLevel}
         isPlaying={isPlaying}
         onTogglePlay={handleTogglePlay}
         onStop={handleStop}
