@@ -1,78 +1,119 @@
-import type { TrackKey } from './types';
+export interface AudioGraphConfig {
+  sampleRate?: number;
+}
 
 export class AudioGraph {
-  readonly context: AudioContext;
-  readonly masterGain: GainNode;
-  readonly analyser: AnalyserNode;
-  readonly output: GainNode;
-  readonly tracks: Record<TrackKey, { filter: BiquadFilterNode; gain: GainNode; pan: StereoPannerNode }>;
+  public ctx: AudioContext;
+  public masterLimiter: DynamicsCompressorNode;
+  public masterEqBands: BiquadFilterNode[] = [];
+  public sidechainCompressor: DynamicsCompressorNode;
+  
+  // Track Parallel Leg Nodes (8 Channels x 3 Processing Slots)
+  public trackBuses: GainNode[] = [];
+  public trackSlots: { bitcrush: WaveShaperNode; phaser: BiquadFilterNode; looper: GainNode }[] = [];
 
-  constructor(context: AudioContext) {
-    this.context = context;
-    this.masterGain = context.createGain();
-    this.output = context.createGain();
-    this.analyser = context.createAnalyser();
-    this.analyser.fftSize = 2048;
+  constructor(config?: AudioGraphConfig) {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    this.ctx = new AudioContextClass(config);
 
-    this.tracks = {
-      vocals: this.createTrackNode('peaking', 2000),
-      drums: this.createTrackNode('peaking', 400),
-      bass: this.createTrackNode('lowshelf', 200),
-      other: this.createTrackNode('highshelf', 5000),
-    };
+    // 1. Master Limiter (20:1 Ratio)
+    this.masterLimiter = this.ctx.createDynamicsCompressor();
+    this.masterLimiter.threshold.setValueAtTime(-3, this.ctx.currentTime);
+    this.masterLimiter.knee.setValueAtTime(0, this.ctx.currentTime);
+    this.masterLimiter.ratio.setValueAtTime(20, this.ctx.currentTime);
+    this.masterLimiter.attack.setValueAtTime(0.001, this.ctx.currentTime);
+    this.masterLimiter.release.setValueAtTime(0.1, this.ctx.currentTime);
 
-    (Object.keys(this.tracks) as TrackKey[]).forEach((key) => {
-      const track = this.tracks[key];
-      track.gain.connect(track.pan);
-      track.pan.connect(this.masterGain);
+    // 2. Sidechain Compressor Bus
+    this.sidechainCompressor = this.ctx.createDynamicsCompressor();
+    this.sidechainCompressor.threshold.setValueAtTime(-12, this.ctx.currentTime);
+    this.sidechainCompressor.ratio.setValueAtTime(2, this.ctx.currentTime);
+    this.sidechainCompressor.attack.setValueAtTime(0.01, this.ctx.currentTime);
+    this.sidechainCompressor.release.setValueAtTime(0.08, this.ctx.currentTime);
+
+    // 3. 5-Band Parametric EQ (Filter-Flip Capable)
+    const frequencies = [60, 250, 1000, 4000, 12000];
+    this.masterEqBands = frequencies.map((freq: number, index: number) => {
+      const filter = this.ctx.createBiquadFilter();
+      if (index === 0) filter.type = 'lowshelf';
+      else if (index === 4) filter.type = 'highshelf';
+      else filter.type = 'peaking';
+      
+      filter.frequency.setValueAtTime(freq, this.ctx.currentTime);
+      filter.gain.setValueAtTime(0, this.ctx.currentTime);
+      filter.Q.setValueAtTime(0.707, this.ctx.currentTime);
+      return filter;
     });
 
-    this.masterGain.connect(this.output);
-    this.output.connect(this.analyser);
-    this.output.connect(this.context.destination);
+    // Chain EQ series -> Sidechain -> Master Limiter -> Destination
+    let previousNode: AudioNode = this.masterEqBands[0];
+    for (let i = 1; i < this.masterEqBands.length; i++) {
+      previousNode.connect(this.masterEqBands[i]);
+      previousNode = this.masterEqBands[i];
+    }
+    previousNode.connect(this.sidechainCompressor);
+    this.sidechainCompressor.connect(this.masterLimiter);
+    this.masterLimiter.connect(this.ctx.destination);
+
+    // 4. Initialize 8 Track Buses with 3 Stationary Parallel Processing Legs
+    for (let t = 0; t < 8; t++) {
+      const bus = this.ctx.createGain();
+      bus.gain.setValueAtTime(0.8, this.ctx.currentTime);
+      bus.connect(this.masterEqBands[0]);
+      this.trackBuses.push(bus);
+
+      // Bitcrush WaveShaper stub
+      const bitcrush = this.ctx.createWaveShaper();
+      // Phaser Biquad stub
+      const phaser = this.ctx.createBiquadFilter();
+      phaser.type = 'allpass';
+      phaser.frequency.setValueAtTime(1000, this.ctx.currentTime);
+      // Looper / Tape-stop Gain stub
+      const looper = this.ctx.createGain();
+      looper.gain.setValueAtTime(1.0, this.ctx.currentTime);
+
+      this.trackSlots.push({ bitcrush, phaser, looper });
+    }
   }
 
-  private createTrackNode(type: BiquadFilterType, frequency: number) {
-    const filter = this.context.createBiquadFilter();
-    filter.type = type;
-    filter.frequency.value = frequency;
-    filter.Q.value = 1;
-
-    const gain = this.context.createGain();
-    gain.gain.value = 1;
-
-    const pan = this.context.createStereoPanner();
-    pan.pan.value = 0;
-
-    filter.connect(gain);
-    return { filter, gain, pan };
+  public async resumeContext(): Promise<void> {
+    if (this.ctx.state === 'suspended') {
+      await this.ctx.resume();
+    }
   }
 
-  connectSource(source: AudioBufferSourceNode) {
-    (Object.keys(this.tracks) as TrackKey[]).forEach((key) => {
-      const track = this.tracks[key];
-      source.connect(track.filter);
-    });
+  public setSidechainPreset(preset: 'soft' | 'medium' | 'hard'): void {
+    const t = this.ctx.currentTime;
+    if (preset === 'soft') {
+      this.sidechainCompressor.attack.setValueAtTime(0.02, t);
+      this.sidechainCompressor.release.setValueAtTime(0.15, t);
+      this.sidechainCompressor.ratio.setValueAtTime(1.5, t);
+    } else if (preset === 'medium') {
+      this.sidechainCompressor.attack.setValueAtTime(0.01, t);
+      this.sidechainCompressor.release.setValueAtTime(0.08, t);
+      this.sidechainCompressor.ratio.setValueAtTime(2.0, t);
+    } else if (preset === 'hard') {
+      this.sidechainCompressor.attack.setValueAtTime(0.001, t);
+      this.sidechainCompressor.release.setValueAtTime(0.04, t);
+      this.sidechainCompressor.ratio.setValueAtTime(3.5, t);
+    }
   }
 
-  setTrackGain(track: TrackKey, value: number) {
-    const node = this.tracks[track];
-    if (!node) return;
-    node.gain.gain.setTargetAtTime(value, this.context.currentTime, 0.05);
-    node.filter.gain.setTargetAtTime((value - 1) * 20, this.context.currentTime, 0.1);
+  public toggleFilterFlip(enableLowpass: boolean): void {
+    const band5 = this.masterEqBands[4];
+    const t = this.ctx.currentTime;
+    if (enableLowpass) {
+      band5.type = 'lowpass';
+      band5.frequency.setValueAtTime(20000, t);
+      band5.Q.setValueAtTime(0.707, t);
+    } else {
+      band5.type = 'highshelf';
+      band5.frequency.setValueAtTime(12000, t);
+      band5.gain.setValueAtTime(0, t);
+    }
   }
 
-  setTrackPan(track: TrackKey, value: number) {
-    const node = this.tracks[track];
-    if (!node) return;
-    node.pan.pan.setTargetAtTime(value, this.context.currentTime, 0.05);
-  }
-
-  setMasterVolume(value: number) {
-    this.output.gain.setTargetAtTime(value, this.context.currentTime, 0.05);
-  }
-
-  getTrackCount() {
-    return Object.keys(this.tracks).length;
+  public createSafeFloat32Array(length: number): Float32Array<ArrayBuffer> {
+    return new Float32Array(length) as Float32Array<ArrayBuffer>;
   }
 }
