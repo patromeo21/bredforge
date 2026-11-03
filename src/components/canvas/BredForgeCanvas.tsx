@@ -74,7 +74,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 
       const rowData = patternState.rows[r];
       if (rowData && rowData.columns) {
-        rowData.columns.forEach((step, c) => {
+        rowData.columns.forEach((step: { note?: string; instrumentId?: number }, c: number) => {
           const xPos = 80 + c * 130;
           const noteText = step.note ? step.note : '---';
           ctx.fillStyle = step.note ? '#38bdf8' : '#374151';
@@ -198,3 +198,5 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     </div>
   );
 };
+
+export default BredForgeCanvas;
