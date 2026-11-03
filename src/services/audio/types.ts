@@ -23,6 +23,26 @@ export interface TrackGraphState {
   effects: TrackEffectState;
 }
 
+export interface MasterEQBandState {
+  type: BiquadFilterType;
+  frequency: number;
+  Q: number;
+  gain: number;
+}
+
+export interface MasterEQState {
+  bands: MasterEQBandState[];
+  filterFlipEnabled: boolean;
+}
+
+export interface AudioGraphRuntimeState {
+  masterVolume: number;
+  masterEq: MasterEQState;
+  sidechainPreset: SidechainPresetName;
+  sidechainSourceLevel: number;
+  tracks: Record<string, TrackGraphState>;
+}
+
 export interface PlayMode = 'oneShot' | 'gate';
 export type ChokeGroup = 0 | 1 | 2 | 3 | 4;
 
@@ -92,16 +112,4 @@ export interface SidechainPresetConfig {
   ratio: number;
   attackMs: number;
   releaseMs: number;
-}
-
-export interface MasterEQBandState {
-  type: BiquadFilterType;
-  frequency: number;
-  Q: number;
-  gain: number;
-}
-
-export interface MasterEQState {
-  bands: MasterEQBandState[];
-  filterFlipEnabled: boolean;
 }
