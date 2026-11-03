@@ -7,6 +7,8 @@ import { SampleLoader } from './services/sample/SampleLoader';
 
 export const App: React.FC = () => {
   const [audioCtx, setAudioCtx] = useState<AudioContext | null>(null);
+  const [sampleManager, setSampleManager] = useState<SampleManager | null>(null);
+  const [sampleLoader, setSampleLoader] = useState<SampleLoader | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentRow, setCurrentRow] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<1 | 2>(2);
@@ -15,12 +17,9 @@ export const App: React.FC = () => {
 
   const trackerRef = useRef<TrackerEngine | null>(null);
   const transportRef = useRef<TransportService | null>(null);
-  const sampleManagerRef = useRef<SampleManager | null>(null);
-  const sampleLoaderRef = useRef<SampleLoader | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
-    // Initialize Tracker & Transport engines
     const tracker = new TrackerEngine(120, 64, 4);
     const transport = new TransportService(120);
     trackerRef.current = tracker;
@@ -34,7 +33,6 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Unlock AudioContext and initialize persistent managers on first user interaction
   const initAudioContext = () => {
     if (!audioCtx) {
       const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -43,8 +41,8 @@ export const App: React.FC = () => {
         ctx.resume();
       }
       setAudioCtx(ctx);
-      sampleManagerRef.current = new SampleManager(ctx);
-      sampleLoaderRef.current = new SampleLoader(ctx);
+      setSampleManager(new SampleManager(ctx));
+      setSampleLoader(new SampleLoader(ctx));
     } else if (audioCtx.state === 'suspended') {
       audioCtx.resume();
     }
@@ -105,15 +103,14 @@ export const App: React.FC = () => {
       className="w-full h-screen overflow-hidden bg-neutral-950 select-none"
       style={{
         WebkitUserSelect: 'none',
-        touchAction: 'none',
       }}
       onClick={initAudioContext}
       onTouchStart={initAudioContext}
     >
       <BredForgeCanvas
         audioCtx={audioCtx}
-        sampleManager={sampleManagerRef.current}
-        sampleLoader={sampleLoaderRef.current}
+        sampleManager={sampleManager}
+        sampleLoader={sampleLoader}
         patternState={patternState}
         currentRow={currentRow}
         activeTab={activeTab}
