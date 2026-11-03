@@ -120,7 +120,7 @@ export const App: React.FC = () => {
         patternState={patternState}
         currentRow={currentRow}
         activeTab={activeTab}
-        onTabChange={(tab) => setActiveTab(tab)}
+        onTabChange={(tab: 1 | 2) => setActiveTab(tab)}
         masterRmsLevel={rmsLevel}
         isPlaying={isPlaying}
         onTogglePlay={handleTogglePlay}

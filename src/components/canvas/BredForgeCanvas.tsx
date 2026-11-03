@@ -2,12 +2,31 @@ import React, { useEffect, useRef } from 'react';
 import { SampleLoader } from '../../services/sample/SampleLoader';
 import { SampleManager } from '../../services/sample/SampleManager';
 import { TouchIsolationService } from '../../services/touch/TouchIsolationService';
+import { PatternState } from '../../services/tracker/TrackerEngine';
 
-interface BredForgeCanvasProps {
+export interface BredForgeCanvasProps {
   audioCtx: AudioContext | null;
+  patternState?: PatternState;
+  currentRow?: number;
+  activeTab?: 1 | 2;
+  onTabChange?: (tab: 1 | 2) => void;
+  masterRmsLevel?: number;
+  isPlaying?: boolean;
+  onTogglePlay?: () => Promise<void>;
+  onStop?: () => void;
 }
 
-export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({ audioCtx }) => {
+export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
+  audioCtx,
+  patternState,
+  currentRow,
+  activeTab = 2,
+  onTabChange,
+  masterRmsLevel = 0,
+  isPlaying = false,
+  onTogglePlay,
+  onStop,
+}) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const sampleManagerRef = useRef<SampleManager | null>(null);
   const sampleLoaderRef = useRef<SampleLoader | null>(null);
@@ -15,13 +34,11 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({ audioCtx }) =>
   useEffect(() => {
     if (!audioCtx) return;
 
-    // Initialize Services
     const manager = new SampleManager(audioCtx);
     const loader = new SampleLoader(audioCtx);
     sampleManagerRef.current = manager;
     sampleLoaderRef.current = loader;
 
-    // Apply Touch Isolation to prevent scroll bounce on iPad
     let touchService: TouchIsolationService | null = null;
     if (containerRef.current) {
       touchService = new TouchIsolationService(containerRef.current);
@@ -38,10 +55,8 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({ audioCtx }) =>
 
     const pad = manager.getPad(padId);
     if (pad && pad.buffer) {
-      // Trigger sample playback
       manager.triggerPad(padId);
     } else {
-      // Prompt user to load a sample if pad is empty
       handleLoadSample(padId);
     }
   };
@@ -65,22 +80,91 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({ audioCtx }) =>
   return (
     <div
       ref={containerRef}
-      className="w-full h-screen bg-neutral-900 text-white flex flex-col items-center justify-center p-4 select-none touch-none"
+      className="w-full h-screen bg-neutral-900 text-white flex flex-col items-center justify-between p-4 select-none touch-none"
     >
-      <h1 className="text-xl font-bold mb-4 tracking-wide">BredForge :: Sampler Matrix</h1>
-      
-      {/* 4x4 Pad Grid */}
-      <div className="grid grid-cols-4 gap-3 w-full max-w-md aspect-square">
-        {Array.from({ length: 16 }, (_, i) => i + 1).map((padId) => (
+      {/* Header & Tab Bar */}
+      <div className="w-full flex justify-between items-center border-b border-neutral-800 pb-3">
+        <h1 className="text-lg font-bold tracking-wider text-amber-500">BREDFORGE :: DAW</h1>
+        <div className="flex gap-2">
           <button
-            key={padId}
-            onClick={() => handlePadTap(padId)}
-            className="bg-neutral-800 hover:bg-neutral-700 active:bg-amber-500 border border-neutral-700 rounded-lg flex flex-col items-center justify-center p-2 transition-colors active:scale-95 touch-none"
+            onClick={() => onTabChange && onTabChange(1)}
+            className={`px-3 py-1 text-sm rounded ${activeTab === 1 ? 'bg-amber-600 text-white' : 'bg-neutral-800 text-neutral-400'}`}
           >
-            <span className="text-xs text-neutral-400">PAD</span>
-            <span className="text-lg font-bold">{padId < 10 ? `0${padId}` : padId}</span>
+            Tracker (Tab 1)
           </button>
-        ))}
+          <button
+            onClick={() => onTabChange && onTabChange(2)}
+            className={`px-3 py-1 text-sm rounded ${activeTab === 2 ? 'bg-amber-600 text-white' : 'bg-neutral-800 text-neutral-400'}`}
+          >
+            Sampler (Tab 2)
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 w-full flex flex-col items-center justify-center my-4">
+        {activeTab === 2 ? (
+          <div className="w-full max-w-md flex flex-col items-center">
+            <div className="text-xs text-neutral-400 mb-2">SP-404 PAD MATRIX (Tap empty to load sample)</div>
+            <div className="grid grid-cols-4 gap-3 w-full aspect-square">
+              {Array.from({ length: 16 }, (_, i) => i + 1).map((padId) => {
+                const pad = sampleManagerRef.current?.getPad(padId);
+                return (
+                  <button
+                    key={padId}
+                    onClick={() => handlePadTap(padId)}
+                    className={`border rounded-lg flex flex-col items-center justify-center p-2 transition-all active:scale-95 touch-none ${
+                      pad?.buffer ? 'bg-neutral-800 border-amber-500/50 text-amber-400' : 'bg-neutral-900 border-neutral-700 text-neutral-400 hover:bg-neutral-800'
+                    }`}
+                  >
+                    <span className="text-[10px] text-neutral-500">PAD</span>
+                    <span className="text-base font-bold">{padId < 10 ? `0${padId}` : padId}</span>
+                    <span className="text-[9px] truncate max-w-[60px] text-neutral-400">{pad?.name || 'Empty'}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="w-full max-w-2xl bg-neutral-950 border border-neutral-800 rounded-lg p-4 h-96 overflow-y-auto font-mono text-xs">
+            <div className="text-amber-500 mb-2 font-bold">TRACKER PATTERN VIEW (Current Row: {currentRow ?? 0})</div>
+            {patternState?.rows.map((row, rIdx) => (
+              <div key={rIdx} className={`flex justify-between p-1 ${rIdx === currentRow ? 'bg-amber-500/20 text-amber-300' : 'text-neutral-400'}`}>
+                <span>Row {rIdx < 10 ? `0${rIdx}` : rIdx}</span>
+                {row.columns.map((col, cIdx) => (
+                  <span key={cIdx}>Inst {col.instrumentId}: {col.note || '---'}</span>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Transport & Master Meter Footer */}
+      <div className="w-full flex items-center justify-between border-t border-neutral-800 pt-3 px-2">
+        <div className="flex gap-2">
+          <button
+            onClick={onTogglePlay}
+            className={`px-4 py-2 rounded font-bold text-sm ${isPlaying ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}
+          >
+            {isPlaying ? 'PAUSE' : 'PLAY'}
+          </button>
+          <button
+            onClick={onStop}
+            className="px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded font-bold text-sm"
+          >
+            STOP
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-neutral-400">Master RMS:</span>
+          <div className="w-24 h-2 bg-neutral-800 rounded overflow-hidden">
+            <div
+              className="h-full bg-amber-500 transition-all duration-75"
+              style={{ width: `${Math.min(100, Math.max(0, masterRmsLevel * 100))}%` }}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
