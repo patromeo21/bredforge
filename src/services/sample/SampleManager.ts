@@ -8,9 +8,9 @@ export interface SampleSlot {
   chokeGroup: number; // 0 = none, 1-3 = groups
   pitch: number;      // -12 to +12 semitones
   volume: number;     // 0.0 to 1.0
-  startPos: number;   // 0.0 to 1.0 (Global normalized 0-1)
-  endPos: number;     // 0.0 to 1.0 (Global normalized 0-1)
-  zoomLevel: number;  // 1.0 to 8.0
+  startPos: number;   // 0.0 to 1.0
+  endPos: number;     // 0.0 to 1.0
+  zoomLevel: number;  // 1.0 to 32.0
   scrollOffset: number; // 0.0 to 1.0
   activeSourceNode?: AudioBufferSourceNode | null;
   activeGainNode?: GainNode | null;
@@ -165,6 +165,7 @@ export class SampleManager {
       pad.activeGainNode = null;
     }
 
+    // Choke Group Handling
     if (pad.chokeGroup > 0) {
       const groupSources = this.chokeGroups.get(pad.chokeGroup);
       if (groupSources) {
@@ -228,6 +229,7 @@ export class SampleManager {
       }
     };
 
-    source.start(0, trimStart, pad.playMode === 'one-shot' ? playDuration : undefined);
+    // One-shot and Gate respect trimEnd stop boundary
+    source.start(0, trimStart, pad.playMode === 'loop' ? undefined : playDuration);
   }
 }
