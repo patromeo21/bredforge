@@ -3,19 +3,16 @@ export class TouchIsolationService {
   private originalTouchAction: string = '';
   private originalOverflow: string = '';
 
-  constructor(element: HTMLElement) {
+  constructor(element: HTMLElement, options?: any) {
     this.element = element;
     this.init();
   }
 
   private init() {
-    // Save original styles
+    if (!this.element) return;
     this.originalTouchAction = this.element.style.touchAction;
     this.originalOverflow = this.element.style.overflow;
 
-    // Apply native browser-level touch isolation via CSS compositor rules.
-    // 'touch-action: none' prevents pinch-zoom, rubber-banding, and panning 
-    // natively without hijacking the JavaScript event lifecycle or killing gesture trust.
     this.element.style.touchAction = 'none';
     this.element.style.overflow = 'hidden';
   }
