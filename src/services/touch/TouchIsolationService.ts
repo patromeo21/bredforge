@@ -3,7 +3,7 @@ export class TouchIsolationService {
   private originalTouchAction: string = '';
   private originalOverflow: string = '';
 
-  constructor(element: HTMLElement, options?: any) {
+  constructor(element: HTMLElement, options: any = {}) {
     this.element = element;
     this.init();
   }
