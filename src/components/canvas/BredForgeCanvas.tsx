@@ -42,8 +42,11 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   const [showClearModal, setShowClearModal] = useState<boolean>(false);
   const [isHoldActive, setIsHoldActive] = useState<boolean>(false);
   const [isChokeActive, setIsChokeActive] = useState<boolean>(false);
-  const [chokeTargetGroup, setChokeTargetGroup] = useState<number>(1); // 1, 2, or 3
+  const [chokeTargetGroup, setChokeTargetGroup] = useState<number>(1);
   const [, setRefreshState] = useState<number>(0);
+
+  // Volume knob drag tracking state
+  const knobDragRef = useRef<{ startY: number; startVal: number } | null>(null);
 
   useEffect(() => {
     let touchService: TouchIsolationService | null = null;
@@ -139,7 +142,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 
   const audioDuration = selectedPad?.buffer ? selectedPad.buffer.duration : 0;
 
-  // Zoom-Aware Waveform Rendering with Bounded Playhead Animation
+  // Zoom-Aware Waveform Rendering
   const drawWaveform = useCallback(() => {
     const canvas = waveformCanvasRef.current;
     if (!canvas || !selectedPad || !selectedPad.buffer) return;
@@ -289,11 +292,15 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     ctx.restore();
   }, []);
 
+  // Redraw D-pad when switching back to sampler tab
   useEffect(() => {
-    drawDpad();
-  }, [drawDpad]);
+    if (activeTab === 2) {
+      drawDpad();
+      drawWaveform();
+    }
+  }, [activeTab, drawDpad, drawWaveform]);
 
-  // Strict 4-Way Transmission Handler with Deep 32x Magnification
+  // Strict 4-Way Transmission Handler with Balanced 16x Magnification
   const handleDpadInteraction = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!sampleManager || !selectedPad || !selectedPad.buffer) return;
     const canvas = dpadCanvasRef.current;
@@ -310,12 +317,12 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 
     if (Math.abs(dy) > Math.abs(dx)) {
       if (dy < 0) {
-        // UP: Zoom In (up to 32.0x for deep 20s micro-chop view)
-        const newZoom = Math.min(32.0, zoom + 2.0);
+        // UP: Zoom In (balanced max 16.0x with smooth 1.0x steps)
+        const newZoom = Math.min(16.0, zoom + 1.0);
         sampleManager.updatePadSettings(selectedPadId, currentBank, { zoomLevel: newZoom });
       } else {
         // DOWN: Zoom Out
-        const newZoom = Math.max(1.0, zoom - 2.0);
+        const newZoom = Math.max(1.0, zoom - 1.0);
         sampleManager.updatePadSettings(selectedPadId, currentBank, { zoomLevel: newZoom, scrollOffset: newZoom === 1.0 ? 0 : scroll });
       }
     } else {
@@ -554,7 +561,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 </div>
               </div>
 
-              {/* Zoom-Aware Start, End, Pitch & Volume Sliders */}
+              {/* Zoom-Aware Start, End, Pitch Sliders & Tactical Hardware Rotary Knob for Volume */}
               <div className="grid grid-cols-4 gap-2 items-center touch-manipulation pt-0.5">
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[9px] text-green-400">
@@ -610,20 +617,37 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                   />
                 </div>
 
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] text-neutral-400">Vol: {Math.round((selectedPad?.volume || 1) * 100)}%</span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.02"
-                    value={selectedPad?.volume ?? 1}
-                    onChange={(e) => {
-                      sampleManager?.updatePadSettings(selectedPadId, currentBank, { volume: parseFloat(e.target.value) });
+                {/* Tactical Hardware Volume Rotary Knob (1% tick precision) */}
+                <div className="flex flex-col items-center gap-0.5">
+                  <span className="text-[9px] text-amber-400">Vol: {Math.round((selectedPad?.volume || 1) * 100)}%</span>
+                  <div
+                    onPointerDown={(e) => {
+                      knobDragRef.current = { startY: e.clientY, startVal: selectedPad?.volume ?? 1 };
+                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                    }}
+                    onPointerMove={(e) => {
+                      if (!knobDragRef.current || !sampleManager) return;
+                      const deltaY = knobDragRef.current.startY - e.clientY; // Drag up increases
+                      const newVal = Math.max(0, Math.min(1, knobDragRef.current.startVal + (deltaY / 120)));
+                      // Snap to 1% increments
+                      const quantizedVal = Math.round(newVal * 100) / 100;
+                      sampleManager.updatePadSettings(selectedPadId, currentBank, { volume: quantizedVal });
                       forceRender();
                     }}
-                    className="accent-amber-500 cursor-pointer h-2 mt-0.5"
-                  />
+                    onPointerUp={(e) => {
+                      knobDragRef.current = null;
+                      try { (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId); } catch (err) {}
+                    }}
+                    className="w-9 h-9 rounded-full bg-neutral-900 border-2 border-amber-500/80 flex items-center justify-center cursor-ns-resize shadow-inner relative touch-none select-none"
+                    title="Drag vertically to adjust volume (1% increments)"
+                  >
+                    {/* Rotary Notch Indicator */}
+                    <div
+                      className="absolute w-1 h-3.5 bg-amber-400 rounded-sm top-0.5 origin-bottom transition-transform"
+                      style={{ transform: `rotate(${((selectedPad?.volume ?? 1) * 270) - 135}deg)` }}
+                    />
+                    <span className="text-[7px] font-bold text-neutral-300 z-10">{Math.round((selectedPad?.volume || 1) * 100)}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -684,7 +708,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {/* Dedicated CHOKE Button (Hold + Tap Pad to Assign) */}
+                  {/* Dedicated CHOKE Button */}
                   <button
                     type="button"
                     onPointerDown={() => setIsChokeActive(true)}
