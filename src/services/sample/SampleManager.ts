@@ -10,6 +10,8 @@ export interface SampleSlot {
   volume: number;     // 0.0 to 1.0
   startPos: number;   // 0.0 to 1.0
   endPos: number;     // 0.0 to 1.0
+  zoomLevel: number;  // 1.0 to 8.0
+  scrollOffset: number; // 0.0 to 1.0
   activeSourceNode?: AudioBufferSourceNode | null;
   activeGainNode?: GainNode | null;
   startTime?: number; // For playhead tracking
@@ -51,6 +53,8 @@ export class SampleManager {
           volume: 1.0,
           startPos: 0,
           endPos: 1.0,
+          zoomLevel: 1.0,
+          scrollOffset: 0.0,
           activeSourceNode: null,
           activeGainNode: null,
         });
@@ -76,6 +80,8 @@ export class SampleManager {
     if (pad) {
       pad.buffer = buffer;
       pad.name = name;
+      pad.zoomLevel = 1.0;
+      pad.scrollOffset = 0.0;
     }
   }
 
@@ -101,6 +107,8 @@ export class SampleManager {
       target.volume = source.volume;
       target.startPos = source.startPos;
       target.endPos = source.endPos;
+      target.zoomLevel = source.zoomLevel;
+      target.scrollOffset = source.scrollOffset;
     }
   }
 
@@ -116,6 +124,8 @@ export class SampleManager {
       pad.volume = 1.0;
       pad.startPos = 0;
       pad.endPos = 1.0;
+      pad.zoomLevel = 1.0;
+      pad.scrollOffset = 0.0;
       pad.activeSourceNode = null;
       pad.activeGainNode = null;
     }
@@ -139,7 +149,6 @@ export class SampleManager {
     const pad = this.getPad(padId, targetBank);
     if (!pad || !pad.buffer || !this.audioCtx) return;
 
-    // Loop toggle-off: If loop is active and playing, tapping again stops it
     if (pad.playMode === 'loop' && pad.activeSourceNode) {
       this.stopPad(padId, targetBank);
       return;
