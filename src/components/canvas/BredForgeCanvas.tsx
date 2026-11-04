@@ -65,13 +65,22 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     forceRender();
   };
 
-  const handlePadTap = async (padId: number) => {
+  const handlePadDown = async (padId: number) => {
     await ensureAudioActive();
     setSelectedPadId(padId);
     if (!sampleManager) return;
     const pad = sampleManager.getPad(padId, currentBank);
     if (pad && pad.buffer) {
       sampleManager.triggerPad(padId, currentBank);
+      forceRender();
+    }
+  };
+
+  const handlePadUp = (padId: number) => {
+    if (!sampleManager) return;
+    const pad = sampleManager.getPad(padId, currentBank);
+    if (pad && pad.playMode === 'gate') {
+      sampleManager.stopPad(padId, currentBank);
       forceRender();
     }
   };
@@ -180,9 +189,45 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         className="hidden"
       />
 
-      {/* Header & Groovebox Navigation */}
-      <div className="w-full flex justify-between items-center border-b border-neutral-800 pb-1.5 flex-shrink-0 touch-manipulation">
-        <h1 className="text-sm font-bold tracking-wider text-amber-500">BREDFORGE :: GROOVEBOX</h1>
+      {/* Top Header with Title, Transport, RMS & Navigation */}
+      <header className="w-full flex justify-between items-center border-b border-neutral-800 pb-1.5 flex-shrink-0 touch-manipulation">
+        <div className="flex items-center gap-3">
+          <h1 className="text-sm font-bold tracking-wider text-amber-500">BREDFORGE :: GROOVEBOX</h1>
+          
+          {/* Transport Controls at Top */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={async () => {
+                await ensureAudioActive();
+                onTogglePlay && onTogglePlay();
+              }}
+              className={`px-2.5 py-0.5 rounded font-bold text-[10px] transition-colors cursor-pointer ${isPlaying ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}
+            >
+              {isPlaying ? 'PAUSE' : 'PLAY'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onStop && onStop();
+              }}
+              className="px-2.5 py-0.5 bg-neutral-800 hover:bg-neutral-700 rounded font-bold text-[10px] transition-colors cursor-pointer text-neutral-300"
+            >
+              STOP
+            </button>
+          </div>
+
+          {/* Master RMS Meter at Top */}
+          <div className="hidden md:flex items-center gap-1.5">
+            <span className="text-[9px] text-neutral-400">RMS:</span>
+            <div className="w-16 h-1.5 bg-neutral-800 rounded overflow-hidden">
+              <div
+                className="h-full bg-amber-500 transition-all duration-75"
+                style={{ width: `${Math.min(100, Math.max(0, (masterRmsLevel || 0) * 100))}%` }}
+              />
+            </div>
+          </div>
+        </div>
         
         <div className="flex items-center gap-2 z-10">
           <label
@@ -216,12 +261,12 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
             </button>
           </div>
         </div>
-      </div>
+      </header>
 
       {/* Main Screen Real-Estate Viewport */}
-      <div className="flex-1 w-full flex flex-col justify-between my-1 overflow-hidden gap-1 min-h-0">
+      <main className="flex-1 w-full flex flex-col justify-between my-1 overflow-hidden gap-1 min-h-0">
         {activeTab === 2 ? (
-          <div className="w-full h-full flex flex-col justify-between max-w-2xl mx-auto">
+          <div className="w-full h-full flex flex-col justify-between max-w-2xl mx-auto min-h-0">
             
             {/* TOP HUD SCREEN BEZEL */}
             <div className="w-full bg-neutral-950 border border-amber-500/40 rounded-lg p-2 text-xs flex flex-col gap-1 flex-shrink-0 shadow-lg">
@@ -239,11 +284,11 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                   <canvas
                     ref={waveformCanvasRef}
                     width={500}
-                    height={45}
-                    className="w-full h-10 block"
+                    height={40}
+                    className="w-full h-9 block"
                   />
                 ) : (
-                  <div className="w-full h-10 flex items-center justify-center text-neutral-500 text-[10px]">
+                  <div className="w-full h-9 flex items-center justify-center text-neutral-500 text-[10px]">
                     Select a pad below, then tap LOAD SAMPLE above to import .wav
                   </div>
                 )}
@@ -317,9 +362,9 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
               </div>
             </div>
 
-            {/* BOTTOM PAD PERFORMANCE GRID */}
-            <div className="w-full flex flex-col justify-end mt-1">
-              <div className="flex justify-between items-center w-full mb-1 px-0.5 touch-manipulation">
+            {/* BOTTOM PAD PERFORMANCE GRID (Non-clipped flexible container) */}
+            <div className="w-full flex-1 flex flex-col justify-end mt-1 min-h-0">
+              <div className="flex justify-between items-center w-full mb-1 px-0.5 touch-manipulation flex-shrink-0">
                 <span className="text-xs text-neutral-400">BANKS:</span>
                 <div className="flex gap-1.5 z-10">
                   {(['A', 'B', 'C', 'D'] as BankID[]).map((bank) => (
@@ -337,7 +382,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-4 gap-1.5 w-full h-[185px]">
+              <div className="grid grid-cols-4 gap-1.5 w-full flex-1 min-h-0 pb-1">
                 {Array.from({ length: 16 }, (_, i) => i + 1).map((padId) => {
                   const pad = sampleManager?.getPad(padId, currentBank);
                   const isSelected = selectedPadId === padId;
@@ -345,7 +390,9 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                     <button
                       key={padId}
                       type="button"
-                      onPointerDown={() => handlePadTap(padId)}
+                      onPointerDown={() => handlePadDown(padId)}
+                      onPointerUp={() => handlePadUp(padId)}
+                      onPointerLeave={() => handlePadUp(padId)}
                       className={`border rounded-lg flex flex-col items-center justify-center p-1 transition-all active:scale-95 cursor-pointer relative touch-manipulation ${
                         pad?.buffer
                           ? isSelected
@@ -377,41 +424,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
             ))}
           </div>
         )}
-      </div>
-
-      {/* Transport Footer */}
-      <div className="w-full flex items-center justify-between border-t border-neutral-800 pt-1 px-0.5 flex-shrink-0 touch-manipulation">
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={async () => {
-              await ensureAudioActive();
-              onTogglePlay && onTogglePlay();
-            }}
-            className={`px-3 py-1 rounded font-bold text-xs transition-colors cursor-pointer ${isPlaying ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}
-          >
-            {isPlaying ? 'PAUSE' : 'PLAY'}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              onStop && onStop();
-            }}
-            className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded font-bold text-xs transition-colors cursor-pointer"
-          >
-            STOP
-          </button>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-neutral-400">Master RMS:</span>
-          <div className="w-20 h-1.5 bg-neutral-800 rounded overflow-hidden">
-            <div
-              className="h-full bg-amber-500 transition-all duration-75"
-              style={{ width: `${Math.min(100, Math.max(0, masterRmsLevel * 100))}%` }}
-            />
-          </div>
-        </div>
-      </div>
+      </main>
     </div>
   );
 };
