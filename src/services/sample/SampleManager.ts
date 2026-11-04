@@ -30,9 +30,13 @@ export class SampleManager {
   // Track active choke groups globally
   private chokeGroups: Map<number, AudioBufferSourceNode[]> = new Map();
 
-  constructor(audioCtx: AudioContext, masterGainNode: GainNode) {
+  constructor(audioCtx: AudioContext, masterGainNode?: GainNode) {
     this.audioCtx = audioCtx;
-    this.masterGainNode = masterGainNode;
+    // Fallback safeguard: if masterGainNode isn't passed, create one and connect to destination
+    this.masterGainNode = masterGainNode || audioCtx.createGain();
+    if (!masterGainNode) {
+      this.masterGainNode.connect(audioCtx.destination);
+    }
     this.initBanks();
   }
 
@@ -90,8 +94,6 @@ export class SampleManager {
     if (!pad || !pad.buffer || !this.audioCtx) return;
 
     // 1. SELF-CHOKE / VOICE STEALING:
-    // If this specific pad is already playing, cut its previous tail instantly 
-    // so rapid tapping re-triggers cleanly instead of muddying up.
     if (pad.activeSourceNode) {
       try {
         pad.activeSourceNode.stop();
@@ -104,7 +106,6 @@ export class SampleManager {
     }
 
     // 2. CHOKE GROUP MANAGEMENT:
-    // If pad belongs to a choke group (1, 2, 3), cut off all other active sources in that group.
     if (pad.chokeGroup > 0) {
       const groupSources = this.chokeGroups.get(pad.chokeGroup);
       if (groupSources) {
@@ -134,7 +135,6 @@ export class SampleManager {
     }
 
     // Apply Pitch Shifting (-12 to +12 semitones via playbackRate)
-    // Formula: 2^(semitones / 12)
     if (pad.pitch !== 0) {
       source.playbackRate.value = Math.pow(2, pad.pitch / 12);
     }
