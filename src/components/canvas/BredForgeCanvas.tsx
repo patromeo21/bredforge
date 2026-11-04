@@ -33,7 +33,6 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const waveformCanvasRef = useRef<HTMLCanvasElement>(null);
-  const hiddenFileInputRef = useRef<HTMLInputElement>(null);
 
   const [currentBank, setCurrentBank] = useState<BankID>('A');
   const [selectedPadId, setSelectedPadId] = useState<number>(1);
@@ -70,13 +69,6 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     }
   };
 
-  const handleTriggerFilePicker = (e: React.PointerEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!hiddenFileInputRef.current) return;
-    hiddenFileInputRef.current.click();
-  };
-
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !sampleLoader || !sampleManager) return;
@@ -95,7 +87,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     } catch (err) {
       console.error(`Failed loading sample to Pad ${selectedPadId}`, err);
     } finally {
-      e.target.value = ''; // Reset input so same file can be selected again if needed
+      e.target.value = '';
     }
   };
 
@@ -169,15 +161,6 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
       ref={containerRef}
       className="w-full h-[100dvh] bg-neutral-900 text-white flex flex-col justify-between p-2 select-none overflow-hidden font-mono box-border"
     >
-      {/* Hidden Persistent Native File Input for iPad Safari */}
-      <input
-        type="file"
-        ref={hiddenFileInputRef}
-        onChange={handleFileSelected}
-        accept="audio/wav, audio/mp3, audio/mpeg, audio/aac, .wav, .mp3, .m4a"
-        style={{ display: 'none' }}
-      />
-
       {/* Header & Tab Bar */}
       <div className="w-full flex justify-between items-center border-b border-neutral-800 pb-1.5 flex-shrink-0">
         <h1 className="text-sm font-bold tracking-wider text-amber-500">BREDFORGE :: DAW</h1>
@@ -216,13 +199,19 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 <span className="font-bold text-amber-500 text-[11px] truncate">
                   HUD :: PAD {selectedPadId < 10 ? `0${selectedPadId}` : selectedPadId} [{currentBank}] — {selectedPad?.name || 'Empty'}
                 </span>
-                <button
-                  type="button"
-                  onPointerDown={handleTriggerFilePicker}
-                  className="px-2 py-0.5 bg-amber-600 hover:bg-amber-500 text-white rounded font-bold text-[10px] cursor-pointer flex-shrink-0"
-                >
-                  LOAD / REPLACE
-                </button>
+                
+                {/* NATIVE OVERLAY FILE INPUT BUTTON (Guaranteed iOS Safari compatibility) */}
+                <div className="relative inline-block overflow-hidden rounded bg-amber-600 hover:bg-amber-500 cursor-pointer">
+                  <span className="block px-2 py-0.5 text-white font-bold text-[10px] pointer-events-none">
+                    LOAD / REPLACE
+                  </span>
+                  <input
+                    type="file"
+                    onChange={handleFileSelected}
+                    accept="audio/wav, audio/mp3, audio/mpeg, audio/aac, .wav, .mp3, .m4a"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                </div>
               </div>
 
               <div className="w-full bg-black border border-neutral-800 rounded overflow-hidden relative">
