@@ -40,6 +40,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   const [copySource, setCopySource] = useState<{ padId: number; bank: BankID } | null>(null);
   const [showClearModal, setShowClearModal] = useState<boolean>(false);
   const [isHoldActive, setIsHoldActive] = useState<boolean>(false);
+  const [multiSelectedPads, setMultiSelectedPads] = useState<Set<number>>(new Set());
   const [, setRefreshState] = useState<number>(0);
 
   useEffect(() => {
@@ -68,9 +69,25 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     forceRender();
   };
 
-  const handlePadDown = async (padId: number) => {
+  const handlePadDown = async (padId: number, e?: React.PointerEvent) => {
     await ensureAudioActive();
     setSelectedPadId(padId);
+
+    // SP Workflow Hold-to-Select / Multi-Select
+    if (isHoldActive) {
+      setMultiSelectedPads((prev) => {
+        const next = new Set(prev);
+        if (next.has(padId)) {
+          next.delete(padId);
+        } else {
+          next.add(padId);
+        }
+        return next;
+      });
+      forceRender();
+      return;
+    }
+
     if (!sampleManager) return;
     const pad = sampleManager.getPad(padId, currentBank);
     if (pad && pad.buffer) {
@@ -79,10 +96,17 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     }
   };
 
+  const handlePadEnter = (padId: number, e: React.PointerEvent) => {
+    // Zero-latency glissando sliding touch across pad grid when mouse/finger is pressed down
+    if (e.buttons === 1) {
+      handlePadDown(padId);
+    }
+  };
+
   const handlePadUp = (padId: number) => {
-    if (!sampleManager) return;
+    if (!sampleManager || isHoldActive) return;
     const pad = sampleManager.getPad(padId, currentBank);
-    if (pad && pad.playMode === 'gate' && !isHoldActive) {
+    if (pad && pad.playMode === 'gate' && pad.activeSourceNode) {
       sampleManager.stopPad(padId, currentBank);
       forceRender();
     }
@@ -117,7 +141,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     ? sampleManager.getPad(selectedPadId, currentBank)
     : undefined;
 
-  // HQ Crisp Waveform, Volume Scaling Animation & Playhead Loop
+  // HQ HD-Resolution Waveform, Live Volume Scaling Animation & Playhead Loop
   const drawWaveform = useCallback(() => {
     const canvas = waveformCanvasRef.current;
     if (!canvas || !selectedPad || !selectedPad.buffer) return;
@@ -125,7 +149,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = (window.devicePixelRatio || 1) * 2; // HD high-res crisp scaling multiplier
     const displayWidth = canvas.clientWidth || 500;
     const displayHeight = canvas.clientHeight || 45;
 
@@ -136,6 +160,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 
     ctx.save();
     ctx.scale(dpr, dpr);
+    ctx.imageSmoothingEnabled = true;
 
     const width = displayWidth;
     const height = displayHeight;
@@ -143,6 +168,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     const rawData = buffer.getChannelData(0);
     const step = Math.ceil(rawData.length / width);
     
+    // Live volume scaling calculation
     const volumeMultiplier = selectedPad.volume ?? 1.0;
     const amp = (height / 2) * volumeMultiplier;
 
@@ -214,6 +240,11 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     renderLoop();
     return () => cancelAnimationFrame(animId);
   }, [drawWaveform, selectedPad?.activeSourceNode]);
+
+  // Force redraw when volume slider changes live
+  useEffect(() => {
+    drawWaveform();
+  }, [selectedPad?.volume, drawWaveform]);
 
   return (
     <div
@@ -443,7 +474,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                           ? 'bg-red-950 border border-red-500 text-red-400 shadow-[0_0_6px_rgba(239,68,68,0.6)]'
                           : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
                       }`}
-                      title="Toggle Touch-Hold Latch mode"
+                      title="Toggle Hold-to-Select Multi-Select mode"
                     >
                       HOLD: {isHoldActive ? 'ON' : 'OFF'}
                     </button>
@@ -508,47 +539,79 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
               </div>
             </div>
 
-            {/* SP-404SX STYLE SCALED 15% SMALLER PAD PERFORMANCE GRID */}
+            {/* PAD PERFORMANCE SECTION (Play Mode buttons top-left hugging pad grid, Bank buttons top-right) */}
             <div className="w-full flex-1 flex flex-col justify-end mt-1 min-h-0">
               <div className="flex justify-between items-center w-full mb-1 px-0.5 touch-manipulation flex-shrink-0">
-                <span className="text-xs text-neutral-400">BANKS:</span>
-                <div className="flex gap-1.5 z-10">
-                  {(['A', 'B', 'C', 'D'] as BankID[]).map((bank) => (
-                    <button
-                      key={bank}
-                      type="button"
-                      onClick={() => handleBankChange(bank)}
-                      className={`px-3 py-0.5 text-xs font-bold rounded transition-all cursor-pointer ${
-                        currentBank === bank ? 'bg-amber-500 text-neutral-950 shadow' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
-                      }`}
-                    >
-                      {bank}
-                    </button>
-                  ))}
+                {/* Play Mode Buttons hugging top-left of pad grid */}
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-neutral-400">MODES:</span>
+                  {(['one-shot', 'gate', 'loop'] as PlayMode[]).map((mode) => {
+                    const isActive = (selectedPad?.playMode || 'one-shot') === mode;
+                    return (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => {
+                          sampleManager?.updatePadSettings(selectedPadId, currentBank, { playMode: mode });
+                          forceRender();
+                        }}
+                        className={`px-2 py-0.5 text-[9px] font-bold rounded transition-all cursor-pointer uppercase ${
+                          isActive
+                            ? 'bg-red-950 border border-red-500 text-red-400 shadow-[0_0_6px_rgba(239,68,68,0.6)]'
+                            : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+                        }`}
+                      >
+                        {mode === 'one-shot' ? '1-SHOT' : mode}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Bank Selection positioned at top-right of the pad grid */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-neutral-400">BANKS:</span>
+                  <div className="flex gap-1 z-10">
+                    {(['A', 'B', 'C', 'D'] as BankID[]).map((bank) => (
+                      <button
+                        key={bank}
+                        type="button"
+                        onClick={() => handleBankChange(bank)}
+                        className={`px-3 py-0.5 text-xs font-bold rounded transition-all cursor-pointer ${
+                          currentBank === bank ? 'bg-amber-500 text-neutral-950 shadow' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+                        }`}
+                      >
+                        {bank}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
               <div className="w-full flex-1 flex items-center justify-center min-h-0 pb-1">
-                <div className="grid grid-cols-4 gap-1.5 w-full h-full max-h-[165px] transform scale-[0.85] origin-center">
+                <div className="grid grid-cols-4 gap-1.5 w-full h-full max-h-[175px] transform scale-[0.95] origin-center">
                   {Array.from({ length: 16 }, (_, i) => i + 1).map((padId) => {
                     const pad = sampleManager?.getPad(padId, currentBank);
                     const isSelected = selectedPadId === padId;
+                    const isMultiSelected = multiSelectedPads.has(padId);
                     const isPlayingPad = pad?.activeSourceNode != null;
                     return (
                       <button
                         key={padId}
                         type="button"
-                        onPointerDown={() => handlePadDown(padId)}
+                        onPointerDown={(e) => handlePadDown(padId, e)}
+                        onPointerEnter={(e) => handlePadEnter(padId, e)}
                         onPointerUp={() => handlePadUp(padId)}
                         onPointerLeave={() => handlePadUp(padId)}
                         className={`border rounded-md flex flex-col items-center justify-center p-0.5 transition-all active:scale-95 cursor-pointer relative touch-manipulation shadow-sm ${
                           isPlayingPad
                             ? 'bg-amber-400 border-white text-neutral-950 ring-2 ring-amber-300'
-                            : pad?.buffer
-                              ? isSelected
-                                ? 'bg-neutral-800 border-amber-400 text-amber-300 ring-1 ring-amber-500/60'
-                                : 'bg-neutral-900 border-amber-500/50 text-amber-400'
-                              : 'bg-neutral-950 border-neutral-800 text-neutral-600 hover:bg-neutral-900'
+                            : isMultiSelected
+                              ? 'bg-emerald-950 border-emerald-400 text-emerald-300 ring-2 ring-emerald-500'
+                              : pad?.buffer
+                                ? isSelected
+                                  ? 'bg-neutral-800 border-amber-400 text-amber-300 ring-1 ring-amber-500/60'
+                                  : 'bg-neutral-900 border-amber-500/50 text-amber-400'
+                                : 'bg-neutral-950 border-neutral-800 text-neutral-600 hover:bg-neutral-900'
                         }`}
                       >
                         <div className="w-full flex justify-between px-1 text-[7px] text-neutral-500">
