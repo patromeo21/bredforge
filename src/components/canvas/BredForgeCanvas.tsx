@@ -51,6 +51,12 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 
   const forceRender = () => setRefreshState((prev) => prev + 1);
 
+  const ensureAudioActive = async () => {
+    if (audioCtx && audioCtx.state === 'suspended') {
+      await audioCtx.resume();
+    }
+  };
+
   const handleBankChange = (bank: BankID) => {
     setCurrentBank(bank);
     if (sampleManager) {
@@ -59,7 +65,8 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     forceRender();
   };
 
-  const handlePadTap = (padId: number, e: React.PointerEvent) => {
+  const handlePadTap = async (padId: number) => {
+    await ensureAudioActive();
     setSelectedPadId(padId);
     if (!sampleManager) return;
     const pad = sampleManager.getPad(padId, currentBank);
@@ -70,6 +77,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   };
 
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    await ensureAudioActive();
     const files = e.target.files;
     if (!files || files.length === 0 || !sampleLoader || !sampleManager) return;
 
@@ -178,9 +186,9 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         <h1 className="text-sm font-bold tracking-wider text-amber-500">BREDFORGE :: GROOVEBOX</h1>
         
         <div className="flex items-center gap-2 z-10">
-          {/* Direct native label triggering file input with full gesture trust */}
           <label
             htmlFor="groovebox-file-input"
+            onClick={ensureAudioActive}
             className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold rounded cursor-pointer shadow inline-block"
           >
             LOAD SAMPLE (PAD {selectedPadId} [{currentBank}])
@@ -189,14 +197,20 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
           <div className="flex gap-1">
             <button
               type="button"
-              onClick={() => onTabChange && onTabChange(1)}
+              onClick={() => {
+                ensureAudioActive();
+                onTabChange && onTabChange(1);
+              }}
               className={`px-2.5 py-1 text-xs rounded transition-colors cursor-pointer ${activeTab === 1 ? 'bg-amber-600 text-white font-bold' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
             >
               Tracker
             </button>
             <button
               type="button"
-              onClick={() => onTabChange && onTabChange(2)}
+              onClick={() => {
+                ensureAudioActive();
+                onTabChange && onTabChange(2);
+              }}
               className={`px-2.5 py-1 text-xs rounded transition-colors cursor-pointer ${activeTab === 2 ? 'bg-amber-600 text-white font-bold' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
             >
               Sampler
@@ -332,7 +346,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                     <button
                       key={padId}
                       type="button"
-                      onPointerDown={(e) => handlePadTap(padId, e)}
+                      onPointerDown={() => handlePadTap(padId)}
                       className={`border rounded-lg flex flex-col items-center justify-center p-1 transition-all active:scale-95 cursor-pointer relative touch-manipulation ${
                         pad?.buffer
                           ? isSelected
@@ -371,14 +385,19 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => onTogglePlay && onTogglePlay()}
+            onClick={async () => {
+              await ensureAudioActive();
+              onTogglePlay && onTogglePlay();
+            }}
             className={`px-3 py-1 rounded font-bold text-xs transition-colors cursor-pointer ${isPlaying ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}
           >
             {isPlaying ? 'PAUSE' : 'PLAY'}
           </button>
           <button
             type="button"
-            onClick={() => onStop && onStop()}
+            onClick={() => {
+              onStop && onStop();
+            }}
             className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 rounded font-bold text-xs transition-colors cursor-pointer"
           >
             STOP
