@@ -200,8 +200,13 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                   HUD :: PAD {selectedPadId < 10 ? `0${selectedPadId}` : selectedPadId} [{currentBank}] — {selectedPad?.name || 'Empty'}
                 </span>
                 
-                {/* NATIVE OVERLAY FILE INPUT BUTTON (Guaranteed iOS Safari compatibility) */}
-                <div className="relative inline-block overflow-hidden rounded bg-amber-600 hover:bg-amber-500 cursor-pointer">
+                {/* Native Overlay File Input with touch isolation bypass */}
+                <div
+                  className="relative inline-block overflow-hidden rounded bg-amber-600 hover:bg-amber-500 cursor-pointer"
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onTouchEnd={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
                   <span className="block px-2 py-0.5 text-white font-bold text-[10px] pointer-events-none">
                     LOAD / REPLACE
                   </span>
