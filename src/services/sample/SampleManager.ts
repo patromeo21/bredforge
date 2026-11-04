@@ -145,7 +145,6 @@ export class SampleManager {
       return;
     }
 
-    // For non-loop modes, stop previous active node if active
     if (pad.activeSourceNode && pad.playMode !== 'loop') {
       try {
         pad.activeSourceNode.stop();
@@ -171,10 +170,15 @@ export class SampleManager {
     const source = this.audioCtx.createBufferSource();
     source.buffer = pad.buffer;
 
+    const duration = pad.buffer.duration;
+    const trimStart = pad.startPos * duration;
+    const trimEnd = pad.endPos * duration;
+    const playDuration = Math.max(0.01, trimEnd - trimStart);
+
     if (pad.playMode === 'loop') {
       source.loop = true;
-      source.loopStart = pad.startPos * pad.buffer.duration;
-      source.loopEnd = pad.endPos * pad.buffer.duration;
+      source.loopStart = trimStart;
+      source.loopEnd = trimEnd;
     } else {
       source.loop = false;
     }
@@ -213,6 +217,6 @@ export class SampleManager {
       }
     };
 
-    source.start(0, pad.startPos * pad.buffer.duration);
+    source.start(0, trimStart, pad.playMode === 'one-shot' ? playDuration : undefined);
   }
 }
