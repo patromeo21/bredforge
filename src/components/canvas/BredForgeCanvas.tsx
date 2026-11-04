@@ -37,6 +37,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 
   const [currentBank, setCurrentBank] = useState<BankID>('A');
   const [selectedPadId, setSelectedPadId] = useState<number>(1);
+  const [copySource, setCopySource] = useState<{ padId: number; bank: BankID } | null>(null);
   const [, setRefreshState] = useState<number>(0);
 
   useEffect(() => {
@@ -114,6 +115,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     ? sampleManager.getPad(selectedPadId, currentBank)
     : undefined;
 
+  // HQ Crisp Waveform & Playhead Animation Loop
   const drawWaveform = useCallback(() => {
     const canvas = waveformCanvasRef.current;
     if (!canvas || !selectedPad || !selectedPad.buffer) return;
@@ -121,8 +123,20 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const width = canvas.width;
-    const height = canvas.height;
+    const dpr = window.devicePixelRatio || 1;
+    const displayWidth = canvas.clientWidth || 500;
+    const displayHeight = canvas.clientHeight || 45;
+
+    if (canvas.width !== displayWidth * dpr || canvas.height !== displayHeight * dpr) {
+      canvas.width = displayWidth * dpr;
+      canvas.height = displayHeight * dpr;
+    }
+
+    ctx.save();
+    ctx.scale(dpr, dpr);
+
+    const width = displayWidth;
+    const height = displayHeight;
     const buffer = selectedPad.buffer;
     const rawData = buffer.getChannelData(0);
     const step = Math.ceil(rawData.length / width);
@@ -131,7 +145,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, width, height);
 
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1;
     ctx.strokeStyle = '#f59e0b';
     ctx.beginPath();
 
@@ -151,12 +165,12 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     const startX = selectedPad.startPos * width;
     const endX = selectedPad.endPos * width;
 
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
     ctx.fillRect(0, 0, startX, height);
     ctx.fillRect(endX, 0, width - endX, height);
 
     ctx.strokeStyle = '#22c55e';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(startX, 0);
     ctx.lineTo(startX, height);
@@ -167,13 +181,36 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     ctx.moveTo(endX, 0);
     ctx.lineTo(endX, height);
     ctx.stroke();
-  }, [selectedPad]);
+
+    // 2D Playhead Animation during active audition
+    if (selectedPad.activeSourceNode && audioCtx && selectedPad.startTime !== undefined) {
+      const elapsed = audioCtx.currentTime - selectedPad.startTime;
+      const duration = buffer.duration;
+      const progress = (elapsed / duration) % 1;
+      const playheadX = progress * width;
+
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(playheadX, 0);
+      ctx.lineTo(playheadX, height);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }, [selectedPad, audioCtx]);
 
   useEffect(() => {
-    if (selectedPad) {
+    let animId: number;
+    const renderLoop = () => {
       drawWaveform();
-    }
-  }, [selectedPad, drawWaveform]);
+      if (selectedPad?.activeSourceNode) {
+        animId = requestAnimationFrame(renderLoop);
+      }
+    };
+    renderLoop();
+    return () => cancelAnimationFrame(animId);
+  }, [drawWaveform, selectedPad?.activeSourceNode]);
 
   return (
     <div
@@ -194,7 +231,6 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         <div className="flex items-center gap-3">
           <h1 className="text-sm font-bold tracking-wider text-amber-500">BREDFORGE :: GROOVEBOX</h1>
           
-          {/* Transport Controls at Top */}
           <div className="flex items-center gap-1.5">
             <button
               type="button"
@@ -217,7 +253,6 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
             </button>
           </div>
 
-          {/* Master RMS Meter at Top */}
           <div className="hidden md:flex items-center gap-1.5">
             <span className="text-[9px] text-neutral-400">RMS:</span>
             <div className="w-16 h-1.5 bg-neutral-800 rounded overflow-hidden">
@@ -235,7 +270,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
             onClick={ensureAudioActive}
             className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-bold rounded cursor-pointer shadow inline-block"
           >
-            LOAD SAMPLE (PAD {selectedPadId} [{currentBank}])
+            LOAD SAMPLE ({selectedPadId} [{currentBank}])
           </label>
 
           <div className="flex gap-1">
@@ -274,17 +309,43 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 <span className="font-bold text-amber-500 text-[11px] truncate">
                   HUD :: PAD {selectedPadId < 10 ? `0${selectedPadId}` : selectedPadId} [{currentBank}] — {selectedPad?.name || 'Empty'}
                 </span>
-                <span className="text-[10px] text-neutral-400">
-                  {selectedPad?.buffer ? 'Ready' : 'Empty Slot'}
-                </span>
+                
+                {/* SP-404SX Style Copy / Delete Utility Action Buttons */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!copySource) {
+                        setCopySource({ padId: selectedPadId, bank: currentBank });
+                      } else {
+                        sampleManager?.copyPad(copySource.padId, copySource.bank, selectedPadId, currentBank);
+                        setCopySource(null);
+                        forceRender();
+                      }
+                    }}
+                    className={`px-2 py-0.5 text-[9px] font-bold rounded ${copySource ? 'bg-emerald-600 text-white animate-pulse' : 'bg-neutral-800 text-amber-400 hover:bg-neutral-700'}`}
+                  >
+                    {copySource ? `PASTE TO ${selectedPadId}` : 'COPY'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm(`Clear Pad ${selectedPadId} [${currentBank}]?`)) {
+                        sampleManager?.clearPad(selectedPadId, currentBank);
+                        forceRender();
+                      }
+                    }}
+                    className="px-2 py-0.5 text-[9px] font-bold rounded bg-neutral-800 text-red-400 hover:bg-neutral-700"
+                  >
+                    CLEAR
+                  </button>
+                </div>
               </div>
 
               <div className="w-full bg-black border border-neutral-800 rounded overflow-hidden relative">
                 {selectedPad?.buffer ? (
                   <canvas
                     ref={waveformCanvasRef}
-                    width={500}
-                    height={40}
                     className="w-full h-9 block"
                   />
                 ) : (
@@ -362,7 +423,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
               </div>
             </div>
 
-            {/* BOTTOM PAD PERFORMANCE GRID (Non-clipped flexible container) */}
+            {/* SP-404SX STYLE COMPACT PAD PERFORMANCE GRID */}
             <div className="w-full flex-1 flex flex-col justify-end mt-1 min-h-0">
               <div className="flex justify-between items-center w-full mb-1 px-0.5 touch-manipulation flex-shrink-0">
                 <span className="text-xs text-neutral-400">BANKS:</span>
@@ -386,6 +447,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 {Array.from({ length: 16 }, (_, i) => i + 1).map((padId) => {
                   const pad = sampleManager?.getPad(padId, currentBank);
                   const isSelected = selectedPadId === padId;
+                  const isPlayingPad = pad?.activeSourceNode != null;
                   return (
                     <button
                       key={padId}
@@ -393,17 +455,22 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                       onPointerDown={() => handlePadDown(padId)}
                       onPointerUp={() => handlePadUp(padId)}
                       onPointerLeave={() => handlePadUp(padId)}
-                      className={`border rounded-lg flex flex-col items-center justify-center p-1 transition-all active:scale-95 cursor-pointer relative touch-manipulation ${
-                        pad?.buffer
-                          ? isSelected
-                            ? 'bg-amber-950/60 border-amber-400 text-amber-300 ring-2 ring-amber-500/50'
-                            : 'bg-neutral-800 border-amber-500/60 text-amber-400'
-                          : 'bg-neutral-900 border-neutral-700 text-neutral-500 hover:bg-neutral-800'
+                      className={`border rounded-md flex flex-col items-center justify-center p-1 transition-all active:scale-95 cursor-pointer relative touch-manipulation shadow-sm ${
+                        isPlayingPad
+                          ? 'bg-amber-400 border-white text-neutral-950 ring-2 ring-amber-300'
+                          : pad?.buffer
+                            ? isSelected
+                              ? 'bg-neutral-800 border-amber-400 text-amber-300 ring-1 ring-amber-500/60'
+                              : 'bg-neutral-900 border-amber-500/50 text-amber-400'
+                            : 'bg-neutral-950 border-neutral-800 text-neutral-600 hover:bg-neutral-900'
                       }`}
                     >
-                      <span className="text-[8px] text-neutral-500">{currentBank}</span>
-                      <span className="text-sm font-bold">{padId < 10 ? `0${padId}` : padId}</span>
-                      <span className="text-[7px] truncate max-w-[55px] text-neutral-400">{pad?.name || 'Empty'}</span>
+                      <div className="w-full flex justify-between px-1 text-[7px] text-neutral-500">
+                        <span>{currentBank}</span>
+                        <span>{pad?.playMode === 'gate' ? '[G]' : pad?.playMode === 'loop' ? '[L]' : '[1]'}</span>
+                      </div>
+                      <span className="text-sm font-bold tracking-tight my-0.5">{padId < 10 ? `0${padId}` : padId}</span>
+                      <span className="text-[7px] truncate max-w-[55px] text-neutral-400">{pad?.name || 'EMPTY'}</span>
                     </button>
                   );
                 })}

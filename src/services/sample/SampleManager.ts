@@ -12,6 +12,7 @@ export interface SampleSlot {
   endPos: number;     // 0.0 to 1.0
   activeSourceNode?: AudioBufferSourceNode | null;
   activeGainNode?: GainNode | null;
+  startTime?: number; // For playhead tracking
 }
 
 export class SampleManager {
@@ -19,7 +20,6 @@ export class SampleManager {
   private masterGainNode: GainNode;
   private activeBank: BankID = 'A';
   
-  // Store pads for 4 banks (A, B, C, D), each with 16 pads (1-16)
   private banks: Record<BankID, Map<number, SampleSlot>> = {
     A: new Map(),
     B: new Map(),
@@ -27,7 +27,6 @@ export class SampleManager {
     D: new Map(),
   };
 
-  // Track active choke groups globally
   private chokeGroups: Map<number, AudioBufferSourceNode[]> = new Map();
 
   constructor(audioCtx: AudioContext, masterGainNode?: GainNode) {
@@ -87,6 +86,38 @@ export class SampleManager {
     }
   }
 
+  public copyPad(sourcePadId: number, sourceBank: BankID, targetPadId: number, targetBank: BankID) {
+    const source = this.getPad(sourcePadId, sourceBank);
+    const target = this.getPad(targetPadId, targetBank);
+    if (source && target) {
+      target.buffer = source.buffer;
+      target.name = source.name;
+      target.playMode = source.playMode;
+      target.chokeGroup = source.chokeGroup;
+      target.pitch = source.pitch;
+      target.volume = source.volume;
+      target.startPos = source.startPos;
+      target.endPos = source.endPos;
+    }
+  }
+
+  public clearPad(padId: number, bank: BankID) {
+    this.stopPad(padId, bank);
+    const pad = this.getPad(padId, bank);
+    if (pad) {
+      pad.buffer = null;
+      pad.name = '';
+      pad.playMode = 'one-shot';
+      pad.chokeGroup = 0;
+      pad.pitch = 0;
+      pad.volume = 1.0;
+      pad.startPos = 0;
+      pad.endPos = 1.0;
+      pad.activeSourceNode = null;
+      pad.activeGainNode = null;
+    }
+  }
+
   public stopPad(padId: number, bank?: BankID) {
     const targetBank = bank || this.activeBank;
     const pad = this.getPad(padId, targetBank);
@@ -95,7 +126,7 @@ export class SampleManager {
         pad.activeSourceNode.stop();
         pad.activeSourceNode.disconnect();
       } catch (e) {
-        // Ignored if already stopped
+        // Ignored
       }
       pad.activeSourceNode = null;
       pad.activeGainNode = null;
@@ -107,19 +138,15 @@ export class SampleManager {
     const pad = this.getPad(padId, targetBank);
     if (!pad || !pad.buffer || !this.audioCtx) return;
 
-    // 1. SELF-CHOKE / VOICE STEALING:
     if (pad.activeSourceNode) {
       try {
         pad.activeSourceNode.stop();
         pad.activeSourceNode.disconnect();
-      } catch (e) {
-        // Ignored if already finished playing
-      }
+      } catch (e) {}
       pad.activeSourceNode = null;
       pad.activeGainNode = null;
     }
 
-    // 2. CHOKE GROUP MANAGEMENT:
     if (pad.chokeGroup > 0) {
       const groupSources = this.chokeGroups.get(pad.chokeGroup);
       if (groupSources) {
@@ -127,19 +154,15 @@ export class SampleManager {
           try {
             src.stop();
             src.disconnect();
-          } catch (e) {
-            // Ignored
-          }
+          } catch (e) {}
         });
       }
       this.chokeGroups.set(pad.chokeGroup, []);
     }
 
-    // 3. CREATE SOURCE & GAIN NODES
     const source = this.audioCtx.createBufferSource();
     source.buffer = pad.buffer;
 
-    // Configure Play Mode
     if (pad.playMode === 'loop') {
       source.loop = true;
       source.loopStart = pad.startPos * pad.buffer.duration;
@@ -148,7 +171,6 @@ export class SampleManager {
       source.loop = false;
     }
 
-    // Apply Pitch Shifting (-12 to +12 semitones via playbackRate)
     if (pad.pitch !== 0) {
       source.playbackRate.value = Math.pow(2, pad.pitch / 12);
     }
@@ -159,18 +181,16 @@ export class SampleManager {
     source.connect(gainNode);
     gainNode.connect(this.masterGainNode);
 
-    // Store references
     pad.activeSourceNode = source;
     pad.activeGainNode = gainNode;
+    pad.startTime = this.audioCtx.currentTime;
 
-    // Register into choke group array if applicable
     if (pad.chokeGroup > 0) {
       const group = this.chokeGroups.get(pad.chokeGroup) || [];
       group.push(source);
       this.chokeGroups.set(pad.chokeGroup, group);
     }
 
-    // Cleanup listeners when audio ends naturally
     source.onended = () => {
       if (pad.activeSourceNode === source) {
         pad.activeSourceNode = null;
