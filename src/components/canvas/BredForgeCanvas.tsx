@@ -73,7 +73,6 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     setSelectedPadId(padId);
     if (!sampleManager) return;
 
-    // HOLD Momentary Modifier Modifier Workflow (SP Style)
     if (isHoldActive) {
       const currentPad = sampleManager.getPad(padId, currentBank);
       const nextMode: PlayMode = currentPad?.playMode === 'one-shot' ? 'gate' : 'one-shot';
@@ -127,7 +126,9 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     ? sampleManager.getPad(selectedPadId, currentBank)
     : undefined;
 
-  // HQ HD-Resolution Waveform (Increased HUD Size + Sub-pixel smoothness)
+  const audioDuration = selectedPad?.buffer ? selectedPad.buffer.duration : 0;
+
+  // HQ HD-Resolution Waveform (Tall Enlarged HUD Height)
   const drawWaveform = useCallback(() => {
     const canvas = waveformCanvasRef.current;
     if (!canvas || !selectedPad || !selectedPad.buffer) return;
@@ -137,7 +138,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 
     const dpr = (window.devicePixelRatio || 1) * 2;
     const displayWidth = canvas.clientWidth || 500;
-    const displayHeight = canvas.clientHeight || 56; // Enlarged HUD waveform height (+5%)
+    const displayHeight = canvas.clientHeight || 96; // Enlarged tall HUD height
 
     if (canvas.width !== displayWidth * dpr || canvas.height !== displayHeight * dpr) {
       canvas.width = displayWidth * dpr;
@@ -343,7 +344,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         {activeTab === 2 ? (
           <div className="w-full h-full flex flex-col justify-between max-w-2xl mx-auto min-h-0">
             
-            {/* TOP HUD SCREEN BEZEL (Enlarged +5% with Start/End Sliders) */}
+            {/* TALL HUD SCREEN BEZEL (Enlarged Height + Time-Based Sliders) */}
             <div className="w-full bg-neutral-950 border border-amber-500/40 rounded-lg p-2 text-xs flex flex-col gap-1.5 flex-shrink-0 shadow-lg">
               <div className="flex justify-between items-center border-b border-neutral-800 pb-1">
                 <span className="font-bold text-amber-500 text-[11px] truncate">
@@ -376,13 +377,13 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 </div>
               </div>
 
-              {/* Waveform Window */}
+              {/* Waveform Window (Tall h-24) */}
               <div className="w-full bg-black border border-neutral-800 rounded overflow-hidden relative">
                 {selectedPad?.buffer ? (
                   <>
                     <canvas
                       ref={waveformCanvasRef}
-                      className="w-full h-14 block"
+                      className="w-full h-24 block"
                     />
                     <button
                       type="button"
@@ -398,21 +399,23 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                     </button>
                   </>
                 ) : (
-                  <div className="w-full h-14 flex items-center justify-center text-neutral-500 text-[10px]">
+                  <div className="w-full h-24 flex items-center justify-center text-neutral-500 text-[10px]">
                     Select a pad below, then tap LOAD SAMPLE above to import .wav
                   </div>
                 )}
               </div>
 
-              {/* Precision Start, End, Pitch & Volume Sliders */}
+              {/* Time-Accurate Start, End, Pitch & Volume Sliders */}
               <div className="grid grid-cols-4 gap-2 items-center touch-manipulation pt-0.5">
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] text-green-400">Start: {Math.round((selectedPad?.startPos || 0) * 100)}%</span>
+                  <span className="text-[9px] text-green-400">
+                    Start: {((selectedPad?.startPos || 0) * audioDuration).toFixed(2)}s ({Math.round((selectedPad?.startPos || 0) * 100)}%)
+                  </span>
                   <input
                     type="range"
                     min="0"
                     max="0.95"
-                    step="0.005"
+                    step="0.002"
                     value={selectedPad?.startPos ?? 0}
                     onChange={(e) => {
                       sampleManager?.updatePadSettings(selectedPadId, currentBank, { startPos: parseFloat(e.target.value) });
@@ -423,12 +426,14 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 </div>
 
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] text-red-400">End: {Math.round((selectedPad?.endPos || 1) * 100)}%</span>
+                  <span className="text-[9px] text-red-400">
+                    End: {((selectedPad?.endPos || 1) * audioDuration).toFixed(2)}s ({Math.round((selectedPad?.endPos || 1) * 100)}%)
+                  </span>
                   <input
                     type="range"
                     min="0.05"
                     max="1"
-                    step="0.005"
+                    step="0.002"
                     value={selectedPad?.endPos ?? 1}
                     onChange={(e) => {
                       sampleManager?.updatePadSettings(selectedPadId, currentBank, { endPos: parseFloat(e.target.value) });
@@ -472,14 +477,13 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
               </div>
             </div>
 
-            {/* SP-404SX HARDWARE HOUSING CONTAINER (Hovering Controls + Bank Bottom-Left + Full-Size Pads) */}
+            {/* SP-404SX HARDWARE HOUSING CONTAINER (Mode Panel Above Pad Grid + Banks Left + Square Chunky Pads) */}
             <div className="w-full flex-1 flex flex-col justify-end mt-1 min-h-0 bg-neutral-950 border border-amber-500/30 rounded-xl p-2.5 shadow-2xl">
               
-              {/* Floating Control Cluster hovering directly above the pads */}
-              <div className="flex justify-between items-center w-full mb-2 px-0.5 touch-manipulation flex-shrink-0">
-                {/* Mode Buttons */}
-                <div className="flex items-center gap-1">
-                  <span className="text-[9px] text-neutral-400">MODE:</span>
+              {/* MODE Panel sitting horizontally across the top of the pad grid */}
+              <div className="flex justify-between items-center w-full mb-2 px-0.5 touch-manipulation flex-shrink-0 bg-neutral-900 border border-neutral-800 rounded-md p-1">
+                <span className="text-[9px] text-neutral-400 font-bold px-1">MODE:</span>
+                <div className="flex items-center gap-1.5 flex-1 justify-around">
                   {(['one-shot', 'gate', 'loop'] as PlayMode[]).map((mode) => {
                     const isActive = (selectedPad?.playMode || 'one-shot') === mode;
                     return (
@@ -490,10 +494,10 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                           sampleManager?.updatePadSettings(selectedPadId, currentBank, { playMode: mode });
                           forceRender();
                         }}
-                        className={`px-2 py-1 text-[9px] font-bold rounded transition-all cursor-pointer uppercase ${
+                        className={`flex-1 py-1 text-[9px] font-bold rounded transition-all cursor-pointer uppercase text-center ${
                           isActive
                             ? 'bg-red-950 border border-red-500 text-red-400 shadow-[0_0_6px_rgba(239,68,68,0.6)]'
-                            : 'bg-neutral-900 border border-neutral-800 text-neutral-400 hover:bg-neutral-800'
+                            : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
                         }`}
                       >
                         {mode === 'one-shot' ? '1-SHOT' : mode}
@@ -502,56 +506,26 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                   })}
                 </div>
 
-                {/* Momentary HOLD Modifier Pad (scale-[0.80]) */}
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onPointerDown={() => setIsHoldActive(true)}
-                    onPointerUp={() => setIsHoldActive(false)}
-                    onPointerLeave={() => setIsHoldActive(false)}
-                    className={`w-12 h-10 transform scale-[0.80] border rounded flex flex-col items-center justify-center font-bold text-[9px] transition-all cursor-pointer shadow ${
-                      isHoldActive
-                        ? 'bg-blue-950 border-blue-400 text-blue-300 shadow-[0_0_10px_rgba(56,189,248,0.8)]'
-                        : 'bg-neutral-900 border-neutral-700 text-neutral-400 hover:bg-neutral-800'
-                    }`}
-                    title="Hold down to toggle pad modes on tap"
-                  >
-                    <span>HOLD</span>
-                    <span className="text-[7px]">{isHoldActive ? 'ACTIVE' : 'MOD'}</span>
-                  </button>
-                </div>
-
-                {/* Choke Group Selector */}
-                <div className="flex items-center gap-1">
-                  <span className="text-[9px] text-neutral-400">CHOKE:</span>
-                  <div className="flex gap-0.5 bg-neutral-900 border border-neutral-800 rounded p-0.5">
-                    {[0, 1, 2, 3].map((grp) => {
-                      const isActive = (selectedPad?.chokeGroup || 0) === grp;
-                      return (
-                        <button
-                          key={grp}
-                          type="button"
-                          onClick={() => {
-                            sampleManager?.updatePadSettings(selectedPadId, currentBank, { chokeGroup: grp });
-                            forceRender();
-                          }}
-                          className={`px-1.5 py-0.5 text-[8px] font-bold rounded transition-all cursor-pointer ${
-                            isActive
-                              ? 'bg-red-950 border border-red-500 text-red-400 shadow-[0_0_6px_rgba(239,68,68,0.6)]'
-                              : 'text-neutral-500 hover:text-neutral-300'
-                          }`}
-                        >
-                          {grp === 0 ? 'OFF' : `G${grp}`}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                {/* Momentary HOLD Modifier Pad */}
+                <button
+                  type="button"
+                  onPointerDown={() => setIsHoldActive(true)}
+                  onPointerUp={() => setIsHoldActive(false)}
+                  onPointerLeave={() => setIsHoldActive(false)}
+                  className={`ml-2 px-2.5 py-1 border rounded flex items-center justify-center font-bold text-[9px] transition-all cursor-pointer shadow ${
+                    isHoldActive
+                      ? 'bg-blue-950 border-blue-400 text-blue-300 shadow-[0_0_8px_rgba(56,189,248,0.8)]'
+                      : 'bg-neutral-800 border-neutral-700 text-neutral-400 hover:bg-neutral-700'
+                  }`}
+                  title="Hold down to toggle pad modes on tap"
+                >
+                  HOLD: {isHoldActive ? 'ACTIVE' : 'MOD'}
+                </button>
               </div>
 
-              {/* Grid Section with Bank Selection Positioned Bottom-Left */}
+              {/* Grid Section with Bank Selection Bottom-Left & Chunky Square Pads */}
               <div className="w-full flex-1 flex items-center justify-between gap-2 min-h-0">
-                {/* Bank Selection positioned at bottom left of the pad grid */}
+                {/* Bank Selection positioned at bottom left */}
                 <div className="flex flex-col gap-1 items-center justify-center flex-shrink-0">
                   <span className="text-[9px] text-neutral-400">BANK</span>
                   <div className="flex flex-col gap-1 z-10">
@@ -570,9 +544,9 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                   </div>
                 </div>
 
-                {/* Full Scale-[1.00] SP-404SX Thick Pad Performance Grid */}
+                {/* Chunky Square SP-404SX Pad Performance Grid */}
                 <div className="flex-1 h-full flex items-center justify-center">
-                  <div className="grid grid-cols-4 gap-2 w-full h-full max-h-[175px] transform scale-[1.00] origin-center">
+                  <div className="grid grid-cols-4 gap-2 w-full h-full max-h-[185px]">
                     {Array.from({ length: 16 }, (_, i) => i + 1).map((padId) => {
                       const pad = sampleManager?.getPad(padId, currentBank);
                       const isSelected = selectedPadId === padId;
@@ -587,7 +561,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                           onPointerDown={() => handlePadDown(padId)}
                           onPointerUp={() => handlePadUp(padId)}
                           onPointerLeave={() => handlePadUp(padId)}
-                          className={`border-2 rounded-lg flex flex-col items-center justify-center p-1 transition-all active:scale-95 cursor-pointer relative touch-manipulation shadow-md ${
+                          className={`border-2 rounded-lg flex flex-col items-center justify-center p-1 transition-all active:scale-95 cursor-pointer relative touch-manipulation shadow-md aspect-square ${
                             isPlayingPad
                               ? 'bg-amber-400 border-white text-neutral-950 ring-2 ring-amber-300'
                               : pad?.buffer
