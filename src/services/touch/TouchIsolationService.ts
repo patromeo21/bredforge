@@ -8,9 +8,9 @@ export class TouchIsolationService {
   private originalOverflow: string = '';
 
   /**
-   * Root-cause fix for persistent TS2554: 
-   * By providing a default parameter value (`options: TouchIsolationOptions = {}`), 
-   * TypeScript guarantees that the parameter is fully optional at the call site, 
+   * Root-cause fix for persistent TS2554:
+   * By providing a default parameter value (options: TouchIsolationOptions = {}),
+   * TypeScript guarantees that the parameter is fully optional at the call site,
    * neutralizing any strict compiler checks or type-shadowing conflicts.
    */
   constructor(element: HTMLElement, options: TouchIsolationOptions = {}) {
