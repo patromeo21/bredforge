@@ -8,8 +8,8 @@ export interface SampleSlot {
   chokeGroup: number; // 0 = none, 1-3 = groups
   pitch: number;      // -12 to +12 semitones
   volume: number;     // 0.0 to 1.0
-  startPos: number;   // 0.0 to 1.0
-  endPos: number;     // 0.0 to 1.0
+  startPos: number;   // 0.0 to 1.0 (Global normalized 0-1)
+  endPos: number;     // 0.0 to 1.0 (Global normalized 0-1)
   zoomLevel: number;  // 1.0 to 8.0
   scrollOffset: number; // 0.0 to 1.0
   activeSourceNode?: AudioBufferSourceNode | null;
@@ -82,6 +82,8 @@ export class SampleManager {
       pad.name = name;
       pad.zoomLevel = 1.0;
       pad.scrollOffset = 0.0;
+      pad.startPos = 0;
+      pad.endPos = 1.0;
     }
   }
 
