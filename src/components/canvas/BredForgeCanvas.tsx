@@ -33,6 +33,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const waveformCanvasRef = useRef<HTMLCanvasElement>(null);
+  const hiddenFileInputRef = useRef<HTMLInputElement>(null);
 
   const [currentBank, setCurrentBank] = useState<BankID>('A');
   const [selectedPadId, setSelectedPadId] = useState<number>(1);
@@ -69,23 +70,33 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     }
   };
 
-  const handleLoadSample = (padId: number, e: React.PointerEvent) => {
+  const handleTriggerFilePicker = (e: React.PointerEvent) => {
+    e.preventDefault();
     e.stopPropagation();
-    if (!sampleLoader || !sampleManager) {
-      alert('Audio engine initializing... Please tap the screen once and try loading again.');
+    if (!hiddenFileInputRef.current) return;
+    hiddenFileInputRef.current.click();
+  };
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !sampleLoader || !sampleManager) return;
+
+    const file = files[0];
+    if (file.name.endsWith('.asd')) {
+      alert('Skipped .asd file: Ableton analysis files cannot be played as audio.');
+      e.target.value = '';
       return;
     }
 
-    sampleLoader.openFilePicker(async (file: File) => {
-      try {
-        const decodedBuffer = await sampleLoader.loadAudioFile(file);
-        sampleManager.assignBufferToPad(padId, currentBank, decodedBuffer, file.name);
-        setSelectedPadId(padId);
-        forceRender();
-      } catch (err) {
-        console.error(`Failed loading sample to Pad ${padId}`, err);
-      }
-    });
+    try {
+      const decodedBuffer = await sampleLoader.loadAudioFile(file);
+      sampleManager.assignBufferToPad(selectedPadId, currentBank, decodedBuffer, file.name);
+      forceRender();
+    } catch (err) {
+      console.error(`Failed loading sample to Pad ${selectedPadId}`, err);
+    } finally {
+      e.target.value = ''; // Reset input so same file can be selected again if needed
+    }
   };
 
   const selectedPad: SampleSlot | undefined = sampleManager
@@ -158,6 +169,15 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
       ref={containerRef}
       className="w-full h-[100dvh] bg-neutral-900 text-white flex flex-col justify-between p-2 select-none overflow-hidden font-mono box-border"
     >
+      {/* Hidden Persistent Native File Input for iPad Safari */}
+      <input
+        type="file"
+        ref={hiddenFileInputRef}
+        onChange={handleFileSelected}
+        accept="audio/wav, audio/mp3, audio/mpeg, audio/aac, .wav, .mp3, .m4a"
+        style={{ display: 'none' }}
+      />
+
       {/* Header & Tab Bar */}
       <div className="w-full flex justify-between items-center border-b border-neutral-800 pb-1.5 flex-shrink-0">
         <h1 className="text-sm font-bold tracking-wider text-amber-500">BREDFORGE :: DAW</h1>
@@ -185,7 +205,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         </div>
       </div>
 
-      {/* Main Screen Real-Estate Viewport (Strictly bounded to prevent bottom clipping) */}
+      {/* Main Screen Real-Estate Viewport */}
       <div className="flex-1 w-full flex flex-col justify-between my-1 overflow-hidden gap-1 min-h-0">
         {activeTab === 2 ? (
           <div className="w-full h-full flex flex-col justify-between max-w-2xl mx-auto">
@@ -198,7 +218,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 </span>
                 <button
                   type="button"
-                  onPointerDown={(e) => handleLoadSample(selectedPadId, e)}
+                  onPointerDown={handleTriggerFilePicker}
                   className="px-2 py-0.5 bg-amber-600 hover:bg-amber-500 text-white rounded font-bold text-[10px] cursor-pointer flex-shrink-0"
                 >
                   LOAD / REPLACE
@@ -288,7 +308,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
               </div>
             </div>
 
-            {/* BOTTOM PAD PERFORMANCE GRID (Sized tightly so the 4th row is never clipped) */}
+            {/* BOTTOM PAD PERFORMANCE GRID */}
             <div className="w-full flex flex-col justify-end mt-1">
               <div className="flex justify-between items-center w-full mb-1 px-0.5">
                 <span className="text-xs text-neutral-400">BANKS:</span>
