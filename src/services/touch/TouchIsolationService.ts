@@ -1,9 +1,12 @@
 export class TouchIsolationService {
-  private element: HTMLElement;
+  private element: HTMLElement | null = null;
   private originalTouchAction: string = '';
   private originalOverflow: string = '';
 
-  constructor(element: HTMLElement, options: any = {}) {
+  // Explicit constructor overloads to allow both 1 and 2 arguments
+  constructor(element: HTMLElement);
+  constructor(element: HTMLElement, options: any);
+  constructor(element: HTMLElement, options?: any) {
     this.element = element;
     this.init();
   }
