@@ -83,6 +83,9 @@ export class SampleManager {
     const pad = this.getPad(padId, bank);
     if (pad) {
       Object.assign(pad, settings);
+      if (pad.activeGainNode && settings.volume !== undefined) {
+        pad.activeGainNode.gain.setValueAtTime(settings.volume, this.audioCtx.currentTime);
+      }
     }
   }
 
@@ -125,9 +128,7 @@ export class SampleManager {
       try {
         pad.activeSourceNode.stop();
         pad.activeSourceNode.disconnect();
-      } catch (e) {
-        // Ignored
-      }
+      } catch (e) {}
       pad.activeSourceNode = null;
       pad.activeGainNode = null;
     }
@@ -138,6 +139,7 @@ export class SampleManager {
     const pad = this.getPad(padId, targetBank);
     if (!pad || !pad.buffer || !this.audioCtx) return;
 
+    // SP Loop Toggle-off behavior: If pad is already playing (especially loop), stop it
     if (pad.activeSourceNode) {
       try {
         pad.activeSourceNode.stop();
@@ -145,6 +147,7 @@ export class SampleManager {
       } catch (e) {}
       pad.activeSourceNode = null;
       pad.activeGainNode = null;
+      return;
     }
 
     if (pad.chokeGroup > 0) {
