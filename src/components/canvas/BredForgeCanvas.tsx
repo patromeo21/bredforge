@@ -38,6 +38,8 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   const [currentBank, setCurrentBank] = useState<BankID>('A');
   const [selectedPadId, setSelectedPadId] = useState<number>(1);
   const [copySource, setCopySource] = useState<{ padId: number; bank: BankID } | null>(null);
+  const [showClearModal, setShowClearModal] = useState<boolean>(false);
+  const [isHoldActive, setIsHoldActive] = useState<boolean>(false);
   const [, setRefreshState] = useState<number>(0);
 
   useEffect(() => {
@@ -80,7 +82,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   const handlePadUp = (padId: number) => {
     if (!sampleManager) return;
     const pad = sampleManager.getPad(padId, currentBank);
-    if (pad && pad.playMode === 'gate') {
+    if (pad && pad.playMode === 'gate' && !isHoldActive) {
       sampleManager.stopPad(padId, currentBank);
       forceRender();
     }
@@ -141,7 +143,6 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     const rawData = buffer.getChannelData(0);
     const step = Math.ceil(rawData.length / width);
     
-    // Scale amplitude dynamically based on volume slider for live visual feedback
     const volumeMultiplier = selectedPad.volume ?? 1.0;
     const amp = (height / 2) * volumeMultiplier;
 
@@ -185,7 +186,6 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     ctx.lineTo(endX, height);
     ctx.stroke();
 
-    // 2D Playhead Animation during active audition
     if (selectedPad.activeSourceNode && audioCtx && selectedPad.startTime !== undefined) {
       const elapsed = audioCtx.currentTime - selectedPad.startTime;
       const duration = buffer.duration;
@@ -218,7 +218,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   return (
     <div
       ref={containerRef}
-      className="w-full h-[100dvh] bg-neutral-900 text-white flex flex-col justify-between p-2 select-none overflow-hidden font-mono box-border touch-none"
+      className="w-full h-[100dvh] bg-neutral-900 text-white flex flex-col justify-between p-2 select-none overflow-hidden font-mono box-border touch-none relative"
     >
       <input
         ref={fileInputRef}
@@ -228,6 +228,38 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         accept=".wav,.mp3,.m4a,.aac,.aif,.aiff"
         className="hidden"
       />
+
+      {/* In-App Clear Confirmation Modal */}
+      {showClearModal && (
+        <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-neutral-950 border border-red-500/60 rounded-xl p-4 max-w-sm w-full flex flex-col gap-3 shadow-2xl">
+            <span className="text-xs font-bold text-red-400 tracking-wider">CONFIRM PAD DELETION</span>
+            <p className="text-[11px] text-neutral-300">
+              Clear Pad {selectedPadId} [{currentBank}]? This will remove the sample and reset all parameters.
+            </p>
+            <div className="flex gap-2 justify-end mt-2">
+              <button
+                type="button"
+                onClick={() => setShowClearModal(false)}
+                className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-semibold rounded cursor-pointer"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  sampleManager?.clearPad(selectedPadId, currentBank);
+                  setShowClearModal(false);
+                  forceRender();
+                }}
+                className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded cursor-pointer shadow"
+              >
+                CLEAR PAD
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Top Header with Title, Transport, RMS & Navigation */}
       <header className="w-full flex justify-between items-center border-b border-neutral-800 pb-1.5 flex-shrink-0 touch-manipulation">
@@ -332,20 +364,15 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (window.confirm(`Clear Pad ${selectedPadId} [${currentBank}]?`)) {
-                        sampleManager?.clearPad(selectedPadId, currentBank);
-                        forceRender();
-                      }
-                    }}
-                    className="px-2 py-0.5 text-[9px] font-bold rounded bg-neutral-800 text-red-400 hover:bg-neutral-700"
+                    onClick={() => setShowClearModal(true)}
+                    className="px-2 py-0.5 text-[9px] font-bold rounded bg-neutral-800 text-red-400 hover:bg-neutral-700 cursor-pointer"
                   >
                     CLEAR
                   </button>
                 </div>
               </div>
 
-              {/* Waveform Window with In-Window Mode/Loop Toggle */}
+              {/* Waveform Window with Active Play Mode Badge */}
               <div className="w-full bg-black border border-neutral-800 rounded overflow-hidden relative">
                 {selectedPad?.buffer ? (
                   <>
@@ -361,10 +388,10 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                         sampleManager?.updatePadSettings(selectedPadId, currentBank, { playMode: nextMode });
                         forceRender();
                       }}
-                      className="absolute top-1 right-1 px-1.5 py-0.5 bg-neutral-900/80 border border-amber-500/40 text-amber-400 text-[8px] font-bold rounded hover:bg-neutral-800 cursor-pointer backdrop-blur-sm"
-                      title="Click to cycle Play Mode"
+                      className="absolute top-1 right-1 px-2 py-0.5 bg-neutral-900/90 border border-red-500/60 text-red-400 text-[8px] font-bold rounded hover:bg-neutral-800 cursor-pointer backdrop-blur-sm shadow-[0_0_8px_rgba(239,68,68,0.4)]"
+                      title="Click to cycle active Play Mode"
                     >
-                      MODE: {selectedPad.playMode?.toUpperCase() || 'ONE-SHOT'}
+                      {selectedPad.playMode?.toUpperCase() || 'ONE-SHOT'}
                     </button>
                   </>
                 ) : (
@@ -374,40 +401,78 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 )}
               </div>
 
-              <div className="grid grid-cols-4 gap-1.5 items-center touch-manipulation">
+              {/* Flat Toggle Controls with Red Backlight when Active */}
+              <div className="grid grid-cols-4 gap-1.5 items-center touch-manipulation pt-0.5">
+                
+                {/* Play Mode Toggles */}
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[9px] text-neutral-400">Play Mode</span>
-                  <select
-                    value={selectedPad?.playMode || 'one-shot'}
-                    onChange={(e) => {
-                      sampleManager?.updatePadSettings(selectedPadId, currentBank, { playMode: e.target.value as PlayMode });
-                      forceRender();
-                    }}
-                    className="bg-neutral-900 border border-neutral-700 rounded p-0.5 text-white text-[10px]"
-                  >
-                    <option value="one-shot">One-Shot</option>
-                    <option value="gate">Gate</option>
-                    <option value="loop">Loop</option>
-                  </select>
+                  <div className="flex gap-0.5 bg-neutral-900 border border-neutral-800 rounded p-0.5">
+                    {(['one-shot', 'gate', 'loop'] as PlayMode[]).map((mode) => {
+                      const isActive = (selectedPad?.playMode || 'one-shot') === mode;
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => {
+                            sampleManager?.updatePadSettings(selectedPadId, currentBank, { playMode: mode });
+                            forceRender();
+                          }}
+                          className={`flex-1 py-0.5 text-[8px] font-bold rounded transition-all cursor-pointer uppercase ${
+                            isActive
+                              ? 'bg-red-950/90 border border-red-500 text-red-400 shadow-[0_0_6px_rgba(239,68,68,0.6)]'
+                              : 'text-neutral-500 hover:text-neutral-300'
+                          }`}
+                        >
+                          {mode === 'one-shot' ? '1-SHOT' : mode}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
+                {/* Choke Group Toggles + Touch-Hold Button */}
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] text-neutral-400">Choke Group</span>
-                  <select
-                    value={selectedPad?.chokeGroup || 0}
-                    onChange={(e) => {
-                      sampleManager?.updatePadSettings(selectedPadId, currentBank, { chokeGroup: parseInt(e.target.value) });
-                      forceRender();
-                    }}
-                    className="bg-neutral-900 border border-neutral-700 rounded p-0.5 text-white text-[10px]"
-                  >
-                    <option value="0">None</option>
-                    <option value="1">Group 1</option>
-                    <option value="2">Group 2</option>
-                    <option value="3">Group 3</option>
-                  </select>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[9px] text-neutral-400">Choke Grp & Hold</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsHoldActive(!isHoldActive)}
+                      className={`px-1.5 py-0.2 text-[8px] font-bold rounded transition-all cursor-pointer ${
+                        isHoldActive
+                          ? 'bg-red-950 border border-red-500 text-red-400 shadow-[0_0_6px_rgba(239,68,68,0.6)]'
+                          : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'
+                      }`}
+                      title="Toggle Touch-Hold Latch mode"
+                    >
+                      HOLD: {isHoldActive ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+                  <div className="flex gap-0.5 bg-neutral-900 border border-neutral-800 rounded p-0.5">
+                    {[0, 1, 2, 3].map((grp) => {
+                      const isActive = (selectedPad?.chokeGroup || 0) === grp;
+                      return (
+                        <button
+                          key={grp}
+                          type="button"
+                          onClick={() => {
+                            sampleManager?.updatePadSettings(selectedPadId, currentBank, { chokeGroup: grp });
+                            forceRender();
+                          }}
+                          className={`flex-1 py-0.5 text-[8px] font-bold rounded transition-all cursor-pointer ${
+                            isActive
+                              ? 'bg-red-950/90 border border-red-500 text-red-400 shadow-[0_0_6px_rgba(239,68,68,0.6)]'
+                              : 'text-neutral-500 hover:text-neutral-300'
+                          }`}
+                        >
+                          {grp === 0 ? 'OFF' : `G${grp}`}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
+                {/* Pitch Slider */}
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[9px] text-neutral-400">Pitch: {selectedPad?.pitch || 0}st</span>
                   <input
@@ -420,10 +485,11 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                       sampleManager?.updatePadSettings(selectedPadId, currentBank, { pitch: parseInt(e.target.value) });
                       forceRender();
                     }}
-                    className="accent-amber-500 cursor-pointer h-2"
+                    className="accent-amber-500 cursor-pointer h-2 mt-1"
                   />
                 </div>
 
+                {/* Volume Slider (2% precise steps) */}
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[9px] text-neutral-400">Vol: {Math.round((selectedPad?.volume || 1) * 100)}%</span>
                   <input
@@ -436,7 +502,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                       sampleManager?.updatePadSettings(selectedPadId, currentBank, { volume: parseFloat(e.target.value) });
                       forceRender();
                     }}
-                    className="accent-amber-500 cursor-pointer h-2"
+                    className="accent-amber-500 cursor-pointer h-2 mt-1"
                   />
                 </div>
               </div>
