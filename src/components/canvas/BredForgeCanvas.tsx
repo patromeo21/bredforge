@@ -200,23 +200,20 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                   HUD :: PAD {selectedPadId < 10 ? `0${selectedPadId}` : selectedPadId} [{currentBank}] — {selectedPad?.name || 'Empty'}
                 </span>
                 
-                {/* Native Overlay File Input with touch isolation bypass */}
-                <div
-                  className="relative inline-block overflow-hidden rounded bg-amber-600 hover:bg-amber-500 cursor-pointer"
+                {/* Native HTML Label Wrapper for 100% reliable iOS Safari file browser triggering */}
+                <label
+                  className="px-2 py-0.5 bg-amber-600 hover:bg-amber-500 text-white rounded font-bold text-[10px] cursor-pointer inline-flex items-center justify-center shadow"
                   onTouchStart={(e) => e.stopPropagation()}
-                  onTouchEnd={(e) => e.stopPropagation()}
                   onPointerDown={(e) => e.stopPropagation()}
                 >
-                  <span className="block px-2 py-0.5 text-white font-bold text-[10px] pointer-events-none">
-                    LOAD / REPLACE
-                  </span>
+                  LOAD / REPLACE
                   <input
                     type="file"
                     onChange={handleFileSelected}
                     accept="audio/wav, audio/mp3, audio/mpeg, audio/aac, .wav, .mp3, .m4a"
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    className="hidden"
                   />
-                </div>
+                </label>
               </div>
 
               <div className="w-full bg-black border border-neutral-800 rounded overflow-hidden relative">
