@@ -33,6 +33,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const waveformCanvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [currentBank, setCurrentBank] = useState<BankID>('A');
   const [selectedPadId, setSelectedPadId] = useState<number>(1);
@@ -69,6 +70,23 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     }
   };
 
+  const handleLoadClick = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (fileInputRef.current) {
+      try {
+        if (typeof fileInputRef.current.showPicker === 'function') {
+          fileInputRef.current.showPicker();
+        } else {
+          fileInputRef.current.click();
+        }
+      } catch (err) {
+        console.error('Failed to launch native file picker:', err);
+        fileInputRef.current.click();
+      }
+    }
+  };
+
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !sampleLoader || !sampleManager) return;
@@ -87,7 +105,9 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     } catch (err) {
       console.error(`Failed loading sample to Pad ${selectedPadId}`, err);
     } finally {
-      e.target.value = '';
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -161,6 +181,16 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
       ref={containerRef}
       className="w-full h-[100dvh] bg-neutral-900 text-white flex flex-col justify-between p-2 select-none overflow-hidden font-mono box-border"
     >
+      {/* Hidden Persistent Native File Input (DeepSeek Architecture Strategy) */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        onChange={handleFileSelected}
+        accept=".wav,.mp3,.m4a,.aac,.aif,.aiff"
+        className="hidden"
+        tabIndex={-1}
+      />
+
       {/* Header & Tab Bar */}
       <div className="w-full flex justify-between items-center border-b border-neutral-800 pb-1.5 flex-shrink-0">
         <h1 className="text-sm font-bold tracking-wider text-amber-500">BREDFORGE :: DAW</h1>
@@ -200,20 +230,14 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                   HUD :: PAD {selectedPadId < 10 ? `0${selectedPadId}` : selectedPadId} [{currentBank}] — {selectedPad?.name || 'Empty'}
                 </span>
                 
-                {/* Native HTML Label Wrapper for 100% reliable iOS Safari file browser triggering */}
-                <label
+                {/* Synchronous showPicker Button */}
+                <button
+                  type="button"
+                  onPointerDown={handleLoadClick}
                   className="px-2 py-0.5 bg-amber-600 hover:bg-amber-500 text-white rounded font-bold text-[10px] cursor-pointer inline-flex items-center justify-center shadow"
-                  onTouchStart={(e) => e.stopPropagation()}
-                  onPointerDown={(e) => e.stopPropagation()}
                 >
                   LOAD / REPLACE
-                  <input
-                    type="file"
-                    onChange={handleFileSelected}
-                    accept="audio/wav, audio/mp3, audio/mpeg, audio/aac, .wav, .mp3, .m4a"
-                    className="hidden"
-                  />
-                </label>
+                </button>
               </div>
 
               <div className="w-full bg-black border border-neutral-800 rounded overflow-hidden relative">
