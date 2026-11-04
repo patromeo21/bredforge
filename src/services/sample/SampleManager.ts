@@ -139,15 +139,20 @@ export class SampleManager {
     const pad = this.getPad(padId, targetBank);
     if (!pad || !pad.buffer || !this.audioCtx) return;
 
-    // SP Loop Toggle-off behavior: If pad is already playing (especially loop), stop it
-    if (pad.activeSourceNode) {
+    // Loop toggle-off: If loop is active and playing, tapping again stops it
+    if (pad.playMode === 'loop' && pad.activeSourceNode) {
+      this.stopPad(padId, targetBank);
+      return;
+    }
+
+    // For non-loop modes, stop previous active node if active
+    if (pad.activeSourceNode && pad.playMode !== 'loop') {
       try {
         pad.activeSourceNode.stop();
         pad.activeSourceNode.disconnect();
       } catch (e) {}
       pad.activeSourceNode = null;
       pad.activeGainNode = null;
-      return;
     }
 
     if (pad.chokeGroup > 0) {
