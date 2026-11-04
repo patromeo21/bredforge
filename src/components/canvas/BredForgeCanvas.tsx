@@ -70,23 +70,6 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     }
   };
 
-  const handleLoadClick = (e: React.PointerEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (fileInputRef.current) {
-      try {
-        if (typeof fileInputRef.current.showPicker === 'function') {
-          fileInputRef.current.showPicker();
-        } else {
-          fileInputRef.current.click();
-        }
-      } catch (err) {
-        console.error('Failed to launch native file picker:', err);
-        fileInputRef.current.click();
-      }
-    }
-  };
-
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !sampleLoader || !sampleManager) return;
@@ -179,42 +162,51 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   return (
     <div
       ref={containerRef}
-      className="w-full h-[100dvh] bg-neutral-900 text-white flex flex-col justify-between p-2 select-none overflow-hidden font-mono box-border"
+      className="w-full h-[100dvh] bg-neutral-900 text-white flex flex-col justify-between p-2 select-none overflow-hidden font-mono box-border relative"
     >
-      {/* Hidden Persistent Native File Input (DeepSeek Architecture Strategy) */}
+      {/* 
+        DECOUPLED NATIVE FILE INPUT: 
+        Placed at the very root of the DOM container, completely outside 
+        any touch-isolation button event chains. 
+      */}
       <input
         ref={fileInputRef}
         type="file"
         onChange={handleFileSelected}
         accept=".wav,.mp3,.m4a,.aac,.aif,.aiff"
         className="hidden"
-        tabIndex={-1}
       />
 
       {/* Header & Tab Bar */}
       <div className="w-full flex justify-between items-center border-b border-neutral-800 pb-1.5 flex-shrink-0">
         <h1 className="text-sm font-bold tracking-wider text-amber-500">BREDFORGE :: DAW</h1>
-        <div className="flex gap-2 z-10">
-          <button
-            type="button"
-            onPointerDown={(e) => {
-              e.preventDefault();
-              onTabChange && onTabChange(1);
-            }}
-            className={`px-3 py-1 text-xs rounded transition-colors cursor-pointer ${activeTab === 1 ? 'bg-amber-600 text-white font-bold' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
+        
+        {/* We put a direct, native label/button right here in the header where touch isolation cannot touch it */}
+        <div className="flex items-center gap-2 z-30">
+          <label 
+            htmlFor="global-audio-file-input"
+            onClick={() => fileInputRef.current?.click()}
+            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded cursor-pointer shadow"
           >
-            Tracker (Tab 1)
-          </button>
-          <button
-            type="button"
-            onPointerDown={(e) => {
-              e.preventDefault();
-              onTabChange && onTabChange(2);
-            }}
-            className={`px-3 py-1 text-xs rounded transition-colors cursor-pointer ${activeTab === 2 ? 'bg-amber-600 text-white font-bold' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
-          >
-            Sampler (Tab 2)
-          </button>
+            LOAD SAMPLE TO PAD {selectedPadId} [{currentBank}]
+          </label>
+
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => onTabChange && onTabChange(1)}
+              className={`px-2.5 py-1 text-xs rounded transition-colors cursor-pointer ${activeTab === 1 ? 'bg-amber-600 text-white font-bold' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
+            >
+              Tracker
+            </button>
+            <button
+              type="button"
+              onClick={() => onTabChange && onTabChange(2)}
+              className={`px-2.5 py-1 text-xs rounded transition-colors cursor-pointer ${activeTab === 2 ? 'bg-amber-600 text-white font-bold' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
+            >
+              Sampler
+            </button>
+          </div>
         </div>
       </div>
 
@@ -229,15 +221,9 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 <span className="font-bold text-amber-500 text-[11px] truncate">
                   HUD :: PAD {selectedPadId < 10 ? `0${selectedPadId}` : selectedPadId} [{currentBank}] — {selectedPad?.name || 'Empty'}
                 </span>
-                
-                {/* Synchronous showPicker Button */}
-                <button
-                  type="button"
-                  onPointerDown={handleLoadClick}
-                  className="px-2 py-0.5 bg-amber-600 hover:bg-amber-500 text-white rounded font-bold text-[10px] cursor-pointer inline-flex items-center justify-center shadow"
-                >
-                  LOAD / REPLACE
-                </button>
+                <span className="text-[10px] text-neutral-400">
+                  {selectedPad?.buffer ? 'Sample Loaded' : 'No Sample'}
+                </span>
               </div>
 
               <div className="w-full bg-black border border-neutral-800 rounded overflow-hidden relative">
@@ -250,7 +236,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                   />
                 ) : (
                   <div className="w-full h-10 flex items-center justify-center text-neutral-500 text-[10px]">
-                    Tap pad to select, click LOAD / REPLACE to import .wav
+                    Select pad below, then click LOAD SAMPLE at the top right to import .wav
                   </div>
                 )}
               </div>
