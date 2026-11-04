@@ -41,6 +41,8 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   const [copySource, setCopySource] = useState<{ padId: number; bank: BankID } | null>(null);
   const [showClearModal, setShowClearModal] = useState<boolean>(false);
   const [isHoldActive, setIsHoldActive] = useState<boolean>(false);
+  const [isChokeActive, setIsChokeActive] = useState<boolean>(false);
+  const [chokeTargetGroup, setChokeTargetGroup] = useState<number>(1); // 1, 2, or 3
   const [, setRefreshState] = useState<number>(0);
 
   useEffect(() => {
@@ -76,8 +78,16 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 
     if (isHoldActive) {
       const currentPad = sampleManager.getPad(padId, currentBank);
-      const nextMode: PlayMode = currentPad?.playMode === 'one-shot' ? 'gate' : 'one-shot';
+      const nextMode: PlayMode = currentPad?.playMode === 'one-shot' ? 'gate' : currentPad?.playMode === 'gate' ? 'loop' : 'one-shot';
       sampleManager.updatePadSettings(padId, currentBank, { playMode: nextMode });
+      forceRender();
+      return;
+    }
+
+    if (isChokeActive) {
+      const currentPad = sampleManager.getPad(padId, currentBank);
+      const newGroup = currentPad?.chokeGroup === chokeTargetGroup ? 0 : chokeTargetGroup;
+      sampleManager.updatePadSettings(padId, currentBank, { chokeGroup: newGroup });
       forceRender();
       return;
     }
@@ -90,7 +100,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   };
 
   const handlePadUp = (padId: number) => {
-    if (!sampleManager || isHoldActive) return;
+    if (!sampleManager || isHoldActive || isChokeActive) return;
     const pad = sampleManager.getPad(padId, currentBank);
     if (pad && pad.playMode === 'gate' && pad.activeSourceNode) {
       sampleManager.stopPad(padId, currentBank);
@@ -129,7 +139,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 
   const audioDuration = selectedPad?.buffer ? selectedPad.buffer.duration : 0;
 
-  // Zoom-Aware Waveform Rendering with Precise Trim Mapping
+  // Zoom-Aware Waveform Rendering with Bounded Playhead Animation
   const drawWaveform = useCallback(() => {
     const canvas = waveformCanvasRef.current;
     if (!canvas || !selectedPad || !selectedPad.buffer) return;
@@ -219,9 +229,22 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 
     if (selectedPad.activeSourceNode && audioCtx && selectedPad.startTime !== undefined) {
       const elapsed = audioCtx.currentTime - selectedPad.startTime;
-      const progress = (elapsed / buffer.duration) % 1;
-      const playheadX = mapGlobalToScreen(progress);
+      const bufferDuration = buffer.duration;
+      let progress = 0;
 
+      if (selectedPad.playMode === 'loop') {
+        const loopDuration = Math.max(0.01, (selectedPad.endPos - selectedPad.startPos) * bufferDuration);
+        const loopElapsed = elapsed % loopDuration;
+        const globalTime = (selectedPad.startPos * bufferDuration) + loopElapsed;
+        progress = globalTime / bufferDuration;
+      } else {
+        const trimDuration = Math.max(0.01, (selectedPad.endPos - selectedPad.startPos) * bufferDuration);
+        const trimElapsed = Math.min(trimDuration, elapsed);
+        const globalTime = (selectedPad.startPos * bufferDuration) + trimElapsed;
+        progress = globalTime / bufferDuration;
+      }
+
+      const playheadX = mapGlobalToScreen(progress);
       ctx.strokeStyle = '#38bdf8';
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -270,7 +293,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     drawDpad();
   }, [drawDpad]);
 
-  // Strict 4-Way Transmission Handler with Zero Diagonal Drift
+  // Strict 4-Way Transmission Handler with Deep 32x Magnification
   const handleDpadInteraction = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!sampleManager || !selectedPad || !selectedPad.buffer) return;
     const canvas = dpadCanvasRef.current;
@@ -282,18 +305,17 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     const zoom = selectedPad.zoomLevel || 1.0;
     const scroll = selectedPad.scrollOffset || 0.0;
 
-    // Strict 4-Way Orthogonal Lane Check
     const dx = x - 35;
     const dy = y - 35;
 
     if (Math.abs(dy) > Math.abs(dx)) {
       if (dy < 0) {
-        // UP: Zoom In
-        const newZoom = Math.min(8.0, zoom + 0.5);
+        // UP: Zoom In (up to 32.0x for deep 20s micro-chop view)
+        const newZoom = Math.min(32.0, zoom + 2.0);
         sampleManager.updatePadSettings(selectedPadId, currentBank, { zoomLevel: newZoom });
       } else {
         // DOWN: Zoom Out
-        const newZoom = Math.max(1.0, zoom - 0.5);
+        const newZoom = Math.max(1.0, zoom - 2.0);
         sampleManager.updatePadSettings(selectedPadId, currentBank, { zoomLevel: newZoom, scrollOffset: newZoom === 1.0 ? 0 : scroll });
       }
     } else {
@@ -326,14 +348,12 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     drawWaveform();
   }, [selectedPad?.volume, selectedPad?.startPos, selectedPad?.endPos, selectedPad?.zoomLevel, selectedPad?.scrollOffset, drawWaveform]);
 
-  // Zoom-aware slider conversions for display & adjustment
   const totalSamples = selectedPad?.buffer ? selectedPad.buffer.getChannelData(0).length : 1;
   const zoom = selectedPad?.zoomLevel || 1.0;
   const scroll = selectedPad?.scrollOffset || 0.0;
   const windowSize = totalSamples / zoom;
   const startSampleWin = scroll * (totalSamples - windowSize);
 
-  // Map global slider 0-1 across current zoomed view window
   const sliderToGlobal = (sliderVal: number) => {
     const sampleIdx = startSampleWin + sliderVal * windowSize;
     return Math.max(0, Math.min(1, sampleIdx / totalSamples));
@@ -608,7 +628,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
               </div>
             </div>
 
-            {/* SP-404SX HARDWARE HOUSING CONTAINER (Independent Yellow Flashing HOLD & Coupled D-Pad Space) */}
+            {/* SP-404SX HARDWARE HOUSING CONTAINER (Scaled HOLD & Dedicated CHOKE Button) */}
             <div className="w-full flex-1 flex flex-col justify-end mt-1 min-h-0 bg-neutral-950 border border-amber-500/30 rounded-xl p-2 shadow-2xl">
               
               {/* MODE Panel */}
@@ -638,17 +658,56 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 </div>
               </div>
 
-              {/* Independent Yellow Flashing HOLD Button & Coupled Controls Space */}
+              {/* Independent 20% Scaled Yellow Flashing HOLD & Dedicated CHOKE Group Buttons */}
               <div className="w-full flex items-center justify-between mb-1 px-1 flex-shrink-0">
-                <span className="text-[9px] text-neutral-400">MODIFIER:</span>
                 <div className="flex items-center gap-2">
-                  {/* Independent Yellow Flashing HOLD Pad (~60% of grid pad size) */}
+                  <span className="text-[9px] text-neutral-400">CHOKE GROUP:</span>
+                  <div className="flex gap-1 bg-neutral-900 border border-neutral-800 rounded p-0.5">
+                    {[1, 2, 3].map((grp) => (
+                      <button
+                        key={grp}
+                        type="button"
+                        onClick={() => {
+                          setChokeTargetGroup(grp);
+                          forceRender();
+                        }}
+                        className={`px-2 py-0.5 text-[8px] font-bold rounded transition-all cursor-pointer ${
+                          chokeTargetGroup === grp
+                            ? 'bg-amber-500 text-neutral-950 shadow'
+                            : 'text-neutral-400 hover:text-white'
+                        }`}
+                      >
+                        G{grp}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Dedicated CHOKE Button (Hold + Tap Pad to Assign) */}
+                  <button
+                    type="button"
+                    onPointerDown={() => setIsChokeActive(true)}
+                    onPointerUp={() => setIsChokeActive(false)}
+                    onPointerLeave={() => setIsChokeActive(false)}
+                    className={`w-16 h-10 border rounded flex flex-col items-center justify-center font-bold text-[9px] transition-all cursor-pointer shadow ${
+                      isChokeActive
+                        ? 'bg-red-600 border-red-400 text-white animate-pulse shadow-[0_0_12px_rgba(239,68,68,0.9)]'
+                        : 'bg-neutral-900 border-red-500/60 text-red-400 hover:bg-neutral-800'
+                    }`}
+                    title="Hold down and tap pad to assign to active Choke Group"
+                  >
+                    <span>CHOKE</span>
+                    <span className="text-[6px]">{isChokeActive ? `ASSIGN G${chokeTargetGroup}` : `G${chokeTargetGroup}`}</span>
+                  </button>
+
+                  {/* 20% Scaled Yellow Flashing HOLD Button */}
                   <button
                     type="button"
                     onPointerDown={() => setIsHoldActive(true)}
                     onPointerUp={() => setIsHoldActive(false)}
                     onPointerLeave={() => setIsHoldActive(false)}
-                    className={`w-14 h-9 border rounded flex flex-col items-center justify-center font-bold text-[9px] transition-all cursor-pointer shadow ${
+                    className={`w-16 h-10 border rounded flex flex-col items-center justify-center font-bold text-[9px] transition-all cursor-pointer shadow ${
                       isHoldActive
                         ? 'bg-yellow-500 border-yellow-300 text-neutral-950 animate-pulse shadow-[0_0_12px_rgba(234,179,8,0.9)]'
                         : 'bg-neutral-900 border-yellow-500/60 text-yellow-400 hover:bg-neutral-800'
@@ -691,6 +750,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                       const isPlayingPad = pad?.activeSourceNode != null;
                       const isGate = pad?.playMode === 'gate';
                       const isLoop = pad?.playMode === 'loop';
+                      const chokeGrp = pad?.chokeGroup || 0;
 
                       return (
                         <button
@@ -711,9 +771,12 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                         >
                           <div className="w-full flex justify-between px-1 text-[7px] text-neutral-500">
                             <span>{currentBank}</span>
-                            <span className={isGate ? 'text-green-400 font-bold' : isLoop ? 'text-amber-400 font-bold' : 'text-blue-400 font-bold'}>
-                              {isGate ? '[G]' : isLoop ? '[L]' : '[1]'}
-                            </span>
+                            <div className="flex gap-0.5">
+                              {chokeGrp > 0 && <span className="text-red-400 font-bold">[G{chokeGrp}]</span>}
+                              <span className={isGate ? 'text-green-400 font-bold' : isLoop ? 'text-amber-400 font-bold' : 'text-blue-400 font-bold'}>
+                                {isGate ? '[G]' : isLoop ? '[L]' : '[1]'}
+                              </span>
+                            </div>
                           </div>
                           <span className="text-xs font-bold tracking-tight my-0.5">{padId < 10 ? `0${padId}` : padId}</span>
                           <span className="text-[6px] truncate max-w-[50px] text-neutral-400">{pad?.name || 'EMPTY'}</span>
