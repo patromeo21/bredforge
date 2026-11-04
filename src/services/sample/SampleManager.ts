@@ -10,7 +10,7 @@ export interface SampleSlot {
   volume: number;     // 0.0 to 1.0
   startPos: number;   // 0.0 to 1.0
   endPos: number;     // 0.0 to 1.0
-  zoomLevel: number;  // 1.0 to 32.0
+  zoomLevel: number;  // 1.0 to 16.0
   scrollOffset: number; // 0.0 to 1.0
   activeSourceNode?: AudioBufferSourceNode | null;
   activeGainNode?: GainNode | null;
@@ -165,7 +165,6 @@ export class SampleManager {
       pad.activeGainNode = null;
     }
 
-    // Choke Group Handling
     if (pad.chokeGroup > 0) {
       const groupSources = this.chokeGroups.get(pad.chokeGroup);
       if (groupSources) {
@@ -229,7 +228,6 @@ export class SampleManager {
       }
     };
 
-    // One-shot and Gate respect trimEnd stop boundary
     source.start(0, trimStart, pad.playMode === 'loop' ? undefined : playDuration);
   }
 }
