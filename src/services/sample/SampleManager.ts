@@ -32,7 +32,6 @@ export class SampleManager {
 
   constructor(audioCtx: AudioContext, masterGainNode?: GainNode) {
     this.audioCtx = audioCtx;
-    // Fallback safeguard: if masterGainNode isn't passed, create one and connect to destination
     this.masterGainNode = masterGainNode || audioCtx.createGain();
     if (!masterGainNode) {
       this.masterGainNode.connect(audioCtx.destination);
@@ -85,6 +84,21 @@ export class SampleManager {
     const pad = this.getPad(padId, bank);
     if (pad) {
       Object.assign(pad, settings);
+    }
+  }
+
+  public stopPad(padId: number, bank?: BankID) {
+    const targetBank = bank || this.activeBank;
+    const pad = this.getPad(padId, targetBank);
+    if (pad && pad.activeSourceNode) {
+      try {
+        pad.activeSourceNode.stop();
+        pad.activeSourceNode.disconnect();
+      } catch (e) {
+        // Ignored if already stopped
+      }
+      pad.activeSourceNode = null;
+      pad.activeGainNode = null;
     }
   }
 
