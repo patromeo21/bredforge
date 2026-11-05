@@ -1,5 +1,5 @@
 // ============================================================================
-// STAGE B - PHASE 11: 3-TIER CORE MOLECULAR JSON STATE ENGINE (TrackerState.ts)
+// STAGE B - PHASE 12: CHROMATIC NOTE MAPPER & STATE ENGINE (TrackerState.ts)
 // ============================================================================
 
 export interface TrackerStep {
@@ -33,7 +33,6 @@ export interface ProjectStateSchema {
 export function createInitialTrackerState(): ProjectStateSchema {
   const defaultPhrases: Record<string, PhraseBlock> = {};
   
-  // Initialize pristine 16-step phrase '01'
   const initialSteps: TrackerStep[] = Array.from({ length: 16 }, (_, i) => ({
     step: i + 1,
     padId: null,
@@ -63,4 +62,40 @@ export function createInitialTrackerState(): ProjectStateSchema {
     ],
     timestamp: Date.now(),
   };
+}
+
+export class TrackerState {
+  private static readonly NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+  // ============================================================================
+  // PHASE 12: CHROMATIC NOTE TRANSLATOR UTILITIES (0-63 to Tracker Pitch Strings)
+  // ============================================================================
+  public static getNoteNameFromPadId(padId: number | null): string {
+    if (padId === null || padId < 0 || padId > 63) {
+      return '---';
+    }
+    const octave = 4 + Math.floor(padId / 12);
+    const note = TrackerState.NOTE_NAMES[padId % 12];
+    return note.includes('#') ? `${note}${octave}` : `${note}-${octave}`;
+  }
+
+  public static getPadIdFromNoteName(noteName: string): number | null {
+    if (!noteName || noteName === '---') {
+      return null;
+    }
+    const cleaned = noteName.trim().toUpperCase();
+    const match = cleaned.match(/^([A-G]#?)-?([0-8])$/);
+    if (!match) {
+      return null;
+    }
+    const [, noteStr, octaveStr] = match;
+    const noteIndex = TrackerState.NOTE_NAMES.indexOf(noteStr);
+    if (noteIndex === -1) {
+      return null;
+    }
+    const octave = parseInt(octaveStr, 10);
+    const padId = (octave - 4) * 12 + noteIndex;
+    return padId >= 0 && padId <= 63 ? padId : null;
+  }
+  // ============================================================================
 }
