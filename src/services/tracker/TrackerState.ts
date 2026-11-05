@@ -1,5 +1,5 @@
 // ============================================================================
-// STAGE B - PHASE 14: FX2 MODULATION OVERLAYS & STATE ENGINE (TrackerState.ts)
+// STAGE B - PHASE 15: LIVE PERFORMANCE INPUT CONFIGURATOR (TrackerState.ts)
 // ============================================================================
 
 export type SPFxType = 'djfxLooper' | 'vinylSim' | 'bitCrasher' | 'isolator' | 'saturation' | 'echo' | 'eq' | 'vocoder' | 'bypass';
@@ -14,12 +14,33 @@ export const TRACKER_FX1_COMMANDS: Record<string, SPFxType> = {
   'X06': 'vocoder',
 };
 
+export type UserPadFXMap = Record<number, { fxType: SPFxType; defaultParam: number }>;
+
+export const DEFAULT_PERFORMANCE_FX_MAP: UserPadFXMap = {
+  0: { fxType: 'djfxLooper', defaultParam: 0.25 },
+  1: { fxType: 'vinylSim', defaultParam: 1.0 },
+  2: { fxType: 'saturation', defaultParam: 4.0 },
+  3: { fxType: 'echo', defaultParam: 0.4 },
+  4: { fxType: 'eq', defaultParam: 3.0 },
+  5: { fxType: 'vocoder', defaultParam: 0.707 },
+  6: { fxType: 'bitCrasher', defaultParam: 0.5 },
+  7: { fxType: 'isolator', defaultParam: 1.0 },
+  8: { fxType: 'bypass', defaultParam: 0.0 },
+  9: { fxType: 'bypass', defaultParam: 0.0 },
+  10: { fxType: 'bypass', defaultParam: 0.0 },
+  11: { fxType: 'bypass', defaultParam: 0.0 },
+  12: { fxType: 'bypass', defaultParam: 0.0 },
+  13: { fxType: 'bypass', defaultParam: 0.0 },
+  14: { fxType: 'bypass', defaultParam: 0.0 },
+  15: { fxType: 'bypass', defaultParam: 0.0 },
+};
+
 export interface TrackerStep {
   step: number;
   padId: number | null;
   vol: number;
   fxType: string;
-  fxParam: number | null; // FX2 parameter modulation value
+  fxParam: number | null;
 }
 
 export type PhraseBlock = TrackerStep[];
@@ -35,6 +56,7 @@ export interface ProjectStateSchema {
   version: string;
   bpm: number;
   swing: number;
+  isLivePerformanceMode: boolean; // Phase 15 state expansion flag
   activePhrase: string;
   phrases: Record<string, PhraseBlock>;
   chains: Record<string, string[]>;
@@ -59,6 +81,7 @@ export function createInitialTrackerState(): ProjectStateSchema {
     version: '1.0.0',
     bpm: 120,
     swing: 0,
+    isLivePerformanceMode: false,
     activePhrase: '01',
     phrases: defaultPhrases,
     chains: {
@@ -115,9 +138,6 @@ export class TrackerState {
     return TRACKER_FX1_COMMANDS[upper] || 'bypass';
   }
 
-  // ============================================================================
-  // PHASE 14: FX2 PARAMETER MODULATION OVERLAY SCALING UTILITIES
-  // ============================================================================
   public static resolveFX2ParameterValue(fxType: SPFxType, rawParam: number | null): number {
     if (rawParam === null || isNaN(rawParam)) {
       switch (fxType) {
@@ -134,18 +154,17 @@ export class TrackerState {
 
     switch (fxType) {
       case 'saturation':
-        return 1.0 + normalized * 11.0; // 1.0 to 12.0 drive
+        return 1.0 + normalized * 11.0;
       case 'echo':
-        return normalized * 0.95;       // 0.0 to 0.95 feedback
+        return normalized * 0.95;
       case 'djfxLooper':
-        return 0.01 + normalized * 1.99;  // 0.01 to 2.0s stutter time
+        return 0.01 + normalized * 1.99;
       case 'vocoder':
-        return normalized;              // 0.0 to 1.0 stereo gain
+        return normalized;
       case 'eq':
-        return -24.0 + normalized * 48.0; // -24dB to +24dB gain
+        return -24.0 + normalized * 48.0;
       default:
         return normalized;
     }
   }
-  // ============================================================================
 }
