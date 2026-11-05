@@ -1,5 +1,5 @@
 // ============================================================================
-// STAGE C - PHASE 18: TICKS-PER-LINE BACKGROUND SUB-CLOCK (TrackerClock.ts)
+// STAGE C - PHASE 19: DYNAMIC SECONDS-PER-TICK SCALER (TrackerClock.ts)
 // ============================================================================
 
 export class TrackerClock {
@@ -11,13 +11,10 @@ export class TrackerClock {
   private isRunning: boolean = false;
   private callback: ((time: number, line: number, tick: number) => void) | null = null;
 
-  // ============================================================================
-  // PHASE 18: TICKS-PER-LINE (TPL) SUB-CLOCK COORDINATES
-  // ============================================================================
+  // TPL Sub-Clock Coordinates
   public currentTick: number = 0;
   public currentLine: number = 0;
-  public ticksPerLine: number = 6; // M8 Specification: 6 ticks per line subdivision
-  // ============================================================================
+  public ticksPerLine: number = 6;
 
   constructor() {}
 
@@ -34,11 +31,8 @@ export class TrackerClock {
     this.callback = onScheduleStep;
     this.isRunning = true;
 
-    // Reset playhead sub-clock coordinates on start
     this.currentLine = 0;
     this.currentTick = 0;
-
-    // Anchor starting time slightly ahead of current audio context time
     this.nextStepTime = audioCtx.currentTime + 0.05;
 
     const tick = () => {
@@ -47,19 +41,19 @@ export class TrackerClock {
       }
 
       // ============================================================================
-      // PHASE 18: SUB-STEP MATHEMATICAL STEPPER (Fractional TPL Tick Interval)
+      // PHASE 19: DYNAMIC SECONDS-PER-TICK SCALER (Live BPM Evaluation)
       // ============================================================================
-      const secondsPerTick = ((60.0 / this.currentBpm) / 4.0) / this.ticksPerLine;
+      const dynamicBpm = Math.max(20, Math.min(300, this.currentBpm));
+      const secondsPerTick = ((60.0 / dynamicBpm) / 4.0) / this.ticksPerLine;
 
-      // Strict look-ahead window loop: while tick time falls within lookahead buffer (40ms)
+      // Strict look-ahead window loop: evaluates dynamic timing on every iteration
       while (this.nextStepTime < audioCtx.currentTime + (this.lookahead / 1000.0)) {
         this.callback(this.nextStepTime, this.currentLine, this.currentTick);
 
-        // Advance tick and relational playhead timeline wrap
         this.currentTick++;
         if (this.currentTick >= this.ticksPerLine) {
           this.currentTick = 0;
-          this.currentLine = (this.currentLine + 1) % 16; // 16-step phrase line loop
+          this.currentLine = (this.currentLine + 1) % 16;
         }
 
         this.nextStepTime += secondsPerTick;
@@ -72,9 +66,17 @@ export class TrackerClock {
     this.timerId = window.setTimeout(tick, this.scheduleInterval);
   }
 
-  public updateBpm(newBpm: number): void {
+  // ============================================================================
+  // PHASE 19: PUBLIC TEMPO MODIFIER HOOK
+  // ============================================================================
+  public updateTempo(newBpm: number): void {
     this.currentBpm = Math.max(20, Math.min(300, newBpm));
   }
+
+  public updateBpm(newBpm: number): void {
+    this.updateTempo(newBpm);
+  }
+  // ============================================================================
 
   public stopClock(): void {
     this.isRunning = false;
