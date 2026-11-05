@@ -1,5 +1,5 @@
 // ============================================================================
-// STAGE A - PHASE 3: DE-DUPLICATED ASYMMETRICAL SATURATION ENGINE (AudioGraph.ts)
+// STAGE A - PHASE 3: WAVESHAPER DOUBLE-CAST REPAIR (AudioGraph.ts)
 // ============================================================================
 
 export type SPFxType = 'djfxLooper' | 'vinylSim' | 'bitCrasher' | 'isolator' | 'saturation' | 'bypass';
@@ -51,12 +51,12 @@ export class AudioGraph {
     });
 
     // ============================================================================
-    // ASYMMETRICAL TUBE SATURATION WAVESHAPER INJECTION
+    // ASYMMETRICAL TUBE SATURATION WAVESHAPER INJECTION WITH DOUBLE-CAST ESCAPE
     // ============================================================================
     this.saturationShaper = this.ctx.createWaveShaper();
     this.saturationShaper.oversample = '4x';
     const initialCurve = this.makeDecapitatorCurve(4.0);
-    this.saturationShaper.curve = initialCurve as unknown as Float32Array;
+    this.saturationShaper.curve = (initialCurve as unknown) as any;
 
     this.effectBuses.saturation.connect(this.saturationShaper);
     this.saturationShaper.connect(this.masterGain);
@@ -86,7 +86,7 @@ export class AudioGraph {
   public setSaturationDrive(driveValue: number): void {
     if (this.saturationShaper) {
       const newCurve = this.makeDecapitatorCurve(Math.max(1.0, driveValue));
-      this.saturationShaper.curve = newCurve as unknown as Float32Array;
+      this.saturationShaper.curve = (newCurve as unknown) as any;
     }
   }
 
