@@ -1,5 +1,5 @@
 // ============================================================================
-// STAGE C - PHASE 17: LOOK-AHEAD ANTI-DRIFT TIMER CLOCK (TrackerClock.ts)
+// STAGE C - PHASE 18: TICKS-PER-LINE BACKGROUND SUB-CLOCK (TrackerClock.ts)
 // ============================================================================
 
 export class TrackerClock {
@@ -9,17 +9,22 @@ export class TrackerClock {
   private nextStepTime: number = 0.0;
   private currentBpm: number = 120;
   private isRunning: boolean = false;
-  private callback: ((time: number) => void) | null = null;
+  private callback: ((time: number, line: number, tick: number) => void) | null = null;
+
+  // ============================================================================
+  // PHASE 18: TICKS-PER-LINE (TPL) SUB-CLOCK COORDINATES
+  // ============================================================================
+  public currentTick: number = 0;
+  public currentLine: number = 0;
+  public ticksPerLine: number = 6; // M8 Specification: 6 ticks per line subdivision
+  // ============================================================================
 
   constructor() {}
 
-  // ============================================================================
-  // PHASE 17: HIGH-PRECISION ANTI-DRIFT LOOK-AHEAD SCHEDULER ENGINE
-  // ============================================================================
   public startClock(
     audioCtx: AudioContext,
     bpm: number,
-    onScheduleStep: (time: number) => void
+    onScheduleStep: (time: number, line: number, tick: number) => void
   ): void {
     if (this.isRunning) {
       this.stopClock();
@@ -29,6 +34,10 @@ export class TrackerClock {
     this.callback = onScheduleStep;
     this.isRunning = true;
 
+    // Reset playhead sub-clock coordinates on start
+    this.currentLine = 0;
+    this.currentTick = 0;
+
     // Anchor starting time slightly ahead of current audio context time
     this.nextStepTime = audioCtx.currentTime + 0.05;
 
@@ -37,14 +46,25 @@ export class TrackerClock {
         return;
       }
 
-      // Calculate 16th note step duration based on current BPM
-      const secondsPerStep = (60.0 / this.currentBpm) / 4.0;
+      // ============================================================================
+      // PHASE 18: SUB-STEP MATHEMATICAL STEPPER (Fractional TPL Tick Interval)
+      // ============================================================================
+      const secondsPerTick = ((60.0 / this.currentBpm) / 4.0) / this.ticksPerLine;
 
-      // Strict look-ahead window loop: while step time falls within lookahead buffer (40ms)
+      // Strict look-ahead window loop: while tick time falls within lookahead buffer (40ms)
       while (this.nextStepTime < audioCtx.currentTime + (this.lookahead / 1000.0)) {
-        this.callback(this.nextStepTime);
-        this.nextStepTime += secondsPerStep;
+        this.callback(this.nextStepTime, this.currentLine, this.currentTick);
+
+        // Advance tick and relational playhead timeline wrap
+        this.currentTick++;
+        if (this.currentTick >= this.ticksPerLine) {
+          this.currentTick = 0;
+          this.currentLine = (this.currentLine + 1) % 16; // 16-step phrase line loop
+        }
+
+        this.nextStepTime += secondsPerTick;
       }
+      // ============================================================================
 
       this.timerId = window.setTimeout(tick, this.scheduleInterval);
     };
@@ -68,5 +88,4 @@ export class TrackerClock {
   public getIsRunning(): boolean {
     return this.isRunning;
   }
-  // ============================================================================
 }
