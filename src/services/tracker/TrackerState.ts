@@ -1,6 +1,18 @@
 // ============================================================================
-// STAGE B - PHASE 12: CHROMATIC NOTE MAPPER & STATE ENGINE (TrackerState.ts)
+// STAGE B - PHASE 13: TRACKER FX1 ROUTER & STATE ENGINE (TrackerState.ts)
 // ============================================================================
+
+export type SPFxType = 'djfxLooper' | 'vinylSim' | 'bitCrasher' | 'isolator' | 'saturation' | 'echo' | 'eq' | 'vocoder' | 'bypass';
+
+export const TRACKER_FX1_COMMANDS: Record<string, SPFxType> = {
+  'X00': 'bypass',
+  'X01': 'vinylSim',
+  'X02': 'djfxLooper',
+  'X03': 'saturation',
+  'X04': 'echo',
+  'X05': 'eq',
+  'X06': 'vocoder',
+};
 
 export interface TrackerStep {
   step: number;
@@ -68,7 +80,7 @@ export class TrackerState {
   private static readonly NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
   // ============================================================================
-  // PHASE 12: CHROMATIC NOTE TRANSLATOR UTILITIES (0-63 to Tracker Pitch Strings)
+  // PHASE 12: CHROMATIC NOTE TRANSLATOR UTILITIES
   // ============================================================================
   public static getNoteNameFromPadId(padId: number | null): string {
     if (padId === null || padId < 0 || padId > 63) {
@@ -97,5 +109,15 @@ export class TrackerState {
     const padId = (octave - 4) * 12 + noteIndex;
     return padId >= 0 && padId <= 63 ? padId : null;
   }
+
   // ============================================================================
+  // PHASE 13: FX1 COMMAND RESOLVER UTILITY
+  // ============================================================================
+  public static resolveFXTypeFromCommand(commandStr: string): SPFxType {
+    if (!commandStr) {
+      return 'bypass';
+    }
+    const upper = commandStr.trim().toUpperCase();
+    return TRACKER_FX1_COMMANDS[upper] || 'bypass';
+  }
 }
