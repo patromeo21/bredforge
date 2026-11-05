@@ -13,7 +13,7 @@ export interface SampleLoader {
   [key: string]: any;
 }
 
-export interface BredForgeCanvasProps {
+export interface BredForgeCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
   audioCtx: AudioContext | null;
   sampleManager: SampleManager | null;
   sampleLoader: SampleLoader | null;
@@ -27,6 +27,7 @@ export interface BredForgeCanvasProps {
   onStop: () => void;
   onPadTrigger?: (bankIndex: number, padIndex: number) => void;
   onAudioUpload?: (file: File) => void;
+  [key: string]: any;
 }
 
 export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
@@ -43,6 +44,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   onStop,
   onPadTrigger,
   onAudioUpload,
+  ...restProps
 }) => {
   const [internalBank, setInternalBank] = useState<'A' | 'B' | 'C' | 'D'>('A');
   const [sampleLoaded, setSampleLoaded] = useState<boolean>(false);
@@ -90,7 +92,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   };
 
   return (
-    <div className="flex flex-col w-full max-w-md mx-auto p-4 bg-[#0a0a0a] text-zinc-100 rounded-xl select-none">
+    <div {...restProps} className={`flex flex-col w-full max-w-md mx-auto p-4 bg-[#0a0a0a] text-zinc-100 rounded-xl select-none ${restProps.className || ''}`}>
       <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="text-lg font-bold tracking-wider text-amber-500">BredForge SP/Tracker</h1>
