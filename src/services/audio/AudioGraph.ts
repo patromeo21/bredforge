@@ -1,5 +1,5 @@
 // ============================================================================
-// STAGE A - PHASE 7: PROPORTIONAL-Q SSL EQ CARVER (AudioGraph.ts)
+// STAGE A - PHASE 8: SPATIAL ROBOT VOCODER MATRIX (AudioGraph.ts)
 // ============================================================================
 
 export type SPFxType = 'djfxLooper' | 'vinylSim' | 'bitCrasher' | 'isolator' | 'saturation' | 'echo' | 'eq' | 'vocoder' | 'bypass';
@@ -39,12 +39,18 @@ export class AudioGraph {
   public echoFeedback: GainNode;
   public echoFilter: BiquadFilterNode;
 
-  // ============================================================================
-  // PHASE 7: SSL G-SERIES PROPORTIONAL-Q EQ NODES
-  // ============================================================================
+  // SSL G-Series Proportional-Q EQ Nodes
   public eqLow: BiquadFilterNode;
   public eqMid: BiquadFilterNode;
   public eqHigh: BiquadFilterNode;
+
+  // ============================================================================
+  // PHASE 8: EVENTIDE H3000 SPATIAL ROBOT VOCODER NODES
+  // ============================================================================
+  public vocoderLeftDelay: DelayNode;
+  public vocoderRightDelay: DelayNode;
+  public vocoderLeftGain: GainNode;
+  public vocoderRightGain: GainNode;
   // ============================================================================
 
   // Master Brickwall Limiter & Bus Compressor Nodes
@@ -71,7 +77,7 @@ export class AudioGraph {
 
     Object.entries(this.effectBuses).forEach(([name, bus]) => {
       bus.gain.value = 0.0;
-      if (name !== 'saturation' && name !== 'djfxLooper' && name !== 'echo' && name !== 'eq') {
+      if (name !== 'saturation' && name !== 'djfxLooper' && name !== 'echo' && name !== 'eq' && name !== 'vocoder') {
         bus.connect(this.masterGain);
       }
     });
@@ -119,7 +125,7 @@ export class AudioGraph {
     // RESONANT ECHO BUS WIRING
     // ============================================================================
     this.echoDelay = this.ctx.createDelay(2.0);
-    this.echoDelay.delayTime.value = 0.375; // Dotted 8th note default
+    this.echoDelay.delayTime.value = 0.375;
 
     this.echoFeedback = this.ctx.createGain();
     this.echoFeedback.gain.value = 0.4;
@@ -136,7 +142,7 @@ export class AudioGraph {
     // ============================================================================
 
     // ============================================================================
-    // PHASE 7: SSL G-SERIES PROPORTIONAL-Q EQ PIPELINE WIRING
+    // SSL G-SERIES PROPORTIONAL-Q EQ PIPELINE WIRING
     // ============================================================================
     this.eqLow = this.ctx.createBiquadFilter();
     this.eqLow.type = 'lowshelf';
@@ -154,10 +160,32 @@ export class AudioGraph {
     this.eqHigh.frequency.value = 5000;
     this.eqHigh.gain.value = 0;
 
-    // Series pipeline: effectBuses.eq -> eqLow -> eqMid -> eqHigh -> Master DYNAMICS chain
     this.effectBuses.eq.connect(this.eqLow);
     this.eqLow.connect(this.eqMid);
     this.eqMid.connect(this.eqHigh);
+    // ============================================================================
+
+    // ============================================================================
+    // PHASE 8: SPATIAL ROBOT VOCODER MATRIX WIRING (Eventide H3000 Splice)
+    // ============================================================================
+    this.vocoderLeftDelay = this.ctx.createDelay(0.1);
+    this.vocoderLeftDelay.delayTime.value = 0.007; // 7ms micro-delay
+
+    this.vocoderRightDelay = this.ctx.createDelay(0.1);
+    this.vocoderRightDelay.delayTime.value = 0.011; // 11ms micro-delay
+
+    this.vocoderLeftGain = this.ctx.createGain();
+    this.vocoderLeftGain.gain.value = 0.707;
+
+    this.vocoderRightGain = this.ctx.createGain();
+    this.vocoderRightGain.gain.value = 0.707;
+
+    // Parallel split from vocoder bus into both delay channels
+    this.effectBuses.vocoder.connect(this.vocoderLeftDelay);
+    this.effectBuses.vocoder.connect(this.vocoderRightDelay);
+
+    this.vocoderLeftDelay.connect(this.vocoderLeftGain);
+    this.vocoderRightDelay.connect(this.vocoderRightGain);
     // ============================================================================
 
     // ============================================================================
@@ -182,6 +210,8 @@ export class AudioGraph {
     this.djfxDelay.connect(this.masterBusCompressor);
     this.echoDelay.connect(this.masterBusCompressor);
     this.eqHigh.connect(this.masterBusCompressor);
+    this.vocoderLeftGain.connect(this.masterBusCompressor);
+    this.vocoderRightGain.connect(this.masterBusCompressor);
 
     // Connect Dry Line directly into Master Bus Compressor as well
     this.dryGain.connect(this.masterBusCompressor);
@@ -258,9 +288,6 @@ export class AudioGraph {
     }
   }
 
-  // ============================================================================
-  // PHASE 7: PROPORTIONAL-Q SSL EQ INTERFACE (.setTargetAtTime automation)
-  // ============================================================================
   public setEQParams(lowGain: number, midGain: number, highGain: number, timeConstant: number = 0.01): void {
     const now = this.ctx.currentTime;
 
@@ -270,13 +297,27 @@ export class AudioGraph {
 
     if (this.eqMid) {
       this.eqMid.gain.setTargetAtTime(Math.max(-24, Math.min(24, midGain)), now, timeConstant);
-      // Proportional-Q algorithm: narrow Q (sharper carve) as midGain magnitude increases
       const dynamicQ = Math.max(0.5, Math.min(8.0, 1.0 + Math.abs(midGain) * 0.25));
       this.eqMid.Q.setTargetAtTime(dynamicQ, now, timeConstant);
     }
 
     if (this.eqHigh) {
       this.eqHigh.gain.setTargetAtTime(Math.max(-24, Math.min(24, highGain)), now, timeConstant);
+    }
+  }
+
+  // ============================================================================
+  // PHASE 8: AUTOMATED SPATIAL LAYER CONTROLLER (.setTargetAtTime automation)
+  // ============================================================================
+  public setVocoderParams(gainLeft: number, gainRight: number, timeConstant: number = 0.01): void {
+    const now = this.ctx.currentTime;
+
+    if (this.vocoderLeftGain) {
+      this.vocoderLeftGain.gain.setTargetAtTime(Math.max(0.0, Math.min(1.0, gainLeft)), now, timeConstant);
+    }
+
+    if (this.vocoderRightGain) {
+      this.vocoderRightGain.gain.setTargetAtTime(Math.max(0.0, Math.min(1.0, gainRight)), now, timeConstant);
     }
   }
   // ============================================================================
