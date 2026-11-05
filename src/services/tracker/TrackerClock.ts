@@ -1,5 +1,5 @@
 // ============================================================================
-// STAGE C - PHASE 19: DYNAMIC SECONDS-PER-TICK SCALER (TrackerClock.ts)
+// STAGE C - PHASE 20: DYNAMIC PLAYHEAD GRID FORWARD SWAPPER (TrackerClock.ts)
 // ============================================================================
 
 export class TrackerClock {
@@ -10,6 +10,12 @@ export class TrackerClock {
   private currentBpm: number = 120;
   private isRunning: boolean = false;
   private callback: ((time: number, line: number, tick: number) => void) | null = null;
+
+  // ============================================================================
+  // PHASE 20: PATTERN BOUNDARY PRE-FETCH EVENT HOOK
+  // ============================================================================
+  public onPreFetchNextPattern?: (line: number, tick: number) => void;
+  // ============================================================================
 
   // TPL Sub-Clock Coordinates
   public currentTick: number = 0;
@@ -40,14 +46,20 @@ export class TrackerClock {
         return;
       }
 
-      // ============================================================================
-      // PHASE 19: DYNAMIC SECONDS-PER-TICK SCALER (Live BPM Evaluation)
-      // ============================================================================
       const dynamicBpm = Math.max(20, Math.min(300, this.currentBpm));
       const secondsPerTick = ((60.0 / dynamicBpm) / 4.0) / this.ticksPerLine;
 
-      // Strict look-ahead window loop: evaluates dynamic timing on every iteration
       while (this.nextStepTime < audioCtx.currentTime + (this.lookahead / 1000.0)) {
+        // ============================================================================
+        // PHASE 20: TICK 5 ROW 15 BOUNDARY PRE-FETCH INTERCEPT
+        // ============================================================================
+        if (this.currentLine === 15 && this.currentTick === 5) {
+          if (this.onPreFetchNextPattern) {
+            this.onPreFetchNextPattern(this.currentLine, this.currentTick);
+          }
+        }
+        // ============================================================================
+
         this.callback(this.nextStepTime, this.currentLine, this.currentTick);
 
         this.currentTick++;
@@ -58,7 +70,6 @@ export class TrackerClock {
 
         this.nextStepTime += secondsPerTick;
       }
-      // ============================================================================
 
       this.timerId = window.setTimeout(tick, this.scheduleInterval);
     };
@@ -66,9 +77,6 @@ export class TrackerClock {
     this.timerId = window.setTimeout(tick, this.scheduleInterval);
   }
 
-  // ============================================================================
-  // PHASE 19: PUBLIC TEMPO MODIFIER HOOK
-  // ============================================================================
   public updateTempo(newBpm: number): void {
     this.currentBpm = Math.max(20, Math.min(300, newBpm));
   }
@@ -76,7 +84,6 @@ export class TrackerClock {
   public updateBpm(newBpm: number): void {
     this.updateTempo(newBpm);
   }
-  // ============================================================================
 
   public stopClock(): void {
     this.isRunning = false;
