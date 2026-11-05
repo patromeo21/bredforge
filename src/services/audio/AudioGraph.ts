@@ -1,5 +1,5 @@
 // ============================================================================
-// STAGE A - PHASE 8: SPATIAL ROBOT VOCODER MATRIX (AudioGraph.ts)
+// STAGE A - PHASE 9: CLICK-FREE EQUAL-POWER TRANSITION CROSSFADER (AudioGraph.ts)
 // ============================================================================
 
 export type SPFxType = 'djfxLooper' | 'vinylSim' | 'bitCrasher' | 'isolator' | 'saturation' | 'echo' | 'eq' | 'vocoder' | 'bypass';
@@ -44,14 +44,11 @@ export class AudioGraph {
   public eqMid: BiquadFilterNode;
   public eqHigh: BiquadFilterNode;
 
-  // ============================================================================
-  // PHASE 8: EVENTIDE H3000 SPATIAL ROBOT VOCODER NODES
-  // ============================================================================
+  // Eventide H3000 Spatial Robot Vocoder Nodes
   public vocoderLeftDelay: DelayNode;
   public vocoderRightDelay: DelayNode;
   public vocoderLeftGain: GainNode;
   public vocoderRightGain: GainNode;
-  // ============================================================================
 
   // Master Brickwall Limiter & Bus Compressor Nodes
   public masterBusCompressor: DynamicsCompressorNode;
@@ -166,13 +163,13 @@ export class AudioGraph {
     // ============================================================================
 
     // ============================================================================
-    // PHASE 8: SPATIAL ROBOT VOCODER MATRIX WIRING (Eventide H3000 Splice)
+    // SPATIAL ROBOT VOCODER MATRIX WIRING
     // ============================================================================
     this.vocoderLeftDelay = this.ctx.createDelay(0.1);
-    this.vocoderLeftDelay.delayTime.value = 0.007; // 7ms micro-delay
+    this.vocoderLeftDelay.delayTime.value = 0.007;
 
     this.vocoderRightDelay = this.ctx.createDelay(0.1);
-    this.vocoderRightDelay.delayTime.value = 0.011; // 11ms micro-delay
+    this.vocoderRightDelay.delayTime.value = 0.011;
 
     this.vocoderLeftGain = this.ctx.createGain();
     this.vocoderLeftGain.gain.value = 0.707;
@@ -180,7 +177,6 @@ export class AudioGraph {
     this.vocoderRightGain = this.ctx.createGain();
     this.vocoderRightGain.gain.value = 0.707;
 
-    // Parallel split from vocoder bus into both delay channels
     this.effectBuses.vocoder.connect(this.vocoderLeftDelay);
     this.effectBuses.vocoder.connect(this.vocoderRightDelay);
 
@@ -205,7 +201,6 @@ export class AudioGraph {
     this.masterBrickwallLimiter.attack.value = 0.001;
     this.masterBrickwallLimiter.release.value = 0.050;
 
-    // Connect all processed effect paths into Master Bus Compressor
     this.saturationShaper.connect(this.masterBusCompressor);
     this.djfxDelay.connect(this.masterBusCompressor);
     this.echoDelay.connect(this.masterBusCompressor);
@@ -213,10 +208,8 @@ export class AudioGraph {
     this.vocoderLeftGain.connect(this.masterBusCompressor);
     this.vocoderRightGain.connect(this.masterBusCompressor);
 
-    // Connect Dry Line directly into Master Bus Compressor as well
     this.dryGain.connect(this.masterBusCompressor);
 
-    // Compress -> Brickwall Limiter -> Master Gain -> Destination
     this.masterBusCompressor.connect(this.masterBrickwallLimiter);
     this.masterBrickwallLimiter.connect(this.masterGain);
     this.masterGain.connect(this.ctx.destination);
@@ -306,9 +299,6 @@ export class AudioGraph {
     }
   }
 
-  // ============================================================================
-  // PHASE 8: AUTOMATED SPATIAL LAYER CONTROLLER (.setTargetAtTime automation)
-  // ============================================================================
   public setVocoderParams(gainLeft: number, gainRight: number, timeConstant: number = 0.01): void {
     const now = this.ctx.currentTime;
 
@@ -318,6 +308,59 @@ export class AudioGraph {
 
     if (this.vocoderRightGain) {
       this.vocoderRightGain.gain.setTargetAtTime(Math.max(0.0, Math.min(1.0, gainRight)), now, timeConstant);
+    }
+  }
+
+  // ============================================================================
+  // PHASE 9: CLICK-FREE 5ms EQUAL-POWER TRANSITION CROSSFADER
+  // ============================================================================
+  public punchInEffect(targetFX: SPFxType, paramValue: number): void {
+    const now = this.ctx.currentTime;
+    const rampEnd = now + 0.005; // Exact 5ms hardware linear ramp timeline
+
+    if (targetFX === 'bypass') {
+      // Smoothly ramp Dry gain back to 1.0 and fade all effect buses to 0.0
+      if (this.dryGain && this.dryGain.gain) {
+        this.dryGain.gain.cancelScheduledValues(now);
+        this.dryGain.gain.setValueAtTime(this.dryGain.gain.value, now);
+        this.dryGain.gain.linearRampToValueAtTime(1.0, rampEnd);
+      }
+
+      Object.values(this.effectBuses).forEach((bus) => {
+        if (bus && bus.gain) {
+          bus.gain.cancelScheduledValues(now);
+          bus.gain.setValueAtTime(bus.gain.value, now);
+          bus.gain.linearRampToValueAtTime(0.0, rampEnd);
+        }
+      });
+    } else {
+      // Crossfade Dry gain down to 0.0
+      if (this.dryGain && this.dryGain.gain) {
+        this.dryGain.gain.cancelScheduledValues(now);
+        this.dryGain.gain.setValueAtTime(this.dryGain.gain.value, now);
+        this.dryGain.gain.linearRampToValueAtTime(0.0, rampEnd);
+      }
+
+      // Mute all other parallel effect buses, drive the target bus to 1.0
+      Object.entries(this.effectBuses).forEach(([name, bus]) => {
+        if (bus && bus.gain) {
+          bus.gain.cancelScheduledValues(now);
+          bus.gain.setValueAtTime(bus.gain.value, now);
+          const targetGainValue = name === targetFX ? 1.0 : 0.0;
+          bus.gain.linearRampToValueAtTime(targetGainValue, rampEnd);
+        }
+      });
+
+      // Pass parameter values directly into corresponding effect controller methods
+      if (targetFX === 'djfxLooper') {
+        this.setDJFXParams(paramValue, 0.5, true);
+      } else if (targetFX === 'saturation') {
+        this.setSaturationParams(paramValue, 'N');
+      } else if (targetFX === 'echo') {
+        this.setEchoParams(paramValue, 0.4, 1200);
+      } else if (targetFX === 'vocoder') {
+        this.setVocoderParams(paramValue, paramValue);
+      }
     }
   }
   // ============================================================================
