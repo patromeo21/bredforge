@@ -1,5 +1,5 @@
 // ============================================================================
-// STAGE B - PHASE 13: TRACKER FX1 ROUTER & STATE ENGINE (TrackerState.ts)
+// STAGE B - PHASE 14: FX2 MODULATION OVERLAYS & STATE ENGINE (TrackerState.ts)
 // ============================================================================
 
 export type SPFxType = 'djfxLooper' | 'vinylSim' | 'bitCrasher' | 'isolator' | 'saturation' | 'echo' | 'eq' | 'vocoder' | 'bypass';
@@ -19,7 +19,7 @@ export interface TrackerStep {
   padId: number | null;
   vol: number;
   fxType: string;
-  fxParam: number | null;
+  fxParam: number | null; // FX2 parameter modulation value
 }
 
 export type PhraseBlock = TrackerStep[];
@@ -79,9 +79,6 @@ export function createInitialTrackerState(): ProjectStateSchema {
 export class TrackerState {
   private static readonly NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
-  // ============================================================================
-  // PHASE 12: CHROMATIC NOTE TRANSLATOR UTILITIES
-  // ============================================================================
   public static getNoteNameFromPadId(padId: number | null): string {
     if (padId === null || padId < 0 || padId > 63) {
       return '---';
@@ -110,9 +107,6 @@ export class TrackerState {
     return padId >= 0 && padId <= 63 ? padId : null;
   }
 
-  // ============================================================================
-  // PHASE 13: FX1 COMMAND RESOLVER UTILITY
-  // ============================================================================
   public static resolveFXTypeFromCommand(commandStr: string): SPFxType {
     if (!commandStr) {
       return 'bypass';
@@ -120,4 +114,38 @@ export class TrackerState {
     const upper = commandStr.trim().toUpperCase();
     return TRACKER_FX1_COMMANDS[upper] || 'bypass';
   }
+
+  // ============================================================================
+  // PHASE 14: FX2 PARAMETER MODULATION OVERLAY SCALING UTILITIES
+  // ============================================================================
+  public static resolveFX2ParameterValue(fxType: SPFxType, rawParam: number | null): number {
+    if (rawParam === null || isNaN(rawParam)) {
+      switch (fxType) {
+        case 'saturation': return 4.0;
+        case 'echo': return 0.4;
+        case 'djfxLooper': return 0.25;
+        case 'vocoder': return 0.707;
+        case 'eq': return 0.0;
+        default: return 1.0;
+      }
+    }
+
+    const normalized = rawParam > 1.0 ? Math.min(1.0, rawParam / 255.0) : Math.max(0.0, Math.min(1.0, rawParam));
+
+    switch (fxType) {
+      case 'saturation':
+        return 1.0 + normalized * 11.0; // 1.0 to 12.0 drive
+      case 'echo':
+        return normalized * 0.95;       // 0.0 to 0.95 feedback
+      case 'djfxLooper':
+        return 0.01 + normalized * 1.99;  // 0.01 to 2.0s stutter time
+      case 'vocoder':
+        return normalized;              // 0.0 to 1.0 stereo gain
+      case 'eq':
+        return -24.0 + normalized * 48.0; // -24dB to +24dB gain
+      default:
+        return normalized;
+    }
+  }
+  // ============================================================================
 }
