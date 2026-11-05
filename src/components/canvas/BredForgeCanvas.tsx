@@ -3,11 +3,11 @@
 // ============================================================================
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { TrackerState, TrackerStep, PhraseBlock, ProjectStateSchema, SPFxType } from '../../services/tracker/TrackerState';
+import { TrackerState, TrackerStep, PhraseBlock, ProjectStateSchema, SPFxType, createInitialTrackerState, TRACKER_FX1_COMMANDS } from '../../services/tracker/TrackerState';
 import { AudioGraph } from '../../services/audio/AudioGraph';
 
 export interface BredForgeCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
-  audioCtx?: AudioContext;
+  audioCtx?: AudioContext | null;
   audioGraph?: AudioGraph;
   initialProjectState?: ProjectStateSchema;
   isPlaying?: boolean;
@@ -41,7 +41,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   const [isEditMode, setIsEditMode] = useState<boolean>(true);
   
   const [projectState, setProjectState] = useState<ProjectStateSchema>(
-    initialProjectState || TrackerState.createInitialTrackerState()
+    initialProjectState || createInitialTrackerState()
   );
 
   const [activePadStates, setActivePadStates] = useState<boolean[]>(Array(16).fill(false));
@@ -100,7 +100,6 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         if (ctx) {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           
-          // Draw high-performance hardware background graticule
           ctx.fillStyle = currentTheme.panel;
           ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -172,10 +171,12 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 
         const updatedPhrase = phrase.map((stepItem) => {
           if (stepItem.step === cursorRow + 1) {
+            const commandKey = `X${padIndex < 10 ? '0' + padIndex : padIndex.toString(16).toUpperCase()}`;
+            const resolvedFx: SPFxType = padIndex < 7 ? (TRACKER_FX1_COMMANDS[commandKey as keyof typeof TRACKER_FX1_COMMANDS] || 'bypass') : 'bypass';
             return {
               ...stepItem,
               padId: padIndex,
-              fxType: padIndex < 7 ? Object.values(TrackerState)['TRACKER_FX1_COMMANDS']?.[padIndex] || 'bypass' : 'bypass'
+              fxType: resolvedFx
             };
           }
           return stepItem;
