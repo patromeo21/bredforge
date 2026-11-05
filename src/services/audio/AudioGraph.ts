@@ -1,5 +1,5 @@
 // ============================================================================
-// STAGE A - PHASE 3: WAVESHAPER DOUBLE-CAST REPAIR (AudioGraph.ts)
+// STAGE A - PHASE 4: TIME-INTERPOLATED DJFX LOOP STUTTER MATRIX (AudioGraph.ts)
 // ============================================================================
 
 export type SPFxType = 'djfxLooper' | 'vinylSim' | 'bitCrasher' | 'isolator' | 'saturation' | 'bypass';
@@ -25,6 +25,15 @@ export class AudioGraph {
   };
 
   public saturationShaper: WaveShaperNode;
+
+  // ============================================================================
+  // PHASE 4: DJFX LOOP STUTTER MATRIX NODES
+  // ============================================================================
+  public djfxDelay: DelayNode;
+  public djfxFeedback: GainNode;
+  public djfxGate: GainNode;
+  // ============================================================================
+
   public padMappings: Map<string, PadRoutingConfig>;
 
   constructor(audioCtx?: AudioContext) {
@@ -45,7 +54,7 @@ export class AudioGraph {
 
     Object.entries(this.effectBuses).forEach(([name, bus]) => {
       bus.gain.value = 0.0;
-      if (name !== 'saturation') {
+      if (name !== 'saturation' && name !== 'djfxLooper') {
         bus.connect(this.masterGain);
       }
     });
@@ -60,6 +69,30 @@ export class AudioGraph {
 
     this.effectBuses.saturation.connect(this.saturationShaper);
     this.saturationShaper.connect(this.masterGain);
+    // ============================================================================
+
+    // ============================================================================
+    // PHASE 4: RECURSIVE DJFX LOOP-CATCHER CIRCUIT WIRING
+    // ============================================================================
+    this.djfxGate = this.ctx.createGain();
+    this.djfxGate.gain.value = 1.0;
+
+    this.djfxDelay = this.ctx.createDelay(5.0); // Max 5 second delay buffer
+    this.djfxDelay.delayTime.value = 0.25; // Default stutter quarter-note
+
+    this.djfxFeedback = this.ctx.createGain();
+    this.djfxFeedback.gain.value = 0.0; // Default zero feedback until engaged
+
+    // Routing: djfxLooper Bus -> djfxGate -> djfxDelay
+    this.effectBuses.djfxLooper.connect(this.djfxGate);
+    this.djfxGate.connect(this.djfxDelay);
+
+    // Recursive feedback loop: djfxDelay -> djfxFeedback -> djfxDelay
+    this.djfxDelay.connect(this.djfxFeedback);
+    this.djfxFeedback.connect(this.djfxDelay);
+
+    // Output: djfxDelay -> masterGain
+    this.djfxDelay.connect(this.masterGain);
     // ============================================================================
 
     this.dryGain.connect(this.masterGain);
@@ -89,6 +122,27 @@ export class AudioGraph {
       this.saturationShaper.curve = (newCurve as unknown) as any;
     }
   }
+
+  // ============================================================================
+  // PHASE 4: POP-FREE TIME-INTERPOLATED DJFX PARAMETER AUTOMATION
+  // ============================================================================
+  public setDJFXParams(time: number, feedback: number, isGateOpen: boolean, timeConstant: number = 0.01): void {
+    const now = this.ctx.currentTime;
+    
+    // Smoothly shift stutter speeds using timeConstant to eliminate audio clicks/pops
+    if (this.djfxDelay && this.djfxDelay.delayTime) {
+      this.djfxDelay.delayTime.setTargetAtTime(Math.max(0.01, Math.min(5.0, time)), now, timeConstant);
+    }
+
+    if (this.djfxFeedback && this.djfxFeedback.gain) {
+      this.djfxFeedback.gain.setTargetAtTime(Math.max(0.0, Math.min(0.98, feedback)), now, timeConstant);
+    }
+
+    if (this.djfxGate && this.djfxGate.gain) {
+      this.djfxGate.gain.setTargetAtTime(isGateOpen ? 1.0 : 0.0, now, 0.005);
+    }
+  }
+  // ============================================================================
 
   private initializePadMappings(): void {
     for (let i = 0; i < 64; i++) {
