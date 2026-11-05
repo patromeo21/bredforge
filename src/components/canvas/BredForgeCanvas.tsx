@@ -1,13 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-
-// Interfaces matching internal project state models
-export interface PatternState {
-  currentPattern: number;
-  steps: any[];
-  isRecording: boolean;
-  isPlaying: boolean;
-  bpm: number;
-}
+import { PatternState } from '../../services/tracker/TrackerEngine';
 
 export interface SampleManager {
   getBuffer?: (id: string | number) => AudioBuffer | null;
@@ -21,7 +13,7 @@ export interface SampleLoader {
   [key: string]: any;
 }
 
-// FULL CONSOLIDATED PROPS INTERFACE (Matching App.tsx inputs)
+// FULL CONSOLIDATED PROPS INTERFACE (Matching App.tsx & TrackerEngine)
 export interface BredForgeCanvasProps {
   audioCtx: AudioContext | null;
   sampleManager: SampleManager | null;
@@ -53,7 +45,6 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   onPadTrigger,
   onAudioUpload,
 }) => {
-  // Normalize internal bank display state
   const [internalBank, setInternalBank] = useState<'A' | 'B' | 'C' | 'D'>('A');
   const [sampleLoaded, setSampleLoaded] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
