@@ -1,5 +1,5 @@
 // ============================================================================
-// STAGE B - PHASE 10: UNIFIED 64-PAD CONTINUOUS HEX DISPATCHER (AudioGraph.ts)
+// STAGE C - PHASE 23: DECOUPLED SPEED & PITCH CONSTANT MODIFIERS (AudioGraph.ts)
 // ============================================================================
 
 export type SPFxType = 'djfxLooper' | 'vinylSim' | 'bitCrasher' | 'isolator' | 'saturation' | 'echo' | 'eq' | 'vocoder' | 'bypass';
@@ -235,6 +235,42 @@ export class AudioGraph {
     const bankIndex = Math.floor(validInt / 16);
     const padIndex = validInt % 16;
     return { bankIndex, padIndex };
+  }
+  // ============================================================================
+
+  // ============================================================================
+  // PHASE 23: DECOUPLED SPEED & PITCH CONSTANT MODIFIERS WORKLET CONNECTOR
+  // ============================================================================
+  public connectStretchNode(
+    source: AudioBufferSourceNode,
+    originalBpm: number,
+    targetBpm: number,
+    semitoneOffset: number
+  ): any {
+    const calculatedRatio = originalBpm / targetBpm;
+    const calculatedPitch = Math.pow(2, semitoneOffset / 12);
+
+    if (source && source.playbackRate) {
+      source.playbackRate.setValueAtTime(calculatedPitch, this.ctx.currentTime);
+    }
+
+    try {
+      const stretchNode = new AudioWorkletNode(this.ctx, 'StretchProcessor');
+      
+      const stretchParam = stretchNode.parameters.get('stretchRatio');
+      if (stretchParam) {
+        stretchParam.setValueAtTime(calculatedRatio, this.ctx.currentTime);
+      }
+
+      source.connect(stretchNode);
+      stretchNode.connect(this.masterBusCompressor);
+
+      return stretchNode;
+    } catch (error) {
+      console.warn("StretchProcessor AudioWorkletNode instantiation failed, falling back to direct dry routing:", error);
+      source.connect(this.dryGain);
+      return source;
+    }
   }
   // ============================================================================
 
