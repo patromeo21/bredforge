@@ -24,15 +24,10 @@ export class AudioGraph {
     vocoder: GainNode;
   };
 
-  // ============================================================================
-  // PHASE 5: CONSOLE SATURATION & PRE-FILTER NODES
-  // ============================================================================
   public saturationPreFilter: BiquadFilterNode;
   public saturationShaper: WaveShaperNode;
   private curveCache: { N: Float32Array; A: Float32Array };
-  // ============================================================================
 
-  // DJFX Loop Stutter Matrix Nodes
   public djfxDelay: DelayNode;
   public djfxFeedback: GainNode;
   public djfxGate: GainNode;
@@ -62,17 +57,13 @@ export class AudioGraph {
       }
     });
 
-    // ============================================================================
-    // PHASE 5: CONSOLE SATURATION WIRING (Bus -> Pre-Filter -> Shaper -> Master)
-    // ============================================================================
     this.saturationPreFilter = this.ctx.createBiquadFilter();
     this.saturationPreFilter.type = 'lowpass';
-    this.saturationPreFilter.frequency.value = 8000; // Warm console high-frequency rolloff
+    this.saturationPreFilter.frequency.value = 8000;
 
     this.saturationShaper = this.ctx.createWaveShaper();
     this.saturationShaper.oversample = '4x';
 
-    // Pre-calculate and cache Neve ('N') and Ampex ('A') curve tables
     this.curveCache = {
       N: this.makeConsoleCurve(4.0, 'N'),
       A: this.makeConsoleCurve(4.0, 'A')
@@ -80,15 +71,10 @@ export class AudioGraph {
 
     this.saturationShaper.curve = (this.curveCache.N as unknown) as any;
 
-    // Connect Saturation bus -> PreFilter -> Shaper -> Master Gain
     this.effectBuses.saturation.connect(this.saturationPreFilter);
     this.saturationPreFilter.connect(this.saturationShaper);
     this.saturationShaper.connect(this.masterGain);
-    // ============================================================================
 
-    // ============================================================================
-    // RECURSIVE DJFX LOOP-CATCHER CIRCUIT WIRING
-    // ============================================================================
     this.djfxGate = this.ctx.createGain();
     this.djfxGate.gain.value = 1.0;
 
@@ -103,7 +89,6 @@ export class AudioGraph {
     this.djfxDelay.connect(this.djfxFeedback);
     this.djfxFeedback.connect(this.djfxDelay);
     this.djfxDelay.connect(this.masterGain);
-    // ============================================================================
 
     this.dryGain.connect(this.masterGain);
     this.masterGain.connect(this.ctx.destination);
@@ -112,9 +97,6 @@ export class AudioGraph {
     this.initializePadMappings();
   }
 
-  // ============================================================================
-  // PHASE 5: DUAL-STYLE CONSOLE CURVE GENERATOR ('N' & 'A' Algorithms)
-  // ============================================================================
   private makeConsoleCurve(drive: number, style: 'N' | 'A'): Float32Array {
     const samples = 44100;
     const curve = new Float32Array(samples);
@@ -125,11 +107,9 @@ export class AudioGraph {
       let distorted = 0;
 
       if (style === 'N') {
-        // Neve-style asymmetrical sigmoid with DC offset for rich even-order harmonics
         const scaledX = x * drive + 0.12; 
         distorted = (Math.sin(scaledX * deg * 90) * 0.9) + (Math.tanh(scaledX * 0.8) * 0.1);
       } else {
-        // Ampex-style symmetric Tanh soft compression for rich odd-order harmonics
         const scaledX = x * drive;
         distorted = Math.tanh(scaledX);
       }
@@ -146,13 +126,10 @@ export class AudioGraph {
     }
   }
 
-  // Legacy helper mapping for single-arg calls
   public setSaturationDrive(driveValue: number): void {
     this.setSaturationParams(driveValue, 'N');
   }
-  // ============================================================================
 
-  // Pop-free time-interpolated DJFX parameter automation
   public setDJFXParams(time: number, feedback: number, isGateOpen: boolean, timeConstant: number = 0.01): void {
     const now = this.ctx.currentTime;
     
@@ -209,7 +186,6 @@ export class AudioGraph {
     }
   }
 
-  // Legacy Compatibility Stubs for MasterDSPController.ts
   public setSidechainPreset(preset: any): void {
     console.log("Legacy sidechain preset call received:", preset);
   }
