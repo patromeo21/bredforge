@@ -48,7 +48,6 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   const [sampleLoaded, setSampleLoaded] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync prop active bank if passed as number or string from App.tsx
   useEffect(() => {
     if (typeof propActiveBank === 'number') {
       const bankMap: Array<'A' | 'B' | 'C' | 'D'> = ['A', 'B', 'C', 'D'];
@@ -58,58 +57,40 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     }
   }, [propActiveBank]);
 
-  // ============================================================================
-  // SURGICAL PHASE 1 INJECTION: THE TOUCH-LATENCY EVENT SHIELD
-  // ============================================================================
-  // Scans exclusively for performance pad elements (.groove-pad-target) and
-  // cancels WebKit 300ms double-tap zoom delay without interfering with native inputs.
+  // Phase 1 Touch-Latency Event Shield
   useEffect(() => {
     const padElements = document.querySelectorAll('.groove-pad-target');
-
     const handleTouchStart = (e: TouchEvent) => {
-      if (e.cancelable) {
-        e.preventDefault(); // Bypass Mobile WebKit 300ms zoom/tap delay
-      }
+      if (e.cancelable) e.preventDefault();
     };
-
     padElements.forEach((el) => {
       el.addEventListener('touchstart', handleTouchStart as EventListener, { passive: false });
     });
-
     return () => {
       padElements.forEach((el) => {
         el.removeEventListener('touchstart', handleTouchStart as EventListener);
       });
     };
   }, [internalBank]);
-  // ============================================================================
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setSampleLoaded(true);
-      if (onAudioUpload) {
-        onAudioUpload(file);
-      } else if (sampleLoader?.loadFromFile) {
-        sampleLoader.loadFromFile(file);
-      }
+      if (onAudioUpload) onAudioUpload(file);
+      else if (sampleLoader?.loadFromFile) sampleLoader.loadFromFile(file);
     }
   };
 
   const handlePadClick = (padIndex: number) => {
     const bankMap = { A: 0, B: 1, C: 2, D: 3 };
     const bankNum = bankMap[internalBank];
-    
-    if (onPadTrigger) {
-      onPadTrigger(bankNum, padIndex);
-    } else if (sampleManager?.playPad) {
-      sampleManager.playPad(bankNum, padIndex);
-    }
+    if (onPadTrigger) onPadTrigger(bankNum, padIndex);
+    else if (sampleManager?.playPad) sampleManager.playPad(bankNum, padIndex);
   };
 
   return (
     <div className="flex flex-col w-full max-w-md mx-auto p-4 bg-[#0a0a0a] text-zinc-100 rounded-xl select-none">
-      {/* Header & Bank Selector */}
       <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="text-lg font-bold tracking-wider text-amber-500">BredForge SP/Tracker</h1>
@@ -118,16 +99,13 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
             <span className={`w-2 h-2 rounded-full ${isPlaying || patternState?.isPlaying ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-600'}`} />
           </div>
         </div>
-        
         <div className="flex gap-1">
           {(['A', 'B', 'C', 'D'] as const).map((bank) => (
             <button
               key={bank}
               onClick={() => setInternalBank(bank)}
               className={`px-3 py-1 text-xs font-semibold rounded transition-colors ${
-                internalBank === bank
-                  ? 'bg-amber-500 text-black'
-                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                internalBank === bank ? 'bg-amber-500 text-black' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
               }`}
             >
               {bank}
@@ -136,7 +114,6 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         </div>
       </div>
 
-      {/* File Upload & Transport Bar */}
       <div className="mb-4 p-3 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <button
@@ -154,3 +131,54 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
           {onPlay && (
             <button
               onClick={onPlay}
+              className={`px-3 py-1 text-xs font-bold rounded ${
+                isPlaying || patternState?.isPlaying ? 'bg-emerald-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+              }`}
+            >
+              PLAY
+            </button>
+          )}
+          <button
+            onClick={onStop}
+            className="px-3 py-1 bg-zinc-800 hover:bg-red-900/50 hover:text-red-400 text-xs font-bold rounded text-zinc-300 border border-zinc-700"
+          >
+            STOP
+          </button>
+        </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="audio/*"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+      </div>
+
+      <div className="grid grid-cols-4 gap-3">
+        {Array.from({ length: 16 }).map((_, index) => {
+          const padDisplayNum = (index + 1).toString().padStart(2, '0');
+          const isActivePad = activePad === index;
+          return (
+            <button
+              key={index}
+              onClick={() => handlePadClick(index)}
+              className={`groove-pad-target aspect-square flex flex-col items-center justify-center bg-zinc-900 border-2 ${
+                isActivePad ? 'border-amber-400 bg-amber-500/20' : 'border-zinc-700 hover:border-amber-500'
+              } active:bg-amber-500/30 active:border-amber-400 rounded-lg transition-colors shadow-inner`}
+              style={{
+                touchAction: 'manipulation',
+                WebkitTouchCallout: 'none',
+                WebkitUserSelect: 'none',
+                userSelect: 'none',
+              }}
+            >
+              <span className="text-[10px] font-mono text-zinc-500">{internalBank}{padDisplayNum}</span>
+              <span className="text-sm font-bold text-zinc-200 mt-1">{index + 1}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
