@@ -1,5 +1,5 @@
 // ============================================================================
-// STAGE A - PHASE 9: CLICK-FREE EQUAL-POWER TRANSITION CROSSFADER (AudioGraph.ts)
+// STAGE B - PHASE 10: UNIFIED 64-PAD CONTINUOUS HEX DISPATCHER (AudioGraph.ts)
 // ============================================================================
 
 export type SPFxType = 'djfxLooper' | 'vinylSim' | 'bitCrasher' | 'isolator' | 'saturation' | 'echo' | 'eq' | 'vocoder' | 'bypass';
@@ -219,6 +219,25 @@ export class AudioGraph {
     this.initializePadMappings();
   }
 
+  // ============================================================================
+  // PHASE 10: UNIFIED 64-PAD CONTINUOUS HEX DISPATCHER STATIC UTILITIES
+  // ============================================================================
+  public static getHexIdFromBank(bankIndex: number, padIndex: number): string {
+    const clampedBank = Math.max(0, Math.min(3, bankIndex));
+    const clampedPad = Math.max(0, Math.min(15, padIndex));
+    const continuousIndex = (clampedBank * 16) + clampedPad;
+    return continuousIndex.toString(16).toUpperCase().padStart(2, '0');
+  }
+
+  public static getBankAndPadFromHex(hexId: string): { bankIndex: number; padIndex: number } {
+    const parsedInt = parseInt(hexId, 16);
+    const validInt = isNaN(parsedInt) ? 0 : Math.max(0, Math.min(63, parsedInt));
+    const bankIndex = Math.floor(validInt / 16);
+    const padIndex = validInt % 16;
+    return { bankIndex, padIndex };
+  }
+  // ============================================================================
+
   private makeConsoleCurve(drive: number, style: 'N' | 'A'): Float32Array {
     const samples = 44100;
     const curve = new Float32Array(samples);
@@ -311,15 +330,11 @@ export class AudioGraph {
     }
   }
 
-  // ============================================================================
-  // PHASE 9: CLICK-FREE 5ms EQUAL-POWER TRANSITION CROSSFADER
-  // ============================================================================
   public punchInEffect(targetFX: SPFxType, paramValue: number): void {
     const now = this.ctx.currentTime;
-    const rampEnd = now + 0.005; // Exact 5ms hardware linear ramp timeline
+    const rampEnd = now + 0.005;
 
     if (targetFX === 'bypass') {
-      // Smoothly ramp Dry gain back to 1.0 and fade all effect buses to 0.0
       if (this.dryGain && this.dryGain.gain) {
         this.dryGain.gain.cancelScheduledValues(now);
         this.dryGain.gain.setValueAtTime(this.dryGain.gain.value, now);
@@ -334,14 +349,12 @@ export class AudioGraph {
         }
       });
     } else {
-      // Crossfade Dry gain down to 0.0
       if (this.dryGain && this.dryGain.gain) {
         this.dryGain.gain.cancelScheduledValues(now);
         this.dryGain.gain.setValueAtTime(this.dryGain.gain.value, now);
         this.dryGain.gain.linearRampToValueAtTime(0.0, rampEnd);
       }
 
-      // Mute all other parallel effect buses, drive the target bus to 1.0
       Object.entries(this.effectBuses).forEach(([name, bus]) => {
         if (bus && bus.gain) {
           bus.gain.cancelScheduledValues(now);
@@ -351,7 +364,6 @@ export class AudioGraph {
         }
       });
 
-      // Pass parameter values directly into corresponding effect controller methods
       if (targetFX === 'djfxLooper') {
         this.setDJFXParams(paramValue, 0.5, true);
       } else if (targetFX === 'saturation') {
@@ -363,11 +375,10 @@ export class AudioGraph {
       }
     }
   }
-  // ============================================================================
 
   private initializePadMappings(): void {
     for (let i = 0; i < 64; i++) {
-      const hexKey = i.toString(16).toUpperCase().padStart(2, '0');
+      const hexKey = AudioGraph.getHexIdFromBank(Math.floor(i / 16), i % 16);
       this.padMappings.set(hexKey, {
         dryLevel: 1.0,
         fxType: 'bypass',
