@@ -7,15 +7,26 @@ import { TrackerState, TrackerStep, PhraseBlock, ProjectStateSchema, SPFxType, c
 import { AudioGraph } from '../../services/audio/AudioGraph';
 
 export interface BredForgeCanvasProps extends React.HTMLAttributes<HTMLDivElement> {
-  audioCtx?: AudioContext | null;
-  audioGraph?: AudioGraph;
-  initialProjectState?: ProjectStateSchema;
+  audioCtx: AudioContext | null;
+  sampleManager: any;
+  sampleLoader: any;
+  patternState?: any;
+  activeBank?: number | string;
+  activePad?: number | null;
   isPlaying?: boolean;
   isRecording?: boolean;
+  bpm?: number;
+  onPlay?: () => void;
+  onStop: () => void;
+  onPadTrigger?: (bankIndex: number, padIndex: number) => void;
+  onAudioUpload?: (file: File) => void;
+  audioGraph?: AudioGraph;
+  initialProjectState?: ProjectStateSchema;
   currentBpm?: number;
   onBpmChange?: (bpm: number) => void;
   onPlayToggle?: () => void;
   onRecordToggle?: () => void;
+  [key: string]: any;
 }
 
 type ViewMode = 'SONG' | 'CHAIN' | 'PHRASE';
@@ -23,10 +34,20 @@ type ThemeMode = 'retro' | 'cyber' | 'amber';
 
 export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   audioCtx,
-  audioGraph,
-  initialProjectState,
+  sampleManager,
+  sampleLoader,
+  patternState,
+  activeBank = 0,
+  activePad = null,
   isPlaying = false,
   isRecording = false,
+  bpm = 120,
+  onPlay,
+  onStop,
+  onPadTrigger,
+  onAudioUpload,
+  audioGraph,
+  initialProjectState,
   currentBpm = 120,
   onBpmChange,
   onPlayToggle,
@@ -155,6 +176,11 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
       });
     }, 120);
 
+    if (onPadTrigger) {
+      const bankIdx = typeof activeBank === 'number' ? activeBank : parseInt(String(activeBank), 10) || 0;
+      onPadTrigger(bankIdx, padIndex);
+    }
+
     if (audioGraph) {
       const hexId = AudioGraph.getHexIdFromBank(0, padIndex);
       const padConfig = audioGraph.getPadConfig(hexId);
@@ -192,7 +218,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         };
       });
     }
-  }, [audioGraph, isEditMode, viewMode, activePhraseKey, cursorRow]);
+  }, [audioGraph, isEditMode, viewMode, activePhraseKey, cursorRow, onPadTrigger, activeBank]);
 
   const currentPhraseBlock: PhraseBlock = projectState.phrases[activePhraseKey] || Array.from({ length: 16 }, (_, i) => ({
     step: i + 1,
@@ -201,6 +227,9 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     fxType: 'bypass',
     fxParam: null
   }));
+
+  const handlePlayAction = onPlayToggle || onPlay;
+  const handleStopAction = onStop || (() => {});
 
   return (
     <div
@@ -267,7 +296,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
-              onClick={onPlayToggle}
+              onClick={handlePlayAction}
               style={{
                 backgroundColor: isPlaying ? '#22c55e' : currentTheme.panel,
                 color: isPlaying ? '#000' : currentTheme.text,
@@ -278,6 +307,19 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
               }}
             >
               {isPlaying ? 'PAUSE' : 'PLAY'}
+            </button>
+            <button
+              onClick={handleStopAction}
+              style={{
+                backgroundColor: currentTheme.panel,
+                color: currentTheme.text,
+                border: `1px solid ${currentTheme.border}`,
+                padding: '6px 14px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+              }}
+            >
+              STOP
             </button>
             <button
               onClick={onRecordToggle}
