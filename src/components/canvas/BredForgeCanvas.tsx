@@ -95,8 +95,8 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         <div>
           <h1 className="text-lg font-bold tracking-wider text-amber-500">BredForge SP/Tracker</h1>
           <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-[10px] font-mono text-zinc-400">BPM: {patternState?.bpm ?? bpm}</span>
-            <span className={`w-2 h-2 rounded-full ${isPlaying || patternState?.isPlaying ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-600'}`} />
+            <span className="text-[10px] font-mono text-zinc-400">BPM: {bpm}</span>
+            <span className={`w-2 h-2 rounded-full ${isPlaying ? 'bg-emerald-500 animate-pulse' : 'bg-zinc-600'}`} />
           </div>
         </div>
         <div className="flex gap-1">
@@ -132,7 +132,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
             <button
               onClick={onPlay}
               className={`px-3 py-1 text-xs font-bold rounded ${
-                isPlaying || patternState?.isPlaying ? 'bg-emerald-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                isPlaying ? 'bg-emerald-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
               }`}
             >
               PLAY
