@@ -1,5 +1,5 @@
 // ============================================================================
-// STAGE A - PHASE 2: HIGH-FIDELITY PARALLEL GRAPH INITIALIZATION
+// STAGE A - PHASE 2: HIGH-FIDELITY PARALLEL GRAPH INITIALIZATION (UPDATED)
 // ============================================================================
 
 export type SPFxType = 'djfxLooper' | 'vinylSim' | 'bitCrasher' | 'isolator' | 'bypass';
@@ -98,5 +98,16 @@ export class AudioGraph {
     if (this.ctx.state === 'suspended') {
       await this.ctx.resume();
     }
+  }
+
+  // ============================================================================
+  // LEGACY COMPATIBILITY STUBS FOR MasterDSPController.ts
+  // ============================================================================
+  public setSidechainPreset(preset: any): void {
+    console.log("Legacy sidechain preset call received:", preset);
+  }
+
+  public toggleFilterFlip(state: boolean): void {
+    console.log("Legacy filter flip call received:", state);
   }
 }
