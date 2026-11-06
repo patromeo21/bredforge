@@ -1,106 +1,137 @@
 // ============================================================================
-// STAGE E - PHASE 30: TACTICAL 4x4 MPC-STYLE PAD GRID SCREEN LAYER (PadMatrix.tsx)
+// STAGE F - CORE PERFORMANCE ENGINE: SP-STYLE AUDITION MATRIX (PadMatrix.tsx)
 // ============================================================================
 
-import React, { useState, useCallback } from 'react';
-import { DEFAULT_PERFORMANCE_FX_MAP } from '../../services/tracker/TrackerState';
+import React, { useState } from 'react';
 
-export interface PadMatrixProps extends React.HTMLAttributes<HTMLDivElement> {
-  activeBankIndex?: number; // 0=A (0-15), 1=B (16-31), 2=C (32-47), 3=D (48-63)
-  isPerformanceMode?: boolean;
-  onPadTrigger?: (bankIndex: number, padIndex: number, hexId: string) => void;
-  [key: string]: any;
+export interface PadConfig {
+  id: number;
+  label: string;
+  sampleName: string;
+  color: string;
+}
+
+interface PadMatrixProps {
+  isRecording?: boolean;
+  onPadTrigger?: (padId: number, sampleName: string) => void;
+  onRecordStep?: (padId: number) => void;
 }
 
 export const PadMatrix: React.FC<PadMatrixProps> = ({
-  activeBankIndex = 0,
-  isPerformanceMode = false,
+  isRecording = false,
   onPadTrigger,
-  ...restProps
+  onRecordStep,
 }) => {
-  const [activePads, setActivePads] = useState<boolean[]>(Array(16).fill(false));
+  const [activePad, setActivePad] = useState<number | null>(null);
+  const [muteMode, setMuteMode] = useState<boolean>(false);
+  const [soloMode, setSoloMode] = useState<boolean>(false);
 
-  const handlePadDown = useCallback((padIndex: number) => {
-    setActivePads((prev) => {
-      const next = [...prev];
-      next[padIndex] = true;
-      return next;
-    });
+  // 4x4 SP-Style Performance Matrix
+  const pads: PadConfig[] = [
+    { id: 1,  label: 'PAD 01', sampleName: 'KICK_01.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
+    { id: 2,  label: 'PAD 02', sampleName: 'SNARE_01.WAV',  color: 'border-emerald-500/40 text-emerald-400' },
+    { id: 3,  label: 'PAD 03', sampleName: 'HH_CLOSE.WAV',  color: 'border-emerald-500/40 text-emerald-400' },
+    { id: 4,  label: 'PAD 04', sampleName: 'HH_OPEN.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
+    { id: 5,  label: 'PAD 05', sampleName: 'CLAP_01.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
+    { id: 6,  label: 'PAD 06', sampleName: 'PERC_01.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
+    { id: 7,  label: 'PAD 07', sampleName: 'CRASH_01.WAV',  color: 'border-emerald-500/40 text-emerald-400' },
+    { id: 8,  label: 'PAD 08', sampleName: 'RIDE_01.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
+    { id: 9,  label: 'PAD 09', sampleName: 'BASS_C1.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
+    { id: 10, label: 'PAD 10', sampleName: 'SYN_CHORD.WAV', color: 'border-emerald-500/40 text-emerald-400' },
+    { id: 11, label: 'PAD 11', sampleName: 'VOX_HIT.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
+    { id: 12, label: 'PAD 12', sampleName: 'FX_STAB.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
+    { id: 13, label: 'PAD 13', sampleName: 'CHOP_01.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
+    { id: 14, label: 'PAD 14', sampleName: 'CHOP_02.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
+    { id: 15, label: 'PAD 15', sampleName: 'CHOP_03.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
+    { id: 16, label: 'PAD 16', sampleName: 'CHOP_04.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
+  ];
 
-    const absoluteIndex = (activeBankIndex * 16) + padIndex;
-    const hexId = absoluteIndex.toString(16).toUpperCase().padStart(2, '0');
-
-    if (onPadTrigger) {
-      onPadTrigger(activeBankIndex, padIndex, hexId);
+  // Hardware Touch Event Handler (Pure Instant Audition)
+  const handleTouchPad = (pad: PadConfig, e?: React.SyntheticEvent) => {
+    if (e) {
+      // Prevent WebKit touch selection/scrolling interference on iPad
+      e.preventDefault();
     }
 
-    setTimeout(() => {
-      setActivePads((prev) => {
-        const next = [...prev];
-        next[padIndex] = false;
-        return next;
-      });
-    }, 120);
-  }, [activeBankIndex, onPadTrigger]);
+    setActivePad(pad.id);
 
-  const bankLetters = ['A', 'B', 'C', 'D'];
-  const currentBankLabel = bankLetters[activeBankIndex] || 'A';
+    // 1. Fire Audio Audition Payload Instantly
+    if (onPadTrigger) {
+      onPadTrigger(pad.id, pad.sampleName);
+    }
+
+    // 2. Write Step Row strictly IF Record Transport is Active
+    if (isRecording && onRecordStep) {
+      onRecordStep(pad.id);
+    }
+
+    // Visual Feedback Timeout
+    setTimeout(() => setActivePad(null), 120);
+  };
 
   return (
-    <div
-      {...restProps}
-      className="flex flex-col w-full font-mono select-none gap-2 p-3 bg-zinc-950 border border-emerald-500/30 rounded shadow-[0_0_15px_rgba(16,185,129,0.1)]"
-    >
-      {/* Pad Matrix Header Bar */}
-      <div className="flex justify-between items-center text-xs text-emerald-400 border-b border-emerald-500/20 pb-2">
-        <span className="font-bold tracking-wider">PAD BANK [{currentBankLabel}]</span>
-        <span className="text-[10px] text-emerald-600">
-          {isPerformanceMode ? 'MODE: PERFORMANCE FX' : 'MODE: NOTE CHOP'}
-        </span>
+    <div className="flex flex-col h-full bg-black/40 border border-emerald-500/20 rounded p-2 font-mono text-[11px] select-none">
+      {/* Header & Tactile Punch-In Controls */}
+      <div className="flex justify-between items-center mb-2 pb-1 border-b border-emerald-500/20">
+        <span className="text-emerald-400 font-bold tracking-wider">[ 4x4 PERFORMANCE MATRIX ]</span>
+        
+        {/* MUTE / SOLO Hardware Strips */}
+        <div className="flex gap-1">
+          <button
+            onClick={() => { setMuteMode(!muteMode); if (soloMode) setSoloMode(false); }}
+            className={`px-2 py-0.5 text-[9px] font-bold rounded border transition-all cursor-pointer ${
+              muteMode
+                ? 'bg-red-600 text-white border-red-500 shadow-[0_0_8px_rgba(220,38,38,0.6)]'
+                : 'bg-zinc-950 text-red-500/70 border-red-900/40 hover:border-red-500/40'
+            }`}
+          >
+            PUNCH MUTE
+          </button>
+          <button
+            onClick={() => { setSoloMode(!soloMode); if (muteMode) setMuteMode(false); }}
+            className={`px-2 py-0.5 text-[9px] font-bold rounded border transition-all cursor-pointer ${
+              soloMode
+                ? 'bg-amber-500 text-black border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.6)]'
+                : 'bg-zinc-950 text-amber-500/70 border-amber-900/40 hover:border-amber-500/40'
+            }`}
+          >
+            PUNCH SOLO
+          </button>
+        </div>
       </div>
 
-      {/* 4x4 MPC Tactile Pad Grid */}
-      <div className="grid grid-cols-4 gap-2.5">
-        {Array.from({ length: 16 }).map((_, padIdx) => {
-          const absoluteIndex = (activeBankIndex * 16) + padIdx;
-          const hexId = absoluteIndex.toString(16).toUpperCase().padStart(2, '0');
-          const isPressed = activePads[padIdx];
-
-          // Query performance FX map if in performance mode
-          let displayLabel = hexId;
-          let subLabel = `NOTE ${absoluteIndex}`;
-          if (isPerformanceMode) {
-            const fxConfig = DEFAULT_PERFORMANCE_FX_MAP[padIdx];
-            if (fxConfig && fxConfig.fxType !== 'bypass') {
-              displayLabel = fxConfig.fxType.substring(0, 5).toUpperCase();
-              subLabel = `PARAM ${fxConfig.defaultParam}`;
-            } else {
-              displayLabel = `FX-${padIdx}`;
-              subLabel = 'BYPASS';
-            }
-          }
-
+      {/* 4x4 Tactile Pad Grid */}
+      <div className="flex-1 grid grid-cols-4 gap-2">
+        {pads.map((pad) => {
+          const isActive = activePad === pad.id;
           return (
-            <button
-              key={padIdx}
-              onMouseDown={() => handlePadDown(padIdx)}
-              onTouchStart={(e) => { e.preventDefault(); handlePadDown(padIdx); }}
-              className={`aspect-square flex flex-col justify-between p-2 rounded border-2 transition-all cursor-pointer ${
-                isPressed
-                  ? 'bg-emerald-500 text-black border-emerald-300 shadow-[0_0_15px_#10b981] scale-[0.98]'
-                  : 'bg-zinc-900 text-emerald-400 border-zinc-800 hover:border-emerald-500/50 hover:bg-zinc-800/80 shadow-inner'
+            <div
+              key={pad.id}
+              onTouchStart={(e) => handleTouchPad(pad, e)}
+              onMouseDown={(e) => handleTouchPad(pad, e)}
+              className={`flex flex-col justify-between p-2 rounded border transition-all cursor-pointer active:scale-95 ${
+                isActive
+                  ? 'bg-emerald-500 text-black border-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.8)] scale-95'
+                  : 'bg-zinc-950/80 border-emerald-500/30 hover:border-emerald-500/60'
               }`}
             >
-              <span className="text-[10px] opacity-70 tracking-widest font-bold">
-                {hexId}
-              </span>
-              <span className="text-sm font-extrabold tracking-wider text-center">
-                {displayLabel}
-              </span>
-              <span className="text-[9px] opacity-60 text-center tracking-tight truncate">
-                {subLabel}
-              </span>
-            </button>
+              <div className="flex justify-between items-start">
+                <span className={`text-[9px] font-bold ${isActive ? 'text-black' : 'text-emerald-500/60'}`}>
+                  {String(pad.id).padStart(2, '0')}
+                </span>
+                {isRecording && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                )}
+              </div>
+              <div className="flex flex-col">
+                <span className={`font-bold text-[10px] ${isActive ? 'text-black' : 'text-emerald-400'}`}>
+                  {pad.label}
+                </span>
+                <span className={`text-[8px] truncate ${isActive ? 'text-black/80' : 'text-emerald-600'}`}>
+                  {pad.sampleName}
+                </span>
+              </div>
+            </div>
           );
         })}
       </div>
