@@ -12,15 +12,18 @@ export interface TrackerStep {
 }
 
 export type StepTriggerCallback = (step: TrackerStep, row: number) => void;
+export type CursorCallback = (step: number) => void;
 
 export class SequencerEngine {
   private audioContext: AudioContext;
   private bpm: number = 120;
   private isPlaying: boolean = false;
   private currentStep: number = 0;
-  private totalSteps: number = 64; // Standard tracker phrase length (rows 00-3F hex / 0-63 decimal)
+  private totalSteps: number = 64; // Standard tracker phrase length (00-3F hex / 0-63 dec)
   private timerId: number | null = null;
+  
   private onStepCallback: StepTriggerCallback | null = null;
+  private cursorCallbacks: CursorCallback[] = [];
 
   constructor(audioContext: AudioContext, bpm: number = 120) {
     this.audioContext = audioContext;
@@ -33,6 +36,13 @@ export class SequencerEngine {
 
   public setOnStep(callback: StepTriggerCallback) {
     this.onStepCallback = callback;
+  }
+
+  public subscribeCursor(callback: CursorCallback): () => void {
+    this.cursorCallbacks.push(callback);
+    return () => {
+      this.cursorCallbacks = this.cursorCallbacks.filter(cb => cb !== callback);
+    };
   }
 
   public start(currentPhraseSteps: TrackerStep[]) {
@@ -50,6 +60,8 @@ export class SequencerEngine {
       this.timerId = null;
     }
     this.currentStep = 0;
+    // Notify cursor subscribers of reset
+    this.notifyCursorSubscribers(0);
     console.log('[SequencerEngine] Stopped and reset.');
   }
 
@@ -69,10 +81,13 @@ export class SequencerEngine {
       fx2: '---'
     };
 
-    // Trigger external handler (sample playback, synth trigger, UI cursor highlight)
+    // 1. Trigger audio playback & bridge callbacks
     if (this.onStepCallback) {
       this.onStepCallback(stepData, this.currentStep);
     }
+
+    // 2. Notify UI cursor subscribers
+    this.notifyCursorSubscribers(this.currentStep);
 
     // Advance step pointer cyclically through the phrase
     this.currentStep = (this.currentStep + 1) % this.totalSteps;
@@ -81,6 +96,12 @@ export class SequencerEngine {
     this.timerId = window.setTimeout(() => {
       this.scheduleNextStep(currentPhraseSteps);
     }, intervalMs);
+  }
+
+  private notifyCursorSubscribers(stepIndex: number) {
+    for (let i = 0; i < this.cursorCallbacks.length; i++) {
+      this.cursorCallbacks[i](stepIndex);
+    }
   }
 
   public getStatus() {
