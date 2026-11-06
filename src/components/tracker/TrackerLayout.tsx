@@ -1,5 +1,5 @@
 // ============================================================================
-// BREDFORGE v1.0 — MASTER TRACKER LAYOUT & 4-PAGE ROUTER (TrackerLayout.tsx)
+// BREDFORGE v1.0 — MASTER TRACKER LAYOUT & AUDIO BINDING (TrackerLayout.tsx)
 // ============================================================================
 
 import React, { useState } from 'react';
@@ -10,6 +10,7 @@ import { ArrangerGrid } from './ArrangerGrid';
 import { MixerView } from './MixerView';
 import { ChainView } from './ChainView';
 import { ChopView } from './ChopView';
+import { AudioEngine } from '../../services/audio/AudioEngine'; // Adjust path if needed
 
 type NavigationTab = 'WORKSPACE' | 'SONG' | 'CHAIN' | 'CHOP';
 
@@ -22,8 +23,10 @@ export const TrackerLayout: React.FC = () => {
   // Mock selection state with column type-assertion for GridController compatibility
   const [gridSelection, setGridSelection] = useState<{ rowIndex: number; columnIndex: any }>({ rowIndex: 0, columnIndex: 0 });
 
-  // Audio trigger handler for pads (SP-Style instant audition)
+  // Live Audio Engine Pad Trigger (SP-Style Zero-Latency Audition & Synth Fallback)
   const handlePadTrigger = async (bankIdx: number, padIdx: number, hexId: string) => {
+    await AudioEngine.init();
+    AudioEngine.playPad(hexId);
     console.log(`[SP AUDITION] Triggered Bank ${bankIdx} | Pad ${padIdx + 1} (Hex: ${hexId})`);
   };
 
@@ -34,8 +37,16 @@ export const TrackerLayout: React.FC = () => {
     }
   };
 
+  const handleGlobalTouch = async () => {
+    await AudioEngine.init();
+  };
+
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#050810] text-emerald-400 font-mono select-none overflow-hidden p-2 gap-2">
+    <div 
+      onClick={handleGlobalTouch}
+      onTouchStart={handleGlobalTouch}
+      className="flex flex-col h-screen w-screen bg-[#050810] text-emerald-400 font-mono select-none overflow-hidden p-2 gap-2"
+    >
       
       {/* ================================================================== */}
       {/* HARDWARE TOP HEADER & 4-PAGE NAVIGATION ROUTER                     */}
