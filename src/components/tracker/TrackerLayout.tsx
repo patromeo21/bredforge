@@ -1,5 +1,5 @@
 // ============================================================================
-// STAGE F - DUAL-SCREEN WORKSPACE & M8 PUNCH-IN CORE (TrackerLayout.tsx)
+// STAGE F - FULL MASTER TRACKER LAYOUT (TrackerLayout.tsx)
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -12,6 +12,8 @@ import { PadMatrix } from './PadMatrix';
 import { PhraseGrid } from './PhraseGrid';
 import { GridController, GridSelectionState, handleGridCellEdit } from './GridController';
 import { TransportFooter } from './TransportFooter';
+import { ArrangerGrid } from './ArrangerGrid';
+import { MixerView } from './MixerView';
 
 export interface TrackerLayoutProps extends React.HTMLAttributes<HTMLDivElement> {
   initialProjectState?: ProjectStateSchema;
@@ -240,14 +242,12 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
 
         {activeTab === 'SONG_MIXER' && (
           /* PAGE 2: SONG VIEW & MIXER DUAL-SCREEN SPLIT */
-          <div className="flex-1 flex gap-2 overflow-hidden p-4">
-            <div className="w-1/2 flex flex-col bg-black/50 border border-emerald-500/20 rounded p-3 items-center justify-center">
-              <span className="text-xs font-bold text-emerald-400 mb-2">[ SONG ARRANGEMENT VIEW ]</span>
-              <span className="text-[11px] text-emerald-600">Chain sequencing and timeline blocks.</span>
+          <div className="flex-1 flex gap-2 overflow-hidden">
+            <div className="w-1/2 flex flex-col overflow-hidden">
+              <ArrangerGrid projectState={projectState} />
             </div>
-            <div className="w-1/2 flex flex-col bg-black/50 border border-emerald-500/20 rounded p-3 items-center justify-center">
-              <span className="text-xs font-bold text-emerald-400 mb-2">[ MODERATE HARDWARE MIXER ]</span>
-              <span className="text-[11px] text-emerald-600">Track volumes, panning, and mute/solo strips.</span>
+            <div className="w-1/2 flex flex-col overflow-hidden">
+              <MixerView />
             </div>
           </div>
         )}
