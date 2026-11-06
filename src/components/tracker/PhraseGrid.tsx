@@ -6,15 +6,15 @@ import React, { useState, useEffect } from 'react';
 import { SequencerEngine, TrackerStep } from '../../services/audio/SequencerEngine';
 
 interface PhraseGridProps {
-  sequencer: SequencerEngine | null;
-  steps: TrackerStep[];
-  activeRowIndex?: number; // Optional prop override from parent layout
+  sequencer?: SequencerEngine | null;
+  steps?: TrackerStep[];
+  activeRowIndex?: number;
   onStepSelect?: (stepIndex: number) => void;
 }
 
 export const PhraseGrid: React.FC<PhraseGridProps> = ({
   sequencer,
-  steps,
+  steps = [],
   activeRowIndex,
   onStepSelect
 }) => {
@@ -70,11 +70,14 @@ export const PhraseGrid: React.FC<PhraseGridProps> = ({
           }
 
           const hexRow = index.toString(16).toUpperCase().padStart(2, '0');
-          const instStr = step.instrument > 0 
-            ? step.instrument.toString(16).toUpperCase().padStart(2, '0') 
+          const instVal = step?.instrument ?? 0;
+          const volVal = step?.volume ?? 64;
+
+          const instStr = instVal > 0 
+            ? instVal.toString(16).toUpperCase().padStart(2, '0') 
             : '--';
-          const volStr = step.volume > 0 
-            ? step.volume.toString(16).toUpperCase().padStart(2, '0') 
+          const volStr = volVal > 0 
+            ? volVal.toString(16).toUpperCase().padStart(2, '0') 
             : '--';
 
           return (
@@ -84,11 +87,11 @@ export const PhraseGrid: React.FC<PhraseGridProps> = ({
               className={`grid grid-cols-12 px-2 py-0.5 cursor-pointer transition-colors ${rowBg}`}
             >
               <span className="col-span-2 opacity-60">{hexRow}</span>
-              <span className="col-span-2 tracking-tight">{step.note || '---'}</span>
+              <span className="col-span-2 tracking-tight">{step?.note || '---'}</span>
               <span className="col-span-2">{instStr}</span>
               <span className="col-span-2">{volStr}</span>
-              <span className="col-span-2 opacity-90">{step.fx1 || '---'}</span>
-              <span className="col-span-2 opacity-90">{step.fx2 || '---'}</span>
+              <span className="col-span-2 opacity-90">{step?.fx1 || '---'}</span>
+              <span className="col-span-2 opacity-90">{step?.fx2 || '---'}</span>
             </div>
           );
         })}
