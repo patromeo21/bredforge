@@ -1,111 +1,62 @@
 // ============================================================================
-// STAGE E - PHASE 28: 16-STEP HEXADECIMAL STRUCTURAL DISPLAY GRID (PhraseGrid.tsx)
+// BREDFORGE v1.0 — PHRASE STEP SEQUENCER GRID WITH PLAYHEAD (PhraseGrid.tsx)
 // ============================================================================
 
 import React from 'react';
-import { PhraseBlock, TrackerState } from '../../services/tracker/TrackerState';
 
-export interface PhraseGridProps extends React.HTMLAttributes<HTMLDivElement> {
-  phrase?: PhraseBlock;
-  activeRowIndex?: number;
-  selectedRowIndex?: number;
-  onSelectRow?: (rowIndex: number) => void;
-  [key: string]: any;
+export interface PhraseGridProps {
+  activeRowIndex: number; // Current step row driven by transport clock (0 - 63)
 }
 
-export const PhraseGrid: React.FC<PhraseGridProps> = ({
-  phrase,
-  activeRowIndex = -1,
-  selectedRowIndex = 0,
-  onSelectRow,
-  ...restProps
-}) => {
-  // Ensure we always have exactly 16 steps to display
-  const steps: PhraseBlock = phrase && phrase.length === 16 
-    ? phrase 
-    : Array.from({ length: 16 }, (_, i) => ({
-        step: i + 1,
-        padId: null,
-        vol: 1.0,
-        fxType: 'bypass',
-        fxParam: null,
-      }));
+export const PhraseGrid: React.FC<PhraseGridProps> = ({ activeRowIndex }) => {
+  // 64 Steps vertical phrase structure typical of advanced hardware trackers
+  const totalRows = 64;
+  const columns = ['NOTE', 'INST', 'VOL', 'FX1', 'FX2'];
 
   return (
-    <div
-      {...restProps}
-      className="flex flex-col w-full font-mono text-xs select-none gap-1 overflow-y-auto pr-1"
-    >
-      {/* Column Headers */}
-      <div className="grid grid-cols-6 gap-2 px-3 py-2 bg-zinc-900 border-b border-emerald-500/30 font-bold text-emerald-400">
-        <div className="text-center">STEP</div>
-        <div className="text-center">NOTE</div>
-        <div className="text-center">PAD HEX</div>
-        <div className="text-center">VOL</div>
-        <div className="text-center">FX TYPE</div>
-        <div className="text-center">FX PARAM</div>
+    <div className="flex-1 bg-zinc-950 border border-emerald-500/30 rounded flex flex-col overflow-hidden font-mono text-[11px]">
+      
+      {/* Grid Column Headers */}
+      <div className="grid grid-cols-6 bg-black/80 border-b border-emerald-500/30 px-2 py-1 text-[10px] text-emerald-500/80 font-bold sticky top-0 z-10">
+        <span className="text-center">ROW</span>
+        {columns.map((col, idx) => (
+          <span key={idx} className="text-center">{col}</span>
+        ))}
       </div>
 
-      {/* 16 Structural Step Rows */}
-      {steps.map((stepItem, idx) => {
-        const isPlayhead = activeRowIndex === idx;
-        const isSelected = selectedRowIndex === idx;
-        const isBeatInterval = idx % 4 === 0;
+      {/* Scrollable Step Rows */}
+      <div className="flex-1 overflow-y-auto flex flex-col divide-y divide-emerald-500/10">
+        {Array.from({ length: totalRows }).map((_, rowIndex) => {
+          const isCurrentRow = rowIndex === activeRowIndex;
+          const isBeatMarker = rowIndex % 4 === 0;
 
-        // Convert padId to 2-character uppercase Hex string or '---'
-        const hexPadId = stepItem.padId !== null && stepItem.padId >= 0 && stepItem.padId <= 63
-          ? stepItem.padId.toString(16).toUpperCase().padStart(2, '0')
-          : '--';
+          return (
+            <div
+              key={rowIndex}
+              className={`grid grid-cols-6 items-center px-2 py-0.5 transition-colors ${
+                isCurrentRow
+                  ? 'bg-emerald-500/30 text-emerald-200 shadow-[inset_0_0_8px_rgba(16,185,129,0.4)] font-bold'
+                  : isBeatMarker
+                  ? 'bg-zinc-900/60 text-emerald-400/90'
+                  : 'bg-transparent text-emerald-600/60 hover:bg-emerald-500/5'
+              }`}
+            >
+              {/* Row Number Identifier */}
+              <span className="text-center text-[10px] tracking-widest">
+                {String(rowIndex).padStart(2, '0')}
+              </span>
 
-        const noteName = TrackerState.getNoteNameFromPadId(stepItem.padId);
-
-        let rowStyle = 'bg-transparent text-emerald-500';
-        if (isPlayhead) {
-          rowStyle = 'bg-emerald-500 text-black font-bold shadow-[0_0_12px_#10b981]';
-        } else if (isSelected) {
-          rowStyle = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50';
-        } else if (isBeatInterval) {
-          rowStyle = 'bg-zinc-900/60 text-emerald-500/90';
-        }
-
-        return (
-          <div
-            key={stepItem.step || idx}
-            onClick={() => onSelectRow && onSelectRow(idx)}
-            className={`grid grid-cols-6 gap-2 px-3 py-2 rounded items-center transition-colors cursor-pointer ${rowStyle}`}
-          >
-            {/* Step Number (Hex 00-0F) */}
-            <div className="text-center font-bold tracking-wider">
-              {isPlayhead ? '▶ ' : ''}{idx.toString(16).toUpperCase().padStart(2, '0')}
+              {/* Step Sequence Columns (Note, Instrument, Volume, FX1, FX2) */}
+              <span className="text-center">---</span>
+              <span className="text-center">--</span>
+              <span className="text-center">--</span>
+              <span className="text-center">---</span>
+              <span className="text-center">---</span>
             </div>
+          );
+        })}
+      </div>
 
-            {/* Note Name */}
-            <div className="text-center tracking-wider font-semibold">
-              {noteName}
-            </div>
-
-            {/* Pad Hex ID */}
-            <div className="text-center tracking-widest font-mono">
-              {hexPadId}
-            </div>
-
-            {/* Volume */}
-            <div className="text-center">
-              {stepItem.vol.toFixed(1)}
-            </div>
-
-            {/* FX Type */}
-            <div className="text-center uppercase text-[10px] tracking-tight">
-              {stepItem.fxType}
-            </div>
-
-            {/* FX Param */}
-            <div className="text-center">
-              {stepItem.fxParam !== null ? stepItem.fxParam.toFixed(2) : '--'}
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 };
