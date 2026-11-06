@@ -8,12 +8,12 @@ export interface PadConfig {
   id: number;
   label: string;
   sampleName: string;
-  color: string;
+  hexId: string;
 }
 
 interface PadMatrixProps {
   isRecording?: boolean;
-  onPadTrigger?: (padId: number, sampleName: string) => void;
+  onPadTrigger?: (bankIdx: number, padIdx: number, hexId: string) => void | Promise<void>;
   onRecordStep?: (padId: number) => void;
 }
 
@@ -26,38 +26,37 @@ export const PadMatrix: React.FC<PadMatrixProps> = ({
   const [muteMode, setMuteMode] = useState<boolean>(false);
   const [soloMode, setSoloMode] = useState<boolean>(false);
 
-  // 4x4 SP-Style Performance Matrix
+  // 4x4 SP-Style Performance Matrix with Bank/Hex mappings
   const pads: PadConfig[] = [
-    { id: 1,  label: 'PAD 01', sampleName: 'KICK_01.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
-    { id: 2,  label: 'PAD 02', sampleName: 'SNARE_01.WAV',  color: 'border-emerald-500/40 text-emerald-400' },
-    { id: 3,  label: 'PAD 03', sampleName: 'HH_CLOSE.WAV',  color: 'border-emerald-500/40 text-emerald-400' },
-    { id: 4,  label: 'PAD 04', sampleName: 'HH_OPEN.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
-    { id: 5,  label: 'PAD 05', sampleName: 'CLAP_01.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
-    { id: 6,  label: 'PAD 06', sampleName: 'PERC_01.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
-    { id: 7,  label: 'PAD 07', sampleName: 'CRASH_01.WAV',  color: 'border-emerald-500/40 text-emerald-400' },
-    { id: 8,  label: 'PAD 08', sampleName: 'RIDE_01.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
-    { id: 9,  label: 'PAD 09', sampleName: 'BASS_C1.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
-    { id: 10, label: 'PAD 10', sampleName: 'SYN_CHORD.WAV', color: 'border-emerald-500/40 text-emerald-400' },
-    { id: 11, label: 'PAD 11', sampleName: 'VOX_HIT.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
-    { id: 12, label: 'PAD 12', sampleName: 'FX_STAB.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
-    { id: 13, label: 'PAD 13', sampleName: 'CHOP_01.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
-    { id: 14, label: 'PAD 14', sampleName: 'CHOP_02.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
-    { id: 15, label: 'PAD 15', sampleName: 'CHOP_03.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
-    { id: 16, label: 'PAD 16', sampleName: 'CHOP_04.WAV',   color: 'border-emerald-500/40 text-emerald-400' },
+    { id: 1,  label: 'PAD 01', sampleName: 'KICK_01.WAV',   hexId: '00' },
+    { id: 2,  label: 'PAD 02', sampleName: 'SNARE_01.WAV',  hexId: '01' },
+    { id: 3,  label: 'PAD 03', sampleName: 'HH_CLOSE.WAV',  hexId: '02' },
+    { id: 4,  label: 'PAD 04', sampleName: 'HH_OPEN.WAV',   hexId: '03' },
+    { id: 5,  label: 'PAD 05', sampleName: 'CLAP_01.WAV',   hexId: '04' },
+    { id: 6,  label: 'PAD 06', sampleName: 'PERC_01.WAV',   hexId: '05' },
+    { id: 7,  label: 'PAD 07', sampleName: 'CRASH_01.WAV',  hexId: '06' },
+    { id: 8,  label: 'PAD 08', sampleName: 'RIDE_01.WAV',   hexId: '07' },
+    { id: 9,  label: 'PAD 09', sampleName: 'BASS_C1.WAV',   hexId: '08' },
+    { id: 10, label: 'PAD 10', sampleName: 'SYN_CHORD.WAV', hexId: '09' },
+    { id: 11, label: 'PAD 11', sampleName: 'VOX_HIT.WAV',   hexId: '0A' },
+    { id: 12, label: 'PAD 12', sampleName: 'FX_STAB.WAV',   hexId: '0B' },
+    { id: 13, label: 'PAD 13', sampleName: 'CHOP_01.WAV',   hexId: '0C' },
+    { id: 14, label: 'PAD 14', sampleName: 'CHOP_02.WAV',   hexId: '0D' },
+    { id: 15, label: 'PAD 15', sampleName: 'CHOP_03.WAV',   hexId: '0E' },
+    { id: 16, label: 'PAD 16', sampleName: 'CHOP_04.WAV',   hexId: '0F' },
   ];
 
   // Hardware Touch Event Handler (Pure Instant Audition)
   const handleTouchPad = (pad: PadConfig, e?: React.SyntheticEvent) => {
     if (e) {
-      // Prevent WebKit touch selection/scrolling interference on iPad
-      e.preventDefault();
+      e.preventDefault(); // Prevent WebKit touch/scroll interference on iPad
     }
 
     setActivePad(pad.id);
 
-    // 1. Fire Audio Audition Payload Instantly
+    // 1. Fire Audio Audition Payload Instantly matching TrackerLayout signature (bankIdx, padIdx, hexId)
     if (onPadTrigger) {
-      onPadTrigger(pad.id, pad.sampleName);
+      onPadTrigger(0, pad.id - 1, pad.hexId);
     }
 
     // 2. Write Step Row strictly IF Record Transport is Active
