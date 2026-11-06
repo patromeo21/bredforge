@@ -7,17 +7,17 @@ import { useLiveStepRecord } from '../../hooks/useLiveStepRecord';
 import { SequencerAudioBridge } from '../../services/audio/SequencerAudioBridge';
 
 interface PhraseGridProps {
-  audioBridge: SequencerAudioBridge;
+  audioBridge?: SequencerAudioBridge;
   totalRows?: number;
   activeRowIndex?: number;
 }
 
 export const PhraseGrid: React.FC<PhraseGridProps> = ({ audioBridge, totalRows = 64, activeRowIndex }) => {
   const [activeVoiceKey] = useState<string>('channel-1');
-  const { currentCursor, recordStep } = useLiveStepRecord(totalRows);
+  const { isRecording, setIsRecording, activeInstrument, setActiveInstrument, recordPadHit } = useLiveStepRecord();
 
-  // Use external activeRowIndex if provided by TrackerLayout, otherwise fallback to hook cursor
-  const effectiveCursor = activeRowIndex !== undefined ? activeRowIndex : currentCursor;
+  // Use external activeRowIndex if provided by TrackerLayout, otherwise fallback to 0
+  const effectiveCursor = activeRowIndex !== undefined ? activeRowIndex : 0;
 
   // 4x4 interactive pad layout mapping to notes & instruments
   const padGrid = [
@@ -40,17 +40,13 @@ export const PhraseGrid: React.FC<PhraseGridProps> = ({ audioBridge, totalRows =
   ];
 
   const handlePadTouch = (pad: { id: number; note: string }) => {
-    // 1. Trigger zero-latency audio playback via audio bridge
-    audioBridge.triggerVoice(activeVoiceKey, pad.note, 64);
+    // 1. Trigger audio playback via audio bridge if available
+    if (audioBridge) {
+      audioBridge.triggerVoice(activeVoiceKey, pad.note, 64);
+    }
 
-    // 2. Record step directly into the active cursor row
-    recordStep(effectiveCursor, {
-      note: pad.note,
-      instrument: pad.id,
-      volume: 64,
-      command: '---',
-      valStr: '00'
-    });
+    // 2. Invoke live recording hook method
+    recordPadHit(pad.note, 64);
   };
 
   return (
@@ -60,8 +56,20 @@ export const PhraseGrid: React.FC<PhraseGridProps> = ({ audioBridge, totalRows =
         <h2 className="text-lg font-mono font-bold tracking-wider text-emerald-400">
           BREDFORGE // LIVE STEP RECORDER
         </h2>
-        <div className="font-mono text-sm bg-slate-900 px-3 py-1 rounded border border-slate-700">
-          SEQ CURSOR: <span className="text-amber-400 font-bold">{String(effectiveCursor).padStart(2, '0')}</span>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setIsRecording(!isRecording)}
+            className={`px-3 py-1 rounded font-mono text-xs font-bold border transition-colors ${
+              isRecording 
+                ? 'bg-red-600 border-red-400 text-white animate-pulse' 
+                : 'bg-slate-800 border-slate-700 text-slate-300'
+            }`}
+          >
+            {isRecording ? 'REC ACTIVE' : 'REC IDLE'}
+          </button>
+          <div className="font-mono text-sm bg-slate-900 px-3 py-1 rounded border border-slate-700">
+            CURSOR: <span className="text-amber-400 font-bold">{String(effectiveCursor).padStart(2, '0')}</span>
+          </div>
         </div>
       </div>
 
@@ -82,7 +90,7 @@ export const PhraseGrid: React.FC<PhraseGridProps> = ({ audioBridge, totalRows =
 
       {/* Footer Instructions */}
       <div className="text-center font-mono text-xs text-slate-500 mt-4">
-        Tap pads to trigger sample buffers & write live steps at cursor position.
+        Tap pads to trigger sample buffers & record live sequence steps.
       </div>
     </div>
   );
