@@ -1,5 +1,5 @@
 // ============================================================================
-// MASTER INTEGRATION - TRACKER LAYOUT WITH TRUE AUDIO COUPLING (TrackerLayout.tsx)
+// STAGE E - PHASE 32: HARDWARE TRANSPORT SYNCHRONIZER CORE (TrackerLayout.tsx)
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -7,8 +7,10 @@ import { ProjectStateSchema, createInitialTrackerState } from '../../services/tr
 import { AudioGraph } from '../../services/audio/AudioGraph';
 import { StorageVault } from '../../services/storage/StorageVault';
 import { UIFrameProxy } from '../../services/tracker/UIFrameProxy';
+import { AntiDriftClock } from '../../services/audio/AntiDriftClock';
 import { PadMatrix } from './PadMatrix';
 import { PhraseGrid } from './PhraseGrid';
+import { GridController, GridSelectionState, handleGridCellEdit } from './GridController';
 
 export interface TrackerLayoutProps extends React.HTMLAttributes<HTMLDivElement> {
   initialProjectState?: ProjectStateSchema;
@@ -26,13 +28,14 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [activeBankIndex, setActiveBankIndex] = useState<number>(0);
   const [activePlayheadRow, setActivePlayheadRow] = useState<number>(-1);
-  const [selectedRowIndex, setSelectedRowIndex] = useState<number>(0);
+  const [gridSelection, setGridSelection] = useState<GridSelectionState>({ rowIndex: 0, columnIndex: 'NOTE' });
   const [isPerformanceMode, setIsPerformanceMode] = useState<boolean>(false);
 
   const audioGraphRef = useRef<AudioGraph | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const clockRef = useRef<AntiDriftClock | null>(null);
 
-  // Initialize Web Audio graph and AudioContext on mount
+  // Initialize Web Audio graph, AudioContext, and AntiDriftClock on mount
   useEffect(() => {
     const initAudio = async () => {
       try {
@@ -42,6 +45,12 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
 
         const graph = new AudioGraph(ctx);
         audioGraphRef.current = graph;
+
+        const clock = new AntiDriftClock(ctx, projectState.bpm, (stepIndex) => {
+          setActivePlayheadRow(stepIndex);
+          setGridSelection((prev) => ({ ...prev, rowIndex: stepIndex }));
+        });
+        clockRef.current = clock;
 
         const savedProject = await StorageVault.loadProject();
         if (savedProject) {
@@ -55,35 +64,32 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
     initAudio();
 
     return () => {
+      if (clockRef.current) {
+        clockRef.current.stop();
+      }
       if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
         audioCtxRef.current.close();
       }
     };
   }, []);
 
-  // Playhead Lifecycle Linkage: Connect UIFrameProxy to timing ticks
+  // Screen Re-Draw Anchoring: Connect UIFrameProxy loop to 60fps frame renders
   useEffect(() => {
     if (isPlaying) {
-      let stepCounter = 0;
-      const intervalMs = (60000 / projectState.bpm) / 4; // 16th note timing
-
       UIFrameProxy.startLoop(() => {
-        // High-performance 60fps frame updates
+        // High-performance 60fps canvas & HUD sync hook
       });
 
-      const timer = window.setInterval(() => {
-        setActivePlayheadRow(stepCounter);
-        setSelectedRowIndex(stepCounter);
-        stepCounter = (stepCounter + 1) % 16;
-      }, intervalMs);
-
-      return () => {
-        clearInterval(timer);
-        UIFrameProxy.stopLoop();
-      };
+      if (clockRef.current) {
+        clockRef.current.setBpm(projectState.bpm);
+        clockRef.current.start();
+      }
     } else {
-      setActivePlayheadRow(-1);
+      if (clockRef.current) {
+        clockRef.current.stop();
+      }
       UIFrameProxy.stopLoop();
+      setActivePlayheadRow(-1);
     }
   }, [isPlaying, projectState.bpm]);
 
@@ -105,7 +111,22 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
         console.warn(`TrackerLayout: AudioGraph trigger failed for pad ${hexId}:`, err);
       }
     }
-  }, []);
+
+    // Step-entry programming: write pad note into current grid selection
+    setProjectState((prevState) => {
+      const activePhraseKey = prevState.activePhrase || '01';
+      const padAbsoluteIndex = (bankIdx * 16) + padIdx;
+      const updated = handleGridCellEdit(prevState, gridSelection, padAbsoluteIndex, activePhraseKey);
+      
+      // Auto-advance row index with wrap-around
+      const nextRow = (gridSelection.rowIndex + 1) % 16;
+      setGridSelection((sel) => ({ ...sel, rowIndex: nextRow }));
+
+      // Persist to storage vault
+      StorageVault.saveProject(updated).catch(console.error);
+      return updated;
+    });
+  }, [gridSelection]);
 
   const handlePlayToggle = async () => {
     if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
@@ -117,8 +138,11 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
   const handleStop = () => {
     setIsPlaying(false);
     setIsRecording(false);
+    if (clockRef.current) {
+      clockRef.current.stop();
+    }
     setActivePlayheadRow(-1);
-    setSelectedRowIndex(0);
+    setGridSelection((prev) => ({ ...prev, rowIndex: 0 }));
   };
 
   const handleRecordToggle = () => {
@@ -138,7 +162,7 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
         <div className="flex items-center gap-6">
           <div className="flex flex-col">
             <span className="text-[10px] text-emerald-600 uppercase tracking-widest">SYSTEM</span>
-            <span className="text-sm font-bold tracking-wider">BRED-FORGE v1.0 [AUDIO-COUPLED]</span>
+            <span className="text-sm font-bold tracking-wider">BRED-FORGE v1.0 [TRANSPORT-SYNCED]</span>
           </div>
           <div className="h-6 w-[1px] bg-emerald-500/30" />
           <div className="flex items-center gap-2">
@@ -152,15 +176,13 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
         </div>
 
         <div className="flex items-center gap-4">
+          <GridController
+            selection={gridSelection}
+            onSelectionChange={(sel) => setGridSelection(sel)}
+          />
           <button
             onClick={() => setIsPerformanceMode(!isPerformanceMode)}
-            className={`px-3 py-1 border text-xs font-bold rounded transition-all cursor-pointer ${
-              isPerformanceMode ? 'bg-emerald-500 text-black border-emerald-400' : 'bg-black/50 text-emerald-400 border-emerald-500/30'
-            }`}
-          >
-            {isPerformanceMode ? 'MODE: PERF FX' : 'MODE: TRACKER'}
-          </button>
-          <div className={`w-3 h-3 rounded-full ${isPlaying ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-zinc-800'}`} />
+            className={`px-3 py-1 border text-xs font-bold rounded transition-all cursor-pointer ${ isPerformanceMode ? 'bg-emerald-500 text-black border-emerald-400' : 'bg-black/50 text-emerald-400 border-emerald-500/30' }`} > {isPerformanceMode ? 'MODE: PERF FX' : 'MODE: TRACKER'} </button> <div className={`w-3 h-3 rounded-full ${isPlaying ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-zinc-800'}`} />
         </div>
       </header>
 
@@ -171,12 +193,12 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
           <PhraseGrid
             phrase={currentPhrase}
             activeRowIndex={activePlayheadRow}
-            selectedRowIndex={selectedRowIndex}
-            onSelectRow={(idx) => setSelectedRowIndex(idx)}
+            selectedRowIndex={gridSelection.rowIndex}
+            onSelectRow={(idx) => setGridSelection((prev) => ({ ...prev, rowIndex: idx }))}
           />
         </div>
 
-        {/* Right: Tactical 4x4 Pad Matrix coupled to Web Audio */}
+        {/* Right: Tactical 4x4 Pad Matrix coupled to Web Audio & Step Entry */}
         <div className="w-[360px] flex flex-col justify-center">
           <PadMatrix
             activeBankIndex={activeBankIndex}
@@ -226,16 +248,4 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
           </button>
           <button
             onClick={handleRecordToggle}
-            className={`px-4 py-1.5 border text-xs font-bold rounded transition-all cursor-pointer ${
-              isRecording
-                ? 'bg-red-600 text-white border-red-500 shadow-[0_0_10px_#ef4444]'
-                : 'bg-zinc-950 text-red-500/70 border-red-500/30 hover:bg-red-500/10'
-            }`}
-          >
-            {isRecording ? 'REC [ON]' : 'REC'}
-          </button>
-        </div>
-      </footer>
-    </div>
-  );
-};
+            className={`px-4 py-
