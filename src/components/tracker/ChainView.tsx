@@ -15,7 +15,7 @@ export const ChainView: React.FC = () => {
   const [activeChainId, setActiveChainId] = useState<string>('C01');
   const [selectedRow, setSelectedRow] = useState<number>(0);
 
-  // Mock chain step table (M8 Chain architecture: Step -> Phrase ID -> Transpose -> Vol)
+  // M8 Chain step table (Step -> Phrase ID -> Transpose -> Volume Offset)
   const chainSteps: ChainStep[] = [
     { step: '00', phraseId: '01', transpose: '+00', volumeOffset: '--' },
     { step: '01', phraseId: '01', transpose: '+00', volumeOffset: '--' },
