@@ -1,5 +1,5 @@
 // ============================================================================
-// STAGE D - FINAL HARDWARE UI OVERHAUL (BredForgeCanvas.tsx)
+// STAGE D - NATIVE CORE INTERFACING & HARDWARE OVERHAUL (BredForgeCanvas.tsx)
 // ============================================================================
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -64,6 +64,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   const [cursorRow, setCursorRow] = useState<number>(0);
   const [cursorCol, setCursorCol] = useState<ColumnType>('NOTE');
   const [isEditMode, setIsEditMode] = useState<boolean>(true);
+  const [isHoldActive, setIsHoldActive] = useState<boolean>(false);
 
   // Sample Waveform & FX Inspector States
   const [sampleStartPoint, setSampleStartPoint] = useState<number>(0.0);
@@ -78,6 +79,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 
   const [activePadStates, setActivePadStates] = useState<boolean[]>(Array(16).fill(false));
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Theme Color Configurations
   const themes = {
@@ -179,28 +181,31 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     }
   }, [viewMode]);
 
-  // Handle Physical Pad Strike & Live Editing
-  const handlePadPress = useCallback((padIndex: number) => {
+  // Handle 64-Pad Continuous Bank Interfacing & Live Editing
+  const handlePadPress = useCallback((padIdx: number) => {
+    // Calculate absolute 64-pad index offset: A=0, B=16, C=32, D=48
+    const absolutePadIndex = (currentBankIndex * 16) + padIdx;
+
     setActivePadStates((prev) => {
       const next = [...prev];
-      next[padIndex] = true;
+      next[padIdx] = true;
       return next;
     });
 
     setTimeout(() => {
       setActivePadStates((prev) => {
         const next = [...prev];
-        next[padIndex] = false;
+        next[padIdx] = false;
         return next;
       });
     }, 120);
 
     if (onPadTrigger) {
-      onPadTrigger(currentBankIndex, padIndex);
+      onPadTrigger(currentBankIndex, padIdx);
     }
 
     if (audioGraph) {
-      const hexId = AudioGraph.getHexIdFromBank(currentBankIndex, padIndex);
+      const hexId = AudioGraph.getHexIdFromBank(currentBankIndex, padIdx);
       const padConfig = audioGraph.getPadConfig(hexId);
       if (padConfig && padConfig.fxType !== 'bypass') {
         audioGraph.punchInEffect(padConfig.fxType, 0.5);
@@ -216,15 +221,15 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         const updatedPhrase = phrase.map((stepItem) => {
           if (stepItem.step === cursorRow + 1) {
             if (cursorCol === 'NOTE') {
-              return { ...stepItem, padId: padIndex };
+              return { ...stepItem, padId: absolutePadIndex };
             } else if (cursorCol === 'VOL') {
-              return { ...stepItem, vol: Math.min(1.0, (padIndex + 1) / 16.0) };
+              return { ...stepItem, vol: Math.min(1.0, (padIdx + 1) / 16.0) };
             } else if (cursorCol === 'FX1') {
-              const commandKey = `X${padIndex < 10 ? '0' + padIndex : padIndex.toString(16).toUpperCase()}`;
-              const resolvedFx: SPFxType = padIndex < 7 ? (TRACKER_FX1_COMMANDS[commandKey as keyof typeof TRACKER_FX1_COMMANDS] || 'bypass') : 'bypass';
+              const commandKey = `X${padIdx < 10 ? '0' + padIdx : padIdx.toString(16).toUpperCase()}`;
+              const resolvedFx: SPFxType = padIdx < 7 ? (TRACKER_FX1_COMMANDS[commandKey as keyof typeof TRACKER_FX1_COMMANDS] || 'bypass') : 'bypass';
               return { ...stepItem, fxType: resolvedFx };
             } else if (cursorCol === 'FX2') {
-              return { ...stepItem, fxParam: (padIndex / 15.0) * 10.0 };
+              return { ...stepItem, fxParam: (padIdx / 15.0) * 10.0 };
             }
           }
           return stepItem;
@@ -250,7 +255,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     fxParam: null
   }));
 
-  const handlePlayAction = onPlayToggle || onPlay;
+  const handlePlayAction = onPlayToggle || onPlay || (() => {});
   const handleStopAction = onStop || (() => {});
 
   return (
@@ -294,7 +299,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
           ))}
         </div>
 
-        {/* BANK SELECTORS [A], [B], [C], [D] */}
+        {/* INDEPENDENT 64-PAD BANK SELECTORS [A], [B], [C], [D] */}
         <div style={{ display: 'flex', gap: '6px' }}>
           {['A', 'B', 'C', 'D'].map((bankLabel, idx) => (
             <button
@@ -310,7 +315,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 borderRadius: '4px',
               }}
             >
-              [{bankLabel}]
+              [{bankLabel} {(idx * 16).toString(16).toUpperCase()}-{(idx * 16 + 15).toString(16).toUpperCase()}]
             </button>
           ))}
         </div>
@@ -392,7 +397,23 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
             
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: `1px solid ${currentTheme.border}`, paddingBottom: '6px' }}>
               <span style={{ fontSize: '12px', fontWeight: 'bold' }}>PHRASE SEQUENCE [{activePhraseKey}] - ACTIVE COL: [{cursorCol}]</span>
-              <span style={{ fontSize: '11px' }}>EDIT: {isEditMode ? 'ON' : 'OFF'}</span>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  onClick={() => setIsHoldActive(!isHoldActive)}
+                  style={{
+                    backgroundColor: isHoldActive ? '#eab308' : currentTheme.bg,
+                    color: isHoldActive ? '#000' : currentTheme.text,
+                    border: `1px solid ${currentTheme.border}`,
+                    padding: '2px 8px',
+                    fontSize: '10px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                  }}
+                >
+                  HOLD: {isHoldActive ? 'LOCKED' : 'OFF'}
+                </button>
+                <span style={{ fontSize: '11px' }}>EDIT: {isEditMode ? 'ON' : 'OFF'}</span>
+              </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto' }}>
@@ -440,15 +461,43 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
             </div>
           </div>
 
-          {/* INTERACTIVE SAMPLE WAVEFORM HUD & RANGE MARKERS */}
+          {/* INTERACTIVE SAMPLE WAVEFORM HUD & AUDIO IMPORT */}
           <div style={{ flex: 1, backgroundColor: currentTheme.panel, border: `1px solid ${currentTheme.border}`, borderRadius: '6px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', fontWeight: 'bold' }}>SAMPLE WAVEFORM HUD & MARKERS</span>
-              <span style={{ fontSize: '11px' }}>START: {sampleStartPoint.toFixed(2)} | END: {sampleEndPoint.toFixed(2)}</span>
+              <span style={{ fontSize: '12px', fontWeight: 'bold' }}>SAMPLE WAVEFORM HUD & IMPORT</span>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  style={{ display: 'none' }}
+                  accept="audio/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file && onAudioUpload) {
+                      onAudioUpload(file);
+                    }
+                  }}
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{
+                    backgroundColor: currentTheme.accent,
+                    color: currentTheme.textBright,
+                    border: `1px solid ${currentTheme.border}`,
+                    padding: '3px 10px',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    borderRadius: '4px',
+                  }}
+                >
+                  IMPORT AUDIO
+                </button>
+                <span style={{ fontSize: '11px' }}>START: {sampleStartPoint.toFixed(2)} | END: {sampleEndPoint.toFixed(2)}</span>
+              </div>
             </div>
 
             <div style={{ flex: 1, backgroundColor: currentTheme.bg, border: `1px solid ${currentTheme.border}`, borderRadius: '4px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {/* Simulated Waveform Visualizer */}
               <div style={{ width: '90%', height: '40px', display: 'flex', alignItems: 'center', gap: '2px' }}>
                 {Array.from({ length: 32 }).map((_, i) => {
                   const h = Math.sin(i * 0.5) * 50 + 50;
@@ -458,7 +507,6 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 })}
               </div>
 
-              {/* Start & End Range Markers */}
               <div style={{ position: 'absolute', left: `${sampleStartPoint * 100}%`, top: 0, bottom: 0, width: '2px', backgroundColor: '#22c55e' }} />
               <div style={{ position: 'absolute', left: `${sampleEndPoint * 100}%`, top: 0, bottom: 0, width: '2px', backgroundColor: '#ef4444' }} />
             </div>
@@ -496,7 +544,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         {/* RIGHT COLUMN: TACTILE PADS, D-PAD, & FX INSPECTOR */}
         <div style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
-          {/* 4x4 TACTILE PAD GRID */}
+          {/* 4x4 TACTILE PAD GRID (BANK-MAPPED) */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', backgroundColor: currentTheme.panel, padding: '12px', border: `1px solid ${currentTheme.border}`, borderRadius: '6px' }}>
             {activePadStates.map((isActive, padIdx) => (
               <button
@@ -509,7 +557,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                   borderRadius: '4px',
                   color: isActive ? currentTheme.bg : currentTheme.text,
                   fontWeight: 'bold',
-                  fontSize: '14px',
+                  fontSize: '13px',
                   cursor: 'pointer',
                   boxShadow: isActive ? `0 0 12px ${currentTheme.accentGlow}` : 'none',
                   transition: 'background-color 0.05s ease',
@@ -553,7 +601,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
             </div>
           </div>
 
-          {/* FX PARAMETER HUD INSPECTOR (Decapitator Saturation, Timeless Echo, DJFX Looper) */}
+          {/* FX PARAMETER HUD INSPECTOR */}
           <div style={{ flex: 1, backgroundColor: currentTheme.panel, border: `1px solid ${currentTheme.border}`, borderRadius: '6px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <span style={{ fontSize: '12px', fontWeight: 'bold' }}>FX PARAMETER HUD INSPECTOR</span>
 
