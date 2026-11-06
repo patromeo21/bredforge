@@ -12,7 +12,7 @@ import { StorageVault } from '../../services/storage/StorageVault';
 
 import { UIFrameProxy } from '../../services/tracker/UIFrameProxy';
 
-import { AntiDriftClock } from '../tracker/AntiDriftClock';
+import { AntiDriftClock } from '../../services/tracker/AntiDriftClock';
 
 import { PadMatrix } from './PadMatrix';
 
