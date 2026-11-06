@@ -8,16 +8,26 @@ export class AudioInstrumentChannel implements InstrumentChannel {
   public id: number;
   private audioContext: AudioContext;
   private outputNode: GainNode;
+  private filterNode: BiquadFilterNode;
   private sampleBuffer: AudioBuffer | null = null;
   private baseNoteMidi: number = 60; // Default root note (C-4)
+  private activeSources: Set<AudioBufferSourceNode> = new Set();
 
   constructor(id: number, audioContext: AudioContext, destinationNode: AudioNode) {
     this.id = id;
     this.audioContext = audioContext;
     
-    // Channel gain strip
+    // Channel filter node for sweep modulation
+    this.filterNode = this.audioContext.createBiquadFilter();
+    this.filterNode.type = 'lowpass';
+    this.filterNode.frequency.setValueAtTime(10000, this.audioContext.currentTime);
+
+    // Channel master gain strip
     this.outputNode = this.audioContext.createGain();
     this.outputNode.gain.setValueAtTime(1.0, this.audioContext.currentTime);
+
+    // Routing: Filter -> Gain -> Destination
+    this.filterNode.connect(this.outputNode);
     this.outputNode.connect(destinationNode);
   }
 
@@ -38,6 +48,11 @@ export class AudioInstrumentChannel implements InstrumentChannel {
     // 1. Create buffer source node (one-shot per trigger)
     const source = this.audioContext.createBufferSource();
     source.buffer = this.sampleBuffer;
+    this.activeSources.add(source);
+
+    source.onended = () => {
+      this.activeSources.delete(source);
+    };
 
     // 2. Calculate pitch/playback rate from note string (e.g., "C-4", "D#4")
     const targetMidi = this.noteToMidi(note);
@@ -51,12 +66,48 @@ export class AudioInstrumentChannel implements InstrumentChannel {
     gainNode.gain.setValueAtTime(0, now);
     gainNode.gain.linearRampToValueAtTime(normalizedVolume, now + rampDuration);
 
-    // 4. Connect routing: Source -> Gain (with anti-click) -> Channel Master
+    // 4. Connect routing: Source -> Gain -> Filter Strip -> Destination
     source.connect(gainNode);
-    gainNode.connect(this.outputNode);
+    gainNode.connect(this.filterNode);
 
     // 5. Fire playback
     source.start(now);
+  }
+
+  /**
+   * Applies real-time micro-modulation commands parsed from Table steps.
+   */
+  public applyModulation(command: string, value: number): void {
+    const now = this.audioContext.currentTime;
+
+    switch (command.charAt(0)) {
+      case 'P': // Pitch offset modulation
+        {
+          const semitoneShift = value > 127 ? value - 256 : value;
+          const rateMultiplier = Math.pow(2, semitoneShift / 12);
+          this.activeSources.forEach(source => {
+            source.playbackRate.setValueAtTime(rateMultiplier, now);
+          });
+        }
+        break;
+
+      case 'F': // Filter cutoff sweep modulation (0x00 to 0xFF)
+        {
+          const cutoffHz = 100 + (value / 255) * 10000;
+          this.filterNode.frequency.setValueAtTime(Math.max(20, Math.min(20000, cutoffHz)), now);
+        }
+        break;
+
+      case 'V': // Volume envelope modulation
+        {
+          const normalizedVol = Math.min(64, value) / 64;
+          this.outputNode.gain.setValueAtTime(normalizedVol, now);
+        }
+        break;
+
+      default:
+        break;
+    }
   }
 
   /**
