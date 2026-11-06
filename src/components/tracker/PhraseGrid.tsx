@@ -16,7 +16,7 @@ export const PhraseGrid: React.FC<PhraseGridProps> = ({ audioBridge, totalRows =
   const [activeVoiceKey] = useState<string>('channel-1');
   const { isRecording, setIsRecording, activeInstrument, setActiveInstrument, recordPadHit } = useLiveStepRecord(
     {} as any,
-    totalRows,
+    [],
     () => {}
   );
 
