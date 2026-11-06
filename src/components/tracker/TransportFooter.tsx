@@ -1,3 +1,7 @@
+// ============================================================================
+// STAGE E - PHASE 32 SUB: COMPACT MODULAR TRANSPORT CONTROLLER (TransportFooter.tsx)
+// ============================================================================
+
 import React from 'react';
 
 export interface TransportFooterProps {
@@ -21,6 +25,7 @@ export const TransportFooter: React.FC<TransportFooterProps> = ({
 }) => {
   return (
     <footer className="flex justify-between items-center px-4 py-3 bg-zinc-900 border border-emerald-500/30 rounded-b shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+      {/* Pad Bank Selector Switches */}
       <div className="flex items-center gap-2">
         <span className="text-xs text-emerald-600 mr-1">BANK:</span>
         {['A', 'B', 'C', 'D'].map((bankLabel, bIdx) => (
@@ -38,7 +43,9 @@ export const TransportFooter: React.FC<TransportFooterProps> = ({
         ))}
       </div>
 
+      {/* Main Tape Transport Deck Controls */}
       <div className="flex items-center gap-2">
+        {/* Record Arm Key */}
         <button
           onClick={() => setIsRecording(!isRecording)}
           className={`px-4 py-1.5 border text-xs font-bold rounded uppercase tracking-wider transition-all cursor-pointer ${
@@ -50,6 +57,7 @@ export const TransportFooter: React.FC<TransportFooterProps> = ({
           {isRecording ? '● REC ACTIVE' : '○ RECORD'}
         </button>
 
+        {/* Play / Pause Toggle Key */}
         <button
           onClick={onPlayToggle}
           className={`px-5 py-1.5 border text-xs font-bold rounded uppercase tracking-wider transition-all cursor-pointer ${
@@ -61,6 +69,7 @@ export const TransportFooter: React.FC<TransportFooterProps> = ({
           {isPlaying ? '■ PAUSE' : '▶ PLAY'}
         </button>
 
+        {/* Hard Reset Stop Key */}
         <button
           onClick={onStop}
           className="px-4 py-1.5 bg-black/50 hover:bg-zinc-800 text-zinc-400 border border-zinc-700/50 hover:border-zinc-500 text-xs font-bold rounded uppercase tracking-wider transition-all cursor-pointer"
