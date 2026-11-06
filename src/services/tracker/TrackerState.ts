@@ -65,91 +65,27 @@ export interface ProjectStateSchema {
 }
 
 // ============================================================================
-// PHASE 24: RUNTIME TYPESCRIPT DATA GUARD VALIDATORS
+// PHASE 24: EXPLICIT RUNTIME TYPE GUARDS
 // ============================================================================
-export function isValidTrackerStep(obj: any): obj is TrackerStep {
+export function isValidTrackerStep(step: any): step is TrackerStep {
   return (
-    obj !== null &&
-    typeof obj === 'object' &&
-    typeof obj.step === 'number' &&
-    !isNaN(obj.step) &&
-    (obj.padId === null || (typeof obj.padId === 'number' && !isNaN(obj.padId))) &&
-    typeof obj.vol === 'number' &&
-    !isNaN(obj.vol) &&
-    typeof obj.fxType === 'string' &&
-    (obj.fxParam === null || (typeof obj.fxParam === 'number' && !isNaN(obj.fxParam)))
+    step !== null &&
+    typeof step === 'object' &&
+    typeof step.step === 'number' &&
+    !isNaN(step.step) &&
+    (step.padId === null || (typeof step.padId === 'number' && !isNaN(step.padId))) &&
+    typeof step.vol === 'number' &&
+    !isNaN(step.vol) &&
+    typeof step.fxType === 'string' &&
+    (step.fxParam === null || (typeof step.fxParam === 'number' && !isNaN(step.fxParam)))
   );
 }
 
-export function isValidPhraseBlock(obj: any): obj is PhraseBlock {
-  if (!Array.isArray(obj) || obj.length !== 16) {
+export function isValidPhraseBlock(phrase: any): phrase is PhraseBlock {
+  if (!Array.isArray(phrase) || phrase.length !== 16) {
     return false;
   }
-  return obj.every((item) => isValidTrackerStep(item));
-}
-
-export function isValidProjectState(obj: any): obj is ProjectStateSchema {
-  if (obj === null || typeof obj !== 'object') {
-    return false;
-  }
-
-  const hasValidPrimitives =
-    typeof obj.version === 'string' &&
-    typeof obj.bpm === 'number' &&
-    !isNaN(obj.bpm) &&
-    typeof obj.swing === 'number' &&
-    !isNaN(obj.swing) &&
-    typeof obj.isLivePerformanceMode === 'boolean' &&
-    typeof obj.activePhrase === 'string' &&
-    typeof obj.timestamp === 'number' &&
-    !isNaN(obj.timestamp);
-
-  if (!hasValidPrimitives) {
-    return false;
-  }
-
-  // Validate phrases dictionary
-  if (!obj.phrases || typeof obj.phrases !== 'object') {
-    return false;
-  }
-
-  for (const phraseKey of Object.keys(obj.phrases)) {
-    if (!isValidPhraseBlock(obj.phrases[phraseKey])) {
-      return false;
-    }
-  }
-
-  // Validate chains dictionary
-  if (!obj.chains || typeof obj.chains !== 'object') {
-    return false;
-  }
-
-  for (const chainKey of Object.keys(obj.chains)) {
-    if (!Array.isArray(obj.chains[chainKey]) || !obj.chains[chainKey].every((p: any) => typeof p === 'string')) {
-      return false;
-    }
-  }
-
-  // Validate songTimeline array
-  if (!Array.isArray(obj.songTimeline)) {
-    return false;
-  }
-
-  for (const row of obj.songTimeline) {
-    if (
-      !row ||
-      typeof row !== 'object' ||
-      typeof row.rowId !== 'number' ||
-      typeof row.phraseKey !== 'string' ||
-      typeof row.repeatCount !== 'number' ||
-      !Array.isArray(row.muteStates) ||
-      !row.muteStates.every((m: any) => typeof m === 'boolean')
-    ) {
-      return false;
-    }
-  }
-
-  return true;
+  return phrase.every((item) => isValidTrackerStep(item));
 }
 // ============================================================================
 
@@ -256,4 +192,89 @@ export class TrackerState {
         return normalized;
     }
   }
+
+  // ============================================================================
+  // PHASE 24: RUNTIME SELF-CORRECTING PROJECT STATE SANITIZER
+  // ============================================================================
+  public static sanitizeProjectState(state: any): ProjectStateSchema {
+    const defaults = createInitialTrackerState();
+
+    if (!state || typeof state !== 'object') {
+      return defaults;
+    }
+
+    const version = typeof state.version === 'string' ? state.version : defaults.version;
+    const bpm = typeof state.bpm === 'number' && !isNaN(state.bpm) ? state.bpm : defaults.bpm;
+    const swing = typeof state.swing === 'number' && !isNaN(state.swing) ? state.swing : defaults.swing;
+    const isLivePerformanceMode = typeof state.isLivePerformanceMode === 'boolean' ? state.isLivePerformanceMode : defaults.isLivePerformanceMode;
+    const activePhrase = typeof state.activePhrase === 'string' ? state.activePhrase : defaults.activePhrase;
+    const timestamp = typeof state.timestamp === 'number' && !isNaN(state.timestamp) ? state.timestamp : Date.now();
+
+    // Sanitize phrases dictionary
+    const sanitizedPhrases: Record<string, PhraseBlock> = {};
+    if (state.phrases && typeof state.phrases === 'object') {
+      for (const [key, phraseVal] of Object.entries(state.phrases)) {
+        if (isValidPhraseBlock(phraseVal)) {
+          sanitizedPhrases[key] = phraseVal;
+        } else if (Array.isArray(phraseVal)) {
+          // Re-build valid 16-step phrase block from corrupt/partial input
+          const fallbackSteps: TrackerStep[] = Array.from({ length: 16 }, (_, i) => {
+            const rawStep = (phraseVal as any[])[i];
+            return {
+              step: i + 1,
+              padId: rawStep && typeof rawStep.padId === 'number' ? rawStep.padId : null,
+              vol: rawStep && typeof rawStep.vol === 'number' ? rawStep.vol : 1.0,
+              fxType: rawStep && typeof rawStep.fxType === 'string' ? rawStep.fxType : 'bypass',
+              fxParam: rawStep && typeof rawStep.fxParam === 'number' ? rawStep.fxParam : null,
+            };
+          });
+          sanitizedPhrases[key] = fallbackSteps;
+        }
+      }
+    }
+
+    if (Object.keys(sanitizedPhrases).length === 0) {
+      sanitizedPhrases['01'] = defaults.phrases['01'];
+    }
+
+    // Sanitize chains dictionary
+    const sanitizedChains: Record<string, string[]> = {};
+    if (state.chains && typeof state.chains === 'object') {
+      for (const [key, chainVal] of Object.entries(state.chains)) {
+        if (Array.isArray(chainVal)) {
+          sanitizedChains[key] = chainVal.filter((p): p is string => typeof p === 'string');
+        }
+      }
+    }
+    if (Object.keys(sanitizedChains).length === 0) {
+      sanitizedChains['01'] = ['01'];
+    }
+
+    // Sanitize songTimeline array
+    let sanitizedTimeline: SongTimelineRow[] = [];
+    if (Array.isArray(state.songTimeline)) {
+      sanitizedTimeline = state.songTimeline.map((row, index) => ({
+        rowId: row && typeof row.rowId === 'number' ? row.rowId : index + 1,
+        phraseKey: row && typeof row.phraseKey === 'string' ? row.phraseKey : '01',
+        repeatCount: row && typeof row.repeatCount === 'number' ? row.repeatCount : 1,
+        muteStates: row && Array.isArray(row.muteStates) ? row.muteStates.map((m: any) => Boolean(m)) : [false, false, false, false],
+      }));
+    }
+    if (sanitizedTimeline.length === 0) {
+      sanitizedTimeline = defaults.songTimeline;
+    }
+
+    return {
+      version,
+      bpm,
+      swing,
+      isLivePerformanceMode,
+      activePhrase: sanitizedPhrases[activePhrase] ? activePhrase : Object.keys(sanitizedPhrases)[0],
+      phrases: sanitizedPhrases,
+      chains: sanitizedChains,
+      songTimeline: sanitizedTimeline,
+      timestamp,
+    };
+  }
+  // ============================================================================
 }
