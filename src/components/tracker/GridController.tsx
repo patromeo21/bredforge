@@ -1,9 +1,9 @@
 // ============================================================================
-// STAGE E - PHASE 31: LIVE STEP-INPUT EDITOR & SELECTION MATRIX (GridController.tsx)
+// STAGE E - PHASE 31 REPAIR: HYPER-CLEAN IMMUTABLE ENTRY MATRIX (GridController.tsx)
 // ============================================================================
 
 import React from 'react';
-import { ProjectStateSchema, SPFxType } from '../../services/tracker/TrackerState';
+import { ProjectStateSchema, TrackerStep } from '../../services/tracker/TrackerState';
 
 export type TrackerColumn = 'NOTE' | 'VOL' | 'FX1' | 'FX2';
 
@@ -14,16 +14,16 @@ export interface GridSelectionState {
 
 /**
  * Immutable grid cell editor function supporting step-entry programming.
- * Automatically increments rowIndex by 1 if autoAdvance is true.
+ * Uses explicit conditional assignments to prevent syntax leakage and deep-clones state.
  */
 export function handleGridCellEdit(
   currentState: ProjectStateSchema,
   selection: GridSelectionState,
   incomingValue: any,
-  autoAdvance: boolean = true
-): { updatedState: ProjectStateSchema; nextSelection: GridSelectionState } {
-  const activePhraseKey = currentState.activePhrase || '01';
-  const currentPhrase = currentState.phrases[activePhraseKey] || Array.from({ length: 16 }, (_, i) => ({
+  activePhraseId: string
+): ProjectStateSchema {
+  const targetPhraseKey = activePhraseId || currentState.activePhrase || '01';
+  const currentPhrase = currentState.phrases[targetPhraseKey] || Array.from({ length: 16 }, (_, i) => ({
     step: i + 1,
     padId: null,
     vol: 1.0,
@@ -33,41 +33,36 @@ export function handleGridCellEdit(
 
   const targetRowIndex = Math.max(0, Math.min(15, selection.rowIndex));
 
-  const updatedPhrase = currentPhrase.map((stepItem, idx) => {
+  // Deep-clone the phrase block array and target step object
+  const updatedPhrase: TrackerStep[] = currentPhrase.map((stepItem, idx) => {
     if (idx === targetRowIndex) {
-      const updatedStep = { ...stepItem };
-      switch (selection.columnIndex) {
-        if (selection.columnIndex === 'NOTE') {
-          updatedStep.padId = incomingValue;
-        } else if (selection.columnIndex === 'VOL') {
-          updatedStep.vol = typeof incomingValue === 'number' ? Math.max(0.0, Math.min(1.0, incomingValue)) : 1.0;
-        } else if (selection.columnIndex === 'FX1') {
-          updatedStep.fxType = typeof incomingValue === 'string' ? incomingValue : 'bypass';
-        } else if (selection.columnIndex === 'FX2') {
-          updatedStep.fxParam = typeof incomingValue === 'number' ? incomingValue : null;
-        }
+      const clonedStep = { ...stepItem };
+      
+      if (selection.columnIndex === 'NOTE') {
+        clonedStep.padId = incomingValue;
+      } else if (selection.columnIndex === 'VOL') {
+        clonedStep.vol = typeof incomingValue === 'number' ? Math.max(0.0, Math.min(1.0, incomingValue)) : 1.0;
+      } else if (selection.columnIndex === 'FX1') {
+        clonedStep.fxType = typeof incomingValue === 'string' ? incomingValue : 'bypass';
+      } else if (selection.columnIndex === 'FX2') {
+        clonedStep.fxParam = typeof incomingValue === 'number' ? incomingValue : null;
       }
-      return updatedStep;
+
+      return clonedStep;
     }
-    return stepItem;
+    return { ...stepItem };
   });
 
   const updatedState: ProjectStateSchema = {
     ...currentState,
     phrases: {
       ...currentState.phrases,
-      [activePhraseKey]: updatedPhrase,
+      [targetPhraseKey]: updatedPhrase,
     },
     timestamp: Date.now(),
   };
 
-  const nextRowIndex = autoAdvance ? (targetRowIndex + 1) % 16 : targetRowIndex;
-  const nextSelection: GridSelectionState = {
-    rowIndex: nextRowIndex,
-    columnIndex: selection.columnIndex,
-  };
-
-  return { updatedState, nextSelection };
+  return updatedState;
 }
 
 export interface GridControllerProps extends React.HTMLAttributes<HTMLDivElement> {
