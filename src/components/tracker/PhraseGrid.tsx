@@ -8,29 +8,33 @@ import { SequencerEngine, TrackerStep } from '../../services/audio/SequencerEngi
 interface PhraseGridProps {
   sequencer: SequencerEngine | null;
   steps: TrackerStep[];
+  activeRowIndex?: number; // Optional prop override from parent layout
   onStepSelect?: (stepIndex: number) => void;
 }
 
 export const PhraseGrid: React.FC<PhraseGridProps> = ({
   sequencer,
   steps,
+  activeRowIndex,
   onStepSelect
 }) => {
-  const [activePlaybackRow, setActivePlaybackRow] = useState<number>(0);
+  const [internalActiveRow, setInternalActiveRow] = useState<number>(0);
   const [selectedRow, setSelectedRow] = useState<number>(0);
 
-  // Subscribe to real-time audio clock cursor without re-rendering unnecessary state
+  // Subscribe to real-time audio clock cursor if parent didn't supply activeRowIndex
   useEffect(() => {
-    if (!sequencer) return;
+    if (!sequencer || activeRowIndex !== undefined) return;
 
-    const unsubscribe = sequencer.subscribeCursor((stepIndex) => {
-      setActivePlaybackRow(stepIndex);
+    const unsubscribe = sequencer.subscribeCursor((stepIndex: number) => {
+      setInternalActiveRow(stepIndex);
     });
 
     return () => {
       unsubscribe();
     };
-  }, [sequencer]);
+  }, [sequencer, activeRowIndex]);
+
+  const activePlaybackRow = activeRowIndex !== undefined ? activeRowIndex : internalActiveRow;
 
   const handleRowClick = (index: number) => {
     setSelectedRow(index);
