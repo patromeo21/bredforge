@@ -1,179 +1,118 @@
-import { PlayMode, ChokeGroup, PadConfig, ActiveVoice } from './types';
+// ============================================================================
+// BREDFORGE v1.0 — HIGH-PERFORMANCE WEB AUDIO ENGINE (AudioEngine.ts)
+// ============================================================================
 
-class AudioEngineService {
-  private ctx: AudioContext | null = null;
-  private masterGain: GainNode | null = null;
-  private activeVoices: Map<string, ActiveVoice> = new Map();
-  private sampleBuffers: Map<number, AudioBuffer> = new Map();
+export class AudioEngine {
+  private static audioCtx: AudioContext | null = null;
+  private static sampleBuffers: Map<string, AudioBuffer> = new Map();
+  private static isInitialized: boolean = false;
 
-  private padConfigs: Map<number, PadConfig> = new Map();
-
-  constructor() {
-    this.initializeDefaultConfigs();
-  }
-
-  private initializeDefaultConfigs() {
-    for (let i = 0; i < 64; i++) {
-      this.padConfigs.set(i, {
-        padIndex: i,
-        playMode: 'oneShot',
-        chokeGroup: 0,
-        gain: 1.0,
-        pitchSemiTones: 0,
-      });
-    }
-  }
-
-  private getContext(): AudioContext {
-    if (!this.ctx) {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.ctx = new AudioCtx();
-      this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.setValueAtTime(0.8, this.ctx.currentTime);
-      this.masterGain.connect(this.ctx.destination);
-    }
-    return this.ctx;
-  }
-
-  public async unlock(): Promise<void> {
-    const ctx = this.getContext();
-    if (ctx.state === 'suspended') {
-      await ctx.resume();
-    }
-  }
-
-  public getPadConfig(padIndex: number): PadConfig {
-    return this.padConfigs.get(padIndex) || {
-      padIndex,
-      playMode: 'oneShot',
-      chokeGroup: 0,
-      gain: 1.0,
-      pitchSemiTones: 0,
-    };
-  }
-
-  public setPadConfig(padIndex: number, config: Partial<PadConfig>): void {
-    const current = this.getPadConfig(padIndex);
-    this.padConfigs.set(padIndex, { ...current, ...config });
-  }
-
-  public async loadSampleToPad(padIndex: number, arrayBuffer: ArrayBuffer): Promise<void> {
-    const ctx = this.getContext();
-    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-    this.sampleBuffers.set(padIndex, audioBuffer);
-  }
-
-  public getSampleBuffer(padIndex: number): AudioBuffer | undefined {
-    return this.sampleBuffers.get(padIndex);
-  }
-
-  public triggerPad(padIndex: number, pointerId?: number): string {
-    const ctx = this.getContext();
-    const config = this.getPadConfig(padIndex);
-
-    // 1. Resolve Choke Groups FIRST before creating the new voice
-    if (config.chokeGroup > 0) {
-      this.chokeGroupVoices(config.chokeGroup);
-    }
-
-    const sampleBuffer = this.sampleBuffers.get(padIndex);
-    const sourceNode = ctx.createBufferSource();
-    const voiceGain = ctx.createGain();
-
-    if (sampleBuffer) {
-      sourceNode.buffer = sampleBuffer;
-      sourceNode.playbackRate.setValueAtTime(
-        Math.pow(2, config.pitchSemiTones / 12),
-        ctx.currentTime
-      );
-    } else {
-      const fallbackBuf = ctx.createBuffer(1, ctx.sampleRate * 0.05, ctx.sampleRate);
-      const data = fallbackBuf.getChannelData(0);
-      for (let i = 0; i < data.length; i++) {
-        data[i] = Math.sin(i / 10) * Math.exp(-i / (ctx.sampleRate * 0.02));
+  /**
+   * Initializes or resumes the AudioContext upon first user interaction
+   * (Crucial requirement for mobile Safari on iPad 9th Gen).
+   */
+  public static async init(): Promise<void> {
+    if (AudioEngine.isInitialized && AudioEngine.audioCtx) {
+      if (AudioEngine.audioCtx.state === 'suspended') {
+        await AudioEngine.audioCtx.resume();
       }
-      sourceNode.buffer = fallbackBuf;
+      return;
     }
 
-    voiceGain.gain.setValueAtTime(config.gain, ctx.currentTime);
-    sourceNode.connect(voiceGain);
-    if (this.masterGain) {
-      voiceGain.connect(this.masterGain);
+    try {
+      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      AudioEngine.audioCtx = new AudioContextClass();
+
+      if (AudioEngine.audioCtx.state === 'suspended') {
+        await AudioEngine.audioCtx.resume();
+      }
+
+      AudioEngine.isInitialized = true;
+      console.log(`[AUDIO ENGINE] Initialized successfully. Sample rate: ${AudioEngine.audioCtx.sampleRate}Hz`);
+    } catch (error) {
+      console.error("[AUDIO ENGINE] Failed to initialize AudioContext:", error);
     }
-
-    const voiceId = `${padIndex}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-
-    const activeVoice: ActiveVoice = {
-      id: voiceId,
-      padIndex,
-      pointerId,
-      chokeGroup: config.chokeGroup,
-      sourceNode,
-      gainNode: voiceGain,
-      startTime: ctx.currentTime,
-    };
-
-    // 2. Register new voice after choke resolution
-    this.activeVoices.set(voiceId, activeVoice);
-
-    sourceNode.onended = () => {
-      voiceGain.disconnect();
-      this.activeVoices.delete(voiceId);
-    };
-
-    sourceNode.start(ctx.currentTime);
-
-    if (config.playMode === 'oneShot' && !sampleBuffer) {
-      sourceNode.stop(ctx.currentTime + 0.05);
-    }
-
-    return voiceId;
   }
 
-  public releasePad(padIndex: number, pointerId?: number): void {
-    if (!this.ctx) return;
-    const config = this.getPadConfig(padIndex);
+  /**
+   * Decodes and caches an ArrayBuffer into an AudioBuffer for instant playback.
+   */
+  public static async loadSample(key: string, arrayBuffer: ArrayBuffer): Promise<void> {
+    await AudioEngine.init();
+    if (!AudioEngine.audioCtx) return;
 
-    if (config.playMode !== 'gate') return;
-
-    const now = this.ctx.currentTime;
-
-    this.activeVoices.forEach((voice, voiceId) => {
-      const matchesPointer = pointerId !== undefined ? voice.pointerId === pointerId : true;
-      if (voice.padIndex === padIndex && matchesPointer) {
-        voice.gainNode.gain.cancelScheduledValues(now);
-        voice.gainNode.gain.setValueAtTime(voice.gainNode.gain.value, now);
-        voice.gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.015);
-        
-        try {
-          voice.sourceNode.stop(now + 0.02);
-        } catch {
-          // Node already stopped
-        }
-        this.activeVoices.delete(voiceId);
-      }
-    });
+    try {
+      // Decode audio data off the main thread where possible
+      const decodedBuffer = await AudioEngine.audioCtx.decodeAudioData(arrayBuffer);
+      AudioEngine.sampleBuffers.set(key.toUpperCase(), decodedBuffer);
+      console.log(`[AUDIO ENGINE] Loaded and decoded sample: ${key}`);
+    } catch (error) {
+      console.error(`[AUDIO ENGINE] Failed to decode audio for ${key}:`, error);
+    }
   }
 
-  private chokeGroupVoices(chokeGroup: ChokeGroup): void {
-    if (!this.ctx || chokeGroup === 0) return;
-    const now = this.ctx.currentTime;
+  /**
+   * Instantaneous zero-latency pad trigger (SP-404 / M8 Style audition).
+   */
+  public static playPad(hexId: string): void {
+    if (!AudioEngine.audioCtx || AudioEngine.audioCtx.state !== 'running') {
+      // Fallback unlock attempt
+      AudioEngine.init();
+      return;
+    }
 
-    this.activeVoices.forEach((voice, voiceId) => {
-      if (voice.chokeGroup === chokeGroup) {
-        voice.gainNode.gain.cancelScheduledValues(now);
-        voice.gainNode.gain.setValueAtTime(voice.gainNode.gain.value, now);
-        voice.gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.005);
-        try {
-          voice.sourceNode.stop(now + 0.006);
-        } catch {
-          // Node already stopped
-        }
-        this.activeVoices.delete(voiceId);
-      }
-    });
+    const buffer = AudioEngine.sampleBuffers.get(hexId.toUpperCase());
+    if (!buffer) {
+      // If no sample buffer is loaded yet, generate a crisp synthesized click/metronome blip 
+      // as a fallback so live pads are immediately responsive out of the box.
+      AudioEngine.playFallbackBlip();
+      return;
+    }
+
+    try {
+      const source = AudioEngine.audioCtx.createBufferSource();
+      source.buffer = buffer;
+
+      // Route through a master gain node for headroom management
+      const gainNode = AudioEngine.audioCtx.createGain();
+      gainNode.gain.value = 0.85;
+
+      source.connect(gainNode);
+      gainNode.connect(AudioEngine.audioCtx.destination);
+
+      source.start(0);
+    } catch (error) {
+      console.error(`[AUDIO ENGINE] Error playback for pad ${hexId}:`, error);
+    }
+  }
+
+  /**
+   * Internal synthetic fallback blip when raw sample buffers are not yet loaded.
+   */
+  private static playFallbackBlip(): void {
+    if (!AudioEngine.audioCtx) return;
+    try {
+      const osc = AudioEngine.audioCtx.createOscillator();
+      const gain = AudioEngine.audioCtx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(220, AudioEngine.audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(55, AudioEngine.audioCtx.currentTime + 0.08);
+
+      gain.gain.setValueAtTime(0.5, AudioEngine.audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, AudioEngine.audioCtx.currentTime + 0.08);
+
+      osc.connect(gain);
+      gain.connect(AudioEngine.audioCtx.destination);
+
+      osc.start();
+      osc.stop(AudioEngine.audioCtx.currentTime + 0.08);
+    } catch (e) {
+      // Suppress fallback audio errors
+    }
+  }
+
+  public static getContextState(): string {
+    return AudioEngine.audioCtx ? AudioEngine.audioCtx.state : 'uninitialized';
   }
 }
-
-export const AudioEngine = new AudioEngineService();
-export default AudioEngine;
