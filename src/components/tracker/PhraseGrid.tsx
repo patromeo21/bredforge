@@ -1,62 +1,94 @@
 // ============================================================================
-// BREDFORGE v1.0 — PHRASE STEP SEQUENCER GRID WITH PLAYHEAD (PhraseGrid.tsx)
+// BREDFORGE v1.0 — HIGH-CONTRAST PHRASE GRID (PhraseGrid.tsx)
 // ============================================================================
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { SequencerEngine, TrackerStep } from '../../services/audio/SequencerEngine';
 
-export interface PhraseGridProps {
-  activeRowIndex: number; // Current step row driven by transport clock (0 - 63)
+interface PhraseGridProps {
+  sequencer: SequencerEngine | null;
+  steps: TrackerStep[];
+  onStepSelect?: (stepIndex: number) => void;
 }
 
-export const PhraseGrid: React.FC<PhraseGridProps> = ({ activeRowIndex }) => {
-  // 64 Steps vertical phrase structure typical of advanced hardware trackers
-  const totalRows = 64;
-  const columns = ['NOTE', 'INST', 'VOL', 'FX1', 'FX2'];
+export const PhraseGrid: React.FC<PhraseGridProps> = ({
+  sequencer,
+  steps,
+  onStepSelect
+}) => {
+  const [activePlaybackRow, setActivePlaybackRow] = useState<number>(0);
+  const [selectedRow, setSelectedRow] = useState<number>(0);
+
+  // Subscribe to real-time audio clock cursor without re-rendering unnecessary state
+  useEffect(() => {
+    if (!sequencer) return;
+
+    const unsubscribe = sequencer.subscribeCursor((stepIndex) => {
+      setActivePlaybackRow(stepIndex);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [sequencer]);
+
+  const handleRowClick = (index: number) => {
+    setSelectedRow(index);
+    if (onStepSelect) {
+      onStepSelect(index);
+    }
+  };
 
   return (
-    <div className="flex-1 bg-zinc-950 border border-emerald-500/30 rounded flex flex-col overflow-hidden font-mono text-[11px]">
-      
-      {/* Grid Column Headers */}
-      <div className="grid grid-cols-6 bg-black/80 border-b border-emerald-500/30 px-2 py-1 text-[10px] text-emerald-500/80 font-bold sticky top-0 z-10">
-        <span className="text-center">ROW</span>
-        {columns.map((col, idx) => (
-          <span key={idx} className="text-center">{col}</span>
-        ))}
+    <div className="w-full h-full bg-black text-white font-mono text-xs select-none overflow-y-auto border border-neutral-800">
+      {/* Tracker Column Headers */}
+      <div className="sticky top-0 bg-neutral-900 border-b border-neutral-700 grid grid-cols-12 px-2 py-1 text-neutral-400 font-bold uppercase tracking-wider">
+        <span className="col-span-2">ROW</span>
+        <span className="col-span-2">NOTE</span>
+        <span className="col-span-2">INST</span>
+        <span className="col-span-2">VOL</span>
+        <span className="col-span-2">FX1</span>
+        <span className="col-span-2">FX2</span>
       </div>
 
-      {/* Scrollable Step Rows */}
-      <div className="flex-1 overflow-y-auto flex flex-col divide-y divide-emerald-500/10">
-        {Array.from({ length: totalRows }).map((_, rowIndex) => {
-          const isCurrentRow = rowIndex === activeRowIndex;
-          const isBeatMarker = rowIndex % 4 === 0;
+      {/* Rows */}
+      <div className="divide-y divide-neutral-900">
+        {steps.map((step, index) => {
+          const isPlaying = index === activePlaybackRow;
+          const isSelected = index === selectedRow;
+
+          // High-contrast Dirtywave pixel styling rules
+          let rowBg = 'bg-black text-neutral-300';
+          if (isPlaying) {
+            rowBg = 'bg-white text-black font-bold'; // Highlight playhead
+          } else if (isSelected) {
+            rowBg = 'bg-neutral-800 text-yellow-400 font-semibold'; // Editing cursor
+          }
+
+          const hexRow = index.toString(16).toUpperCase().padStart(2, '0');
+          const instStr = step.instrument > 0 
+            ? step.instrument.toString(16).toUpperCase().padStart(2, '0') 
+            : '--';
+          const volStr = step.volume > 0 
+            ? step.volume.toString(16).toUpperCase().padStart(2, '0') 
+            : '--';
 
           return (
             <div
-              key={rowIndex}
-              className={`grid grid-cols-6 items-center px-2 py-0.5 transition-colors ${
-                isCurrentRow
-                  ? 'bg-emerald-500/30 text-emerald-200 shadow-[inset_0_0_8px_rgba(16,185,129,0.4)] font-bold'
-                  : isBeatMarker
-                  ? 'bg-zinc-900/60 text-emerald-400/90'
-                  : 'bg-transparent text-emerald-600/60 hover:bg-emerald-500/5'
-              }`}
+              key={index}
+              onClick={() => handleRowClick(index)}
+              className={`grid grid-cols-12 px-2 py-0.5 cursor-pointer transition-colors ${rowBg}`}
             >
-              {/* Row Number Identifier */}
-              <span className="text-center text-[10px] tracking-widest">
-                {String(rowIndex).padStart(2, '0')}
-              </span>
-
-              {/* Step Sequence Columns (Note, Instrument, Volume, FX1, FX2) */}
-              <span className="text-center">---</span>
-              <span className="text-center">--</span>
-              <span className="text-center">--</span>
-              <span className="text-center">---</span>
-              <span className="text-center">---</span>
+              <span className="col-span-2 opacity-60">{hexRow}</span>
+              <span className="col-span-2 tracking-tight">{step.note || '---'}</span>
+              <span className="col-span-2">{instStr}</span>
+              <span className="col-span-2">{volStr}</span>
+              <span className="col-span-2 opacity-90">{step.fx1 || '---'}</span>
+              <span className="col-span-2 opacity-90">{step.fx2 || '---'}</span>
             </div>
           );
         })}
       </div>
-
     </div>
   );
 };
