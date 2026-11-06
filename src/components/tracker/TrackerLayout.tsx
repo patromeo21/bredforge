@@ -12,7 +12,7 @@ import { StorageVault } from '../../services/storage/StorageVault';
 
 import { UIFrameProxy } from '../../services/tracker/UIFrameProxy';
 
-import { AntiDriftClock } from '../../services/audio/AntiDriftClock';
+import { AntiDriftClock } from '../tracker/AntiDriftClock';
 
 import { PadMatrix } from './PadMatrix';
 
@@ -88,7 +88,7 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
 
 
 
-        const clock = new AntiDriftClock(ctx, projectState.bpm, (stepIndex) => {
+        const clock = new AntiDriftClock(ctx, projectState.bpm, (stepIndex: number) => {
 
           setActivePlayheadRow(stepIndex);
 
