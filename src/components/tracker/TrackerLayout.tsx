@@ -1,8 +1,8 @@
 // ============================================================================
-// BREDFORGE v1.0 — MASTER TRACKER LAYOUT & PERSISTENCE (TrackerLayout.tsx)
+// BREDFORGE v1.0 — MASTER TRACKER LAYOUT & STEP CLOCK (TrackerLayout.tsx)
 // ============================================================================
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PhraseGrid } from './PhraseGrid';
 import { GridController } from './GridController';
 import { PadMatrix } from './PadMatrix';
@@ -21,9 +21,27 @@ export const TrackerLayout: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [bpm, setBpm] = useState<number>(124);
   const [statusMessage, setStatusMessage] = useState<string>('READY');
+  const [activeRowIndex, setActiveRowIndex] = useState<number>(0);
 
   // Mock selection state with column type-assertion for GridController compatibility
   const [gridSelection, setGridSelection] = useState<{ rowIndex: number; columnIndex: any }>({ rowIndex: 0, columnIndex: 0 });
+
+  // High-precision hardware transport clock for step sequencing playhead
+  useEffect(() => {
+    if (!isPlaying) {
+      setActiveRowIndex(0);
+      return;
+    }
+
+    // Calculate milliseconds per 16th note step based on BPM: (60 / BPM / 4) * 1000
+    const stepIntervalMs = (60 / bpm / 4) * 1000;
+
+    const timer = setInterval(() => {
+      setActiveRowIndex((prevRow) => (prevRow + 1) % 64);
+    }, stepIntervalMs);
+
+    return () => clearInterval(timer);
+  }, [isPlaying, bpm]);
 
   // Live Audio Engine Pad Trigger (SP-Style Zero-Latency Audition & Synth Fallback)
   const handlePadTrigger = async (bankIdx: number, padIdx: number, hexId: string) => {
@@ -186,10 +204,10 @@ export const TrackerLayout: React.FC = () => {
             <div className="flex-1 flex flex-col bg-zinc-950/40 border border-emerald-500/20 rounded p-2 overflow-hidden">
               <div className="flex justify-between items-center pb-1 mb-1 border-b border-emerald-500/20 text-[10px] text-emerald-500/70">
                 <span>[ PHRASE STEP SEQUENCER ]</span>
-                <span>ROW: 00 / 64</span>
+                <span>ROW: {String(activeRowIndex).padStart(2, '0')} / 64</span>
               </div>
               <div className="flex-1 flex flex-col overflow-hidden gap-2">
-                <PhraseGrid />
+                <PhraseGrid activeRowIndex={activeRowIndex} />
                 <GridController selection={gridSelection} />
               </div>
             </div>
