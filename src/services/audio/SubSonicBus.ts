@@ -30,7 +30,7 @@ export class SubSonicBus {
 
     // 2. Decapitator + SP-404 Saturation WaveShaper Node
     this.waveshaper = this.context.createWaveShaper();
-    this.waveshaper.curve = this.createSaturationCurve(2.5) as unknown as Float32Array; // Drive amount
+    this.waveshaper.curve = this.createSaturationCurve(2.5) as any; // Drive amount
 
     // 3. MPC AIR High-End Spectral Warmth (High-Shelf Exciter)
     this.airFilter = this.context.createBiquadFilter();
@@ -76,6 +76,6 @@ export class SubSonicBus {
   }
 
   public setDrive(amount: number) {
-    this.waveshaper.curve = this.createSaturationCurve(amount) as unknown as Float32Array;
+    this.waveshaper.curve = this.createSaturationCurve(amount) as any;
   }
 }
