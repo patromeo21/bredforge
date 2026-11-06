@@ -65,7 +65,7 @@ export interface ProjectStateSchema {
 }
 
 // ============================================================================
-// PHASE 24: EXPLICIT RUNTIME TYPE GUARDS
+// PHASE 24: EXPLICIT RUNTIME TYPE GUARDS & GLOBAL STORAGE SHIELDS
 // ============================================================================
 export function isValidTrackerStep(step: any): step is TrackerStep {
   return (
@@ -86,6 +86,16 @@ export function isValidPhraseBlock(phrase: any): phrase is PhraseBlock {
     return false;
   }
   return phrase.every((item) => isValidTrackerStep(item));
+}
+
+export function isValidProjectState(state: any): state is ProjectStateSchema {
+  return (
+    state !== null &&
+    typeof state === 'object' &&
+    'phrases' in state &&
+    'chains' in state &&
+    'songTimeline' in state
+  );
 }
 // ============================================================================
 
@@ -217,7 +227,6 @@ export class TrackerState {
         if (isValidPhraseBlock(phraseVal)) {
           sanitizedPhrases[key] = phraseVal;
         } else if (Array.isArray(phraseVal)) {
-          // Re-build valid 16-step phrase block from corrupt/partial input
           const fallbackSteps: TrackerStep[] = Array.from({ length: 16 }, (_, i) => {
             const rawStep = (phraseVal as any[])[i];
             return {
@@ -250,10 +259,10 @@ export class TrackerState {
       sanitizedChains['01'] = ['01'];
     }
 
-    // Sanitize songTimeline array
+    // Sanitize songTimeline array with explicit typing
     let sanitizedTimeline: SongTimelineRow[] = [];
     if (Array.isArray(state.songTimeline)) {
-      sanitizedTimeline = state.songTimeline.map((row, index) => ({
+      sanitizedTimeline = state.songTimeline.map((row: any, index: number) => ({
         rowId: row && typeof row.rowId === 'number' ? row.rowId : index + 1,
         phraseKey: row && typeof row.phraseKey === 'string' ? row.phraseKey : '01',
         repeatCount: row && typeof row.repeatCount === 'number' ? row.repeatCount : 1,
