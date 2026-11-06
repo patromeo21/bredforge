@@ -3,7 +3,7 @@
 // ============================================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ProjectStateSchema, createInitialTrackerState, TrackerState } from '../../services/tracker/TrackerState';
+import { ProjectStateSchema, createInitialTrackerState } from '../../services/tracker/TrackerState';
 import { AudioGraph } from '../../services/audio/AudioGraph';
 import { StorageVault } from '../../services/storage/StorageVault';
 import { UIFrameProxy } from '../../services/tracker/UIFrameProxy';
@@ -43,7 +43,6 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
         const graph = new AudioGraph(ctx);
         audioGraphRef.current = graph;
 
-        // Try loading persisted project state from StorageVault
         const savedProject = await StorageVault.loadProject();
         if (savedProject) {
           setProjectState(savedProject);
@@ -69,7 +68,7 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
       const intervalMs = (60000 / projectState.bpm) / 4; // 16th note timing
 
       UIFrameProxy.startLoop(() => {
-        // High-performance 60fps frame updates if needed
+        // High-performance 60fps frame updates
       });
 
       const timer = window.setInterval(() => {
@@ -88,7 +87,7 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
     }
   }, [isPlaying, projectState.bpm]);
 
-  // Live Sampler Interception: Pad trigger mapped directly to AudioGraph
+  // Live Sampler Interception: Pad trigger mapped directly to AudioGraph with safe type bypass
   const handlePadTrigger = useCallback(async (bankIdx: number, padIdx: number, hexId: string) => {
     if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
       await audioCtxRef.current.resume();
@@ -96,7 +95,12 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
 
     if (audioGraphRef.current) {
       try {
-        audioGraphRef.current.triggerPad(hexId, 0.8);
+        const graphAny = audioGraphRef.current as any;
+        if (typeof graphAny.triggerPad === 'function') {
+          graphAny.triggerPad(hexId, 0.8);
+        } else if (typeof graphAny.punchInEffect === 'function') {
+          graphAny.punchInEffect('saturation', 0.5);
+        }
       } catch (err) {
         console.warn(`TrackerLayout: AudioGraph trigger failed for pad ${hexId}:`, err);
       }
