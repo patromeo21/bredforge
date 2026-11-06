@@ -1,5 +1,5 @@
 // ============================================================================
-// BREDFORGE v1.0 — MASTER TRACKER LAYOUT & AUDIO BINDING (TrackerLayout.tsx)
+// BREDFORGE v1.0 — MASTER TRACKER LAYOUT & PERSISTENCE (TrackerLayout.tsx)
 // ============================================================================
 
 import React, { useState } from 'react';
@@ -10,7 +10,8 @@ import { ArrangerGrid } from './ArrangerGrid';
 import { MixerView } from './MixerView';
 import { ChainView } from './ChainView';
 import { ChopView } from './ChopView';
-import { AudioEngine } from '../../services/audio/AudioEngine'; // Adjust path if needed
+import { AudioEngine } from '../../services/audio/AudioEngine';
+import { StorageVault } from '../../services/storage/StorageVault';
 
 type NavigationTab = 'WORKSPACE' | 'SONG' | 'CHAIN' | 'CHOP';
 
@@ -19,6 +20,7 @@ export const TrackerLayout: React.FC = () => {
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [bpm, setBpm] = useState<number>(124);
+  const [statusMessage, setStatusMessage] = useState<string>('READY');
 
   // Mock selection state with column type-assertion for GridController compatibility
   const [gridSelection, setGridSelection] = useState<{ rowIndex: number; columnIndex: any }>({ rowIndex: 0, columnIndex: 0 });
@@ -41,6 +43,44 @@ export const TrackerLayout: React.FC = () => {
     await AudioEngine.init();
   };
 
+  // StorageVault Save Handler
+  const handleSaveProject = async () => {
+    try {
+      setStatusMessage('SAVING...');
+      const projectPayload: any = {
+        version: '1.0.0',
+        metadata: { title: 'BREDFORGE_LIVE_SESSION', bpm, createdAt: Date.now() },
+        tracker: { bpm, steps: [] },
+      };
+      await StorageVault.saveProject(projectPayload);
+      setStatusMessage('SAVED OK');
+      setTimeout(() => setStatusMessage('READY'), 2000);
+    } catch (error) {
+      setStatusMessage('SAVE ERR');
+      setTimeout(() => setStatusMessage('READY'), 2000);
+    }
+  };
+
+  // StorageVault Load Handler
+  const handleLoadProject = async () => {
+    try {
+      setStatusMessage('LOADING...');
+      const loaded = await StorageVault.loadProject();
+      if (loaded) {
+        if (loaded.tracker?.bpm) {
+          setBpm(loaded.tracker.bpm);
+        }
+        setStatusMessage('LOAD OK');
+      } else {
+        setStatusMessage('NO DATA');
+      }
+      setTimeout(() => setStatusMessage('READY'), 2000);
+    } catch (error) {
+      setStatusMessage('LOAD ERR');
+      setTimeout(() => setStatusMessage('READY'), 2000);
+    }
+  };
+
   return (
     <div 
       onClick={handleGlobalTouch}
@@ -61,7 +101,7 @@ export const TrackerLayout: React.FC = () => {
           </div>
           <div className="flex items-center gap-2 text-[10px] text-emerald-500/70 border-l border-emerald-500/20 pl-3">
             <span>BPM: <strong className="text-emerald-400">{bpm}</strong></span>
-            <span>TARGET: <strong className="text-emerald-400">IPAD 9TH GEN (60FPS)</strong></span>
+            <span>STATUS: <strong className="text-amber-400">{statusMessage}</strong></span>
           </div>
         </div>
 
@@ -90,8 +130,23 @@ export const TrackerLayout: React.FC = () => {
           })}
         </div>
 
-        {/* Global Transport Controls (PLAY / REC) */}
+        {/* Storage Persistence & Transport Controls */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleSaveProject}
+            className="px-2 py-1 rounded text-[9px] font-bold bg-zinc-900 text-emerald-400 border border-emerald-500/30 hover:border-emerald-500/60 transition-all cursor-pointer"
+          >
+            💾 SAVE
+          </button>
+          <button
+            onClick={handleLoadProject}
+            className="px-2 py-1 rounded text-[9px] font-bold bg-zinc-900 text-emerald-400 border border-emerald-500/30 hover:border-emerald-500/60 transition-all cursor-pointer"
+          >
+            📂 LOAD
+          </button>
+
+          <div className="h-4 w-[1px] bg-emerald-500/20 mx-1" />
+
           <button
             onClick={() => setIsPlaying(!isPlaying)}
             className={`px-3 py-1 rounded text-[10px] font-bold border transition-all cursor-pointer ${
