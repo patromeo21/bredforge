@@ -14,7 +14,11 @@ interface PhraseGridProps {
 
 export const PhraseGrid: React.FC<PhraseGridProps> = ({ audioBridge, totalRows = 64, activeRowIndex }) => {
   const [activeVoiceKey] = useState<string>('channel-1');
-  const { isRecording, setIsRecording, activeInstrument, setActiveInstrument, recordPadHit } = useLiveStepRecord();
+  const { isRecording, setIsRecording, activeInstrument, setActiveInstrument, recordPadHit } = useLiveStepRecord(
+    totalRows,
+    0,
+    () => {}
+  );
 
   // Use external activeRowIndex if provided by TrackerLayout, otherwise fallback to 0
   const effectiveCursor = activeRowIndex !== undefined ? activeRowIndex : 0;
