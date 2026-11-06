@@ -19,10 +19,12 @@ export const TrackerLayout: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [bpm, setBpm] = useState<number>(124);
 
+  // Mock selection state for GridController
+  const [gridSelection, setGridSelection] = useState<{ row: number; col: number }>({ row: 0, col: 0 });
+
   // Audio trigger handler for pads (SP-Style instant audition)
   const handlePadTrigger = async (bankIdx: number, padIdx: number, hexId: string) => {
     console.log(`[SP AUDITION] Triggered Bank ${bankIdx} | Pad ${padIdx + 1} (Hex: ${hexId})`);
-    // Connects to Web Audio playback engine without altering step sequence unless recording
   };
 
   // Conditional step entry when REC transport is active
@@ -120,7 +122,7 @@ export const TrackerLayout: React.FC = () => {
               </div>
               <div className="flex-1 flex flex-col overflow-hidden gap-2">
                 <PhraseGrid />
-                <GridController />
+                <GridController selection={gridSelection} />
               </div>
             </div>
 
