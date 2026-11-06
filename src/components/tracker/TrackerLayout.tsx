@@ -19,8 +19,8 @@ export const TrackerLayout: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [bpm, setBpm] = useState<number>(124);
 
-  // Mock selection state for GridController
-  const [gridSelection, setGridSelection] = useState<{ row: number; col: number }>({ row: 0, col: 0 });
+  // Correct selection state matching GridSelectionState (rowIndex, columnIndex)
+  const [gridSelection, setGridSelection] = useState<{ rowIndex: number; columnIndex: number }>({ rowIndex: 0, columnIndex: 0 });
 
   // Audio trigger handler for pads (SP-Style instant audition)
   const handlePadTrigger = async (bankIdx: number, padIdx: number, hexId: string) => {
