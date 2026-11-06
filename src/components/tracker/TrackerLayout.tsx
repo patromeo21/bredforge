@@ -65,10 +65,12 @@ export const TrackerLayout: React.FC = () => {
   const handleLoadProject = async () => {
     try {
       setStatusMessage('LOADING...');
-      const loaded = await StorageVault.loadProject();
+      const loaded = (await StorageVault.loadProject()) as any;
       if (loaded) {
         if (loaded.tracker?.bpm) {
           setBpm(loaded.tracker.bpm);
+        } else if (loaded.bpm) {
+          setBpm(loaded.bpm);
         }
         setStatusMessage('LOAD OK');
       } else {
