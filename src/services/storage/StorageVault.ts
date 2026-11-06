@@ -38,6 +38,12 @@ export class StorageVault {
 
       const parsed = JSON.parse(serialized);
       const sanitized = TrackerState.sanitizeProjectState(parsed);
+      
+      if (!isValidProjectState(sanitized)) {
+        console.warn("StorageVault: Sanitized project state failed validation. Falling back to null.");
+        return null;
+      }
+
       return sanitized;
     } catch (error) {
       console.error("StorageVault: Failed to read project sequence from localStorage:", error);
@@ -47,31 +53,36 @@ export class StorageVault {
   // ============================================================================
 
   // ============================================================================
-  // INDEXEDDB ASYNCHRONOUS OFF-HEAP AUDIO BUFFER BLOB VAULT
+  // INDEXEDDB ASYNCHRONOUS OFF-HEAP AUDIO BUFFER BLOB VAULT (SAFARI HARDENED)
   // ============================================================================
   private static openDatabase(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
-      if (typeof indexedDB === 'undefined') {
-        reject(new Error("IndexedDB is not supported in this environment."));
-        return;
-      }
-
-      const request = indexedDB.open(StorageVault.DB_NAME, StorageVault.DB_VERSION);
-
-      request.onerror = () => {
-        reject(request.error || new Error("Failed to open IndexedDB database."));
-      };
-
-      request.onsuccess = () => {
-        resolve(request.result);
-      };
-
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        if (!db.objectStoreNames.contains(StorageVault.STORE_NAME)) {
-          db.createObjectStore(StorageVault.STORE_NAME);
+      try {
+        if (typeof indexedDB === 'undefined') {
+          reject(new Error("IndexedDB is not supported in this environment."));
+          return;
         }
-      };
+
+        const request = indexedDB.open(StorageVault.DB_NAME, StorageVault.DB_VERSION);
+
+        request.onerror = () => {
+          reject(request.error || new Error("Failed to open IndexedDB database."));
+        };
+
+        request.onsuccess = () => {
+          resolve(request.result);
+        };
+
+        request.onupgradeneeded = (event) => {
+          const db = (event.target as IDBOpenDBRequest).result;
+          if (!db.objectStoreNames.contains(StorageVault.STORE_NAME)) {
+            db.createObjectStore(StorageVault.STORE_NAME);
+          }
+        };
+      } catch (syncError) {
+        // Catches synchronous Safari SecurityErrors / Quota errors in private mode
+        reject(syncError instanceof Error ? syncError : new Error("Synchronous IndexedDB open failure."));
+      }
     });
   }
 
