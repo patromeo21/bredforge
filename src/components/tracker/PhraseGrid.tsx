@@ -3,17 +3,21 @@
 // ============================================================================
 
 import React, { useState } from 'react';
-import { useLiveStepRecord } from '../hooks/useLiveStepRecord';
-import { SequencerAudioBridge } from '../services/audio/SequencerAudioBridge';
+import { useLiveStepRecord } from '../../hooks/useLiveStepRecord';
+import { SequencerAudioBridge } from '../../services/audio/SequencerAudioBridge';
 
 interface PhraseGridProps {
   audioBridge: SequencerAudioBridge;
   totalRows?: number;
+  activeRowIndex?: number;
 }
 
-export const PhraseGrid: React.FC<PhraseGridProps> = ({ audioBridge, totalRows = 64 }) => {
+export const PhraseGrid: React.FC<PhraseGridProps> = ({ audioBridge, totalRows = 64, activeRowIndex }) => {
   const [activeVoiceKey] = useState<string>('channel-1');
   const { currentCursor, recordStep } = useLiveStepRecord(totalRows);
+
+  // Use external activeRowIndex if provided by TrackerLayout, otherwise fallback to hook cursor
+  const effectiveCursor = activeRowIndex !== undefined ? activeRowIndex : currentCursor;
 
   // 4x4 interactive pad layout mapping to notes & instruments
   const padGrid = [
@@ -39,8 +43,8 @@ export const PhraseGrid: React.FC<PhraseGridProps> = ({ audioBridge, totalRows =
     // 1. Trigger zero-latency audio playback via audio bridge
     audioBridge.triggerVoice(activeVoiceKey, pad.note, 64);
 
-    // 2. Record step directly into the current active live cursor row
-    recordStep(currentCursor, {
+    // 2. Record step directly into the active cursor row
+    recordStep(effectiveCursor, {
       note: pad.note,
       instrument: pad.id,
       volume: 64,
@@ -57,7 +61,7 @@ export const PhraseGrid: React.FC<PhraseGridProps> = ({ audioBridge, totalRows =
           BREDFORGE // LIVE STEP RECORDER
         </h2>
         <div className="font-mono text-sm bg-slate-900 px-3 py-1 rounded border border-slate-700">
-          SEQ CURSOR: <span className="text-amber-400 font-bold">{String(currentCursor).padStart(2, '0')}</span>
+          SEQ CURSOR: <span className="text-amber-400 font-bold">{String(effectiveCursor).padStart(2, '0')}</span>
         </div>
       </div>
 
