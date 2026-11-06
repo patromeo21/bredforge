@@ -201,16 +201,16 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
           )}
 
           {activeView === 'CHAIN' && (
-            <ChainView 
-              projectState={projectState}
-              setProjectState={setProjectState}
-            />
+            React.createElement(ChainView as any, {
+              projectState: projectState,
+              setProjectState: setProjectState
+            })
           )}
 
           {activeView === 'MIXER' && (
-            <MixerView 
-              audioGraph={audioGraphRef.current}
-            />
+            React.createElement(MixerView as any, {
+              audioGraph: audioGraphRef.current
+            })
           )}
         </div>
 
