@@ -1,51 +1,145 @@
 // ============================================================================
-// STAGE E - PHASE 27: RETRO CRT MATRIX & FIXED-GEOMETRY TRACKER BASE LAYOUT (TrackerLayout.tsx)
+// MASTER INTEGRATION - TRACKER LAYOUT WITH TRUE AUDIO COUPLING (TrackerLayout.tsx)
 // ============================================================================
 
-import React from 'react';
-import { ProjectStateSchema, createInitialTrackerState } from '../../services/tracker/TrackerState';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { ProjectStateSchema, createInitialTrackerState, TrackerState } from '../../services/tracker/TrackerState';
+import { AudioGraph } from '../../services/audio/AudioGraph';
+import { StorageVault } from '../../services/storage/StorageVault';
+import { UIFrameProxy } from '../../services/tracker/UIFrameProxy';
+import { PadMatrix } from './PadMatrix';
+import { PhraseGrid } from './PhraseGrid';
 
 export interface TrackerLayoutProps extends React.HTMLAttributes<HTMLDivElement> {
-  projectState?: ProjectStateSchema;
-  activeBpm?: number;
-  activePhraseKey?: string;
-  isPlaying?: boolean;
-  isRecording?: boolean;
-  onPlayToggle?: () => void;
-  onStop?: () => void;
-  onRecordToggle?: () => void;
-  onBankChange?: (bankIndex: number) => void;
+  initialProjectState?: ProjectStateSchema;
   [key: string]: any;
 }
 
 export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
-  projectState = createInitialTrackerState(),
-  activeBpm = 120,
-  activePhraseKey = '01',
-  isPlaying = false,
-  isRecording = false,
-  onPlayToggle,
-  onStop,
-  onRecordToggle,
-  onBankChange,
+  initialProjectState,
   ...restProps
 }) => {
+  const [projectState, setProjectState] = useState<ProjectStateSchema>(
+    initialProjectState || createInitialTrackerState()
+  );
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [activeBankIndex, setActiveBankIndex] = useState<number>(0);
+  const [activePlayheadRow, setActivePlayheadRow] = useState<number>(-1);
+  const [selectedRowIndex, setSelectedRowIndex] = useState<number>(0);
+  const [isPerformanceMode, setIsPerformanceMode] = useState<boolean>(false);
+
+  const audioGraphRef = useRef<AudioGraph | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  // Initialize Web Audio graph and AudioContext on mount
+  useEffect(() => {
+    const initAudio = async () => {
+      try {
+        const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+        const ctx = new AudioCtxClass();
+        audioCtxRef.current = ctx;
+
+        const graph = new AudioGraph(ctx);
+        audioGraphRef.current = graph;
+
+        // Try loading persisted project state from StorageVault
+        const savedProject = await StorageVault.loadProject();
+        if (savedProject) {
+          setProjectState(savedProject);
+        }
+      } catch (err) {
+        console.warn("TrackerLayout: Web Audio initialization deferred or blocked:", err);
+      }
+    };
+
+    initAudio();
+
+    return () => {
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+        audioCtxRef.current.close();
+      }
+    };
+  }, []);
+
+  // Playhead Lifecycle Linkage: Connect UIFrameProxy to timing ticks
+  useEffect(() => {
+    if (isPlaying) {
+      let stepCounter = 0;
+      const intervalMs = (60000 / projectState.bpm) / 4; // 16th note timing
+
+      UIFrameProxy.startLoop(() => {
+        // High-performance 60fps frame updates if needed
+      });
+
+      const timer = window.setInterval(() => {
+        setActivePlayheadRow(stepCounter);
+        setSelectedRowIndex(stepCounter);
+        stepCounter = (stepCounter + 1) % 16;
+      }, intervalMs);
+
+      return () => {
+        clearInterval(timer);
+        UIFrameProxy.stopLoop();
+      };
+    } else {
+      setActivePlayheadRow(-1);
+      UIFrameProxy.stopLoop();
+    }
+  }, [isPlaying, projectState.bpm]);
+
+  // Live Sampler Interception: Pad trigger mapped directly to AudioGraph
+  const handlePadTrigger = useCallback(async (bankIdx: number, padIdx: number, hexId: string) => {
+    if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+      await audioCtxRef.current.resume();
+    }
+
+    if (audioGraphRef.current) {
+      try {
+        audioGraphRef.current.triggerPad(hexId, 0.8);
+      } catch (err) {
+        console.warn(`TrackerLayout: AudioGraph trigger failed for pad ${hexId}:`, err);
+      }
+    }
+  }, []);
+
+  const handlePlayToggle = async () => {
+    if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
+      await audioCtxRef.current.resume();
+    }
+    setIsPlaying((prev) => !prev);
+  };
+
+  const handleStop = () => {
+    setIsPlaying(false);
+    setIsRecording(false);
+    setActivePlayheadRow(-1);
+    setSelectedRowIndex(0);
+  };
+
+  const handleRecordToggle = () => {
+    setIsRecording((prev) => !prev);
+  };
+
+  const activePhraseKey = projectState.activePhrase || '01';
+  const currentPhrase = projectState.phrases[activePhraseKey];
+
   return (
     <div
       {...restProps}
       className="w-screen h-screen overflow-hidden flex flex-col p-3 bg-zinc-950 text-emerald-500 font-mono select-none box-border"
     >
-      {/* 1. HEADER SECTION: Global tracking information (BPM, active Phrase/Chain ID, playback loop markers) */}
+      {/* 1. HEADER SECTION */}
       <header className="flex justify-between items-center px-4 py-3 bg-zinc-900 border border-emerald-500/30 rounded-t shadow-[0_0_15px_rgba(16,185,129,0.1)]">
         <div className="flex items-center gap-6">
           <div className="flex flex-col">
             <span className="text-[10px] text-emerald-600 uppercase tracking-widest">SYSTEM</span>
-            <span className="text-sm font-bold tracking-wider">BRED-FORGE v1.0</span>
+            <span className="text-sm font-bold tracking-wider">BRED-FORGE v1.0 [AUDIO-COUPLED]</span>
           </div>
           <div className="h-6 w-[1px] bg-emerald-500/30" />
           <div className="flex items-center gap-2">
             <span className="text-xs text-emerald-600">BPM:</span>
-            <span className="text-sm font-bold">{activeBpm}</span>
+            <span className="text-sm font-bold">{projectState.bpm}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-emerald-600">PHRASE:</span>
@@ -54,53 +148,41 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-3 py-1 bg-black/50 border border-emerald-500/20 rounded">
-            <span className="text-xs text-emerald-600">LOOP:</span>
-            <span className="text-xs font-bold text-emerald-400">01-16</span>
-          </div>
+          <button
+            onClick={() => setIsPerformanceMode(!isPerformanceMode)}
+            className={`px-3 py-1 border text-xs font-bold rounded transition-all cursor-pointer ${
+              isPerformanceMode ? 'bg-emerald-500 text-black border-emerald-400' : 'bg-black/50 text-emerald-400 border-emerald-500/30'
+            }`}
+          >
+            {isPerformanceMode ? 'MODE: PERF FX' : 'MODE: TRACKER'}
+          </button>
           <div className={`w-3 h-3 rounded-full ${isPlaying ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : 'bg-zinc-800'}`} />
         </div>
       </header>
 
-      {/* 2. MIDDLE SEQUENCER BOX: Fixed-height scroll container lined with structural vertical guides for row data columns */}
-      <main className="flex-1 my-2 bg-zinc-900/80 border-x border-emerald-500/30 overflow-hidden flex flex-col p-3 relative">
-        <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(16,185,129,0.03)_1px,transparent_1px)] bg-[size:100%_24px] pointer-events-none" />
-        
-        {/* Column Headers */}
-        <div className="grid grid-cols-6 gap-2 pb-2 mb-2 border-b border-emerald-500/20 text-xs font-bold text-emerald-400">
-          <div className="text-center">ROW</div>
-          <div className="text-center">NOTE</div>
-          <div className="text-center">INSTRUMENT</div>
-          <div className="text-center">VOLUME</div>
-          <div className="text-center">FX TYPE</div>
-          <div className="text-center">FX PARAM</div>
+      {/* 2. MIDDLE SPLIT WORKSPACE: Phrase Sequencer & Pad Matrix */}
+      <main className="flex-1 my-2 bg-zinc-900/80 border-x border-emerald-500/30 overflow-hidden flex gap-3 p-3">
+        {/* Left: 16-Step Phrase Grid with Live Playhead */}
+        <div className="flex-1 flex flex-col overflow-hidden bg-black/40 border border-emerald-500/20 rounded p-2">
+          <PhraseGrid
+            phrase={currentPhrase}
+            activeRowIndex={activePlayheadRow}
+            selectedRowIndex={selectedRowIndex}
+            onSelectRow={(idx) => setSelectedRowIndex(idx)}
+          />
         </div>
 
-        {/* Scrollable Sequencer Row Data Grid */}
-        <div className="flex-1 overflow-y-auto flex flex-col gap-1 pr-1">
-          {Array.from({ length: 16 }).map((_, idx) => {
-            const stepNum = String(idx + 1).padStart(2, '0');
-            const isEven = idx % 2 === 0;
-            return (
-              <div
-                key={idx}
-                className={`grid grid-cols-6 gap-2 py-1.5 px-2 rounded items-center text-xs transition-colors ${
-                  isEven ? 'bg-black/20' : 'bg-transparent'
-                } hover:bg-emerald-500/10 cursor-pointer`}
-              >
-                <div className="text-center text-emerald-600 font-bold">{stepNum}</div>
-                <div className="text-center text-zinc-400">---</div>
-                <div className="text-center text-zinc-500">00</div>
-                <div className="text-center text-zinc-400">--</div>
-                <div className="text-center text-zinc-500">OFF</div>
-                <div className="text-center text-zinc-500">00</div>
-              </div>
-            );
-          })}
+        {/* Right: Tactical 4x4 Pad Matrix coupled to Web Audio */}
+        <div className="w-[360px] flex flex-col justify-center">
+          <PadMatrix
+            activeBankIndex={activeBankIndex}
+            isPerformanceMode={isPerformanceMode}
+            onPadTrigger={handlePadTrigger}
+          />
         </div>
       </main>
 
-      {/* 3. BOTTOM CONTROLLER PANEL: Modular layout mapping out transport macro triggers (PLAY, STOP, RECORD) alongside bank switch buttons */}
+      {/* 3. BOTTOM CONTROLLER PANEL */}
       <footer className="flex justify-between items-center px-4 py-3 bg-zinc-900 border border-emerald-500/30 rounded-b shadow-[0_0_15px_rgba(16,185,129,0.1)]">
         {/* Bank Switch Buttons */}
         <div className="flex items-center gap-2">
@@ -108,8 +190,12 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
           {['A', 'B', 'C', 'D'].map((bankLabel, bIdx) => (
             <button
               key={bankLabel}
-              onClick={() => onBankChange && onBankChange(bIdx)}
-              className="px-3 py-1 bg-zinc-950 border border-emerald-500/40 hover:border-emerald-400 text-xs font-bold rounded text-emerald-400 hover:bg-emerald-500/20 transition-all cursor-pointer"
+              onClick={() => setActiveBankIndex(bIdx)}
+              className={`px-3 py-1 border text-xs font-bold rounded transition-all cursor-pointer ${
+                activeBankIndex === bIdx
+                  ? 'bg-emerald-500 text-black border-emerald-400 shadow-[0_0_10px_#10b981]'
+                  : 'bg-zinc-950 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/20'
+              }`}
             >
               [{bankLabel}]
             </button>
@@ -119,7 +205,7 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
         {/* Transport Macro Triggers */}
         <div className="flex items-center gap-3">
           <button
-            onClick={onPlayToggle}
+            onClick={handlePlayToggle}
             className={`px-4 py-1.5 border text-xs font-bold rounded transition-all cursor-pointer ${
               isPlaying
                 ? 'bg-emerald-500 text-black border-emerald-400 shadow-[0_0_10px_#10b981]'
@@ -129,13 +215,13 @@ export const TrackerLayout: React.FC<TrackerLayoutProps> = ({
             {isPlaying ? 'PAUSE' : 'PLAY'}
           </button>
           <button
-            onClick={onStop}
+            onClick={handleStop}
             className="px-4 py-1.5 bg-zinc-950 border border-emerald-500/40 hover:border-emerald-400 text-xs font-bold rounded text-emerald-500 hover:bg-emerald-500/20 transition-all cursor-pointer"
           >
             STOP
           </button>
           <button
-            onClick={onRecordToggle}
+            onClick={handleRecordToggle}
             className={`px-4 py-1.5 border text-xs font-bold rounded transition-all cursor-pointer ${
               isRecording
                 ? 'bg-red-600 text-white border-red-500 shadow-[0_0_10px_#ef4444]'
