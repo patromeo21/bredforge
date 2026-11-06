@@ -1,100 +1,84 @@
 // ============================================================================
-// BREDFORGE v1.0 — HIGH-CONTRAST PHRASE GRID (PhraseGrid.tsx)
+// BREDFORGE v1.0 — PHRASE GRID & LIVE RECORDING COMPONENT (PhraseGrid.tsx)
 // ============================================================================
 
-import React, { useState, useEffect } from 'react';
-import { SequencerEngine, TrackerStep } from '../../services/audio/SequencerEngine';
+import React, { useState } from 'react';
+import { useLiveStepRecord } from '../hooks/useLiveStepRecord';
+import { SequencerAudioBridge } from '../services/audio/SequencerAudioBridge';
 
 interface PhraseGridProps {
-  sequencer?: SequencerEngine | null;
-  steps?: TrackerStep[];
-  activeRowIndex?: number;
-  onStepSelect?: (stepIndex: number) => void;
+  audioBridge: SequencerAudioBridge;
+  totalRows?: number;
 }
 
-export const PhraseGrid: React.FC<PhraseGridProps> = ({
-  sequencer,
-  steps = [],
-  activeRowIndex,
-  onStepSelect
-}) => {
-  const [internalActiveRow, setInternalActiveRow] = useState<number>(0);
-  const [selectedRow, setSelectedRow] = useState<number>(0);
+export const PhraseGrid: React.FC<PhraseGridProps> = ({ audioBridge, totalRows = 64 }) => {
+  const [activeVoiceKey] = useState<string>('channel-1');
+  const { currentCursor, recordStep } = useLiveStepRecord(totalRows);
 
-  // Subscribe to real-time audio clock cursor if parent didn't supply activeRowIndex
-  useEffect(() => {
-    if (!sequencer || activeRowIndex !== undefined) return;
+  // 4x4 interactive pad layout mapping to notes & instruments
+  const padGrid = [
+    { id: 0, note: 'C-4', label: 'C4 (Kick)' },
+    { id: 1, note: 'D-4', label: 'D4 (Snare)' },
+    { id: 2, note: 'E-4', label: 'E4 (Hat)' },
+    { id: 3, note: 'F-4', label: 'F4 (Clap)' },
+    { id: 4, note: 'G-4', label: 'G4 (Perc 1)' },
+    { id: 5, note: 'A-4', label: 'A4 (Perc 2)' },
+    { id: 6, note: 'B-4', label: 'B4 (Bass)' },
+    { id: 7, note: 'C-5', label: 'C5 (Lead)' },
+    { id: 8, note: 'C#3', label: 'C#3 (Sub)' },
+    { id: 9, note: 'D#3', label: 'D#3 (Sub 2)' },
+    { id: 10, note: 'F#3', label: 'F#3 (Chord)' },
+    { id: 11, note: 'G#3', label: 'G#3 (Chord 2)' },
+    { id: 12, note: 'A#3', label: 'A#3 (FX 1)' },
+    { id: 13, note: 'C#4', label: 'C#4 (FX 2)' },
+    { id: 14, note: 'D#4', label: 'D#4 (FX 3)' },
+    { id: 15, note: 'F#4', label: 'F#4 (FX 4)' },
+  ];
 
-    const unsubscribe = sequencer.subscribeCursor((stepIndex: number) => {
-      setInternalActiveRow(stepIndex);
+  const handlePadTouch = (pad: { id: number; note: string }) => {
+    // 1. Trigger zero-latency audio playback via audio bridge
+    audioBridge.triggerVoice(activeVoiceKey, pad.note, 64);
+
+    // 2. Record step directly into the current active live cursor row
+    recordStep(currentCursor, {
+      note: pad.note,
+      instrument: pad.id,
+      volume: 64,
+      command: '---',
+      valStr: '00'
     });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [sequencer, activeRowIndex]);
-
-  const activePlaybackRow = activeRowIndex !== undefined ? activeRowIndex : internalActiveRow;
-
-  const handleRowClick = (index: number) => {
-    setSelectedRow(index);
-    if (onStepSelect) {
-      onStepSelect(index);
-    }
   };
 
   return (
-    <div className="w-full h-full bg-black text-white font-mono text-xs select-none overflow-y-auto border border-neutral-800">
-      {/* Tracker Column Headers */}
-      <div className="sticky top-0 bg-neutral-900 border-b border-neutral-700 grid grid-cols-12 px-2 py-1 text-neutral-400 font-bold uppercase tracking-wider">
-        <span className="col-span-2">ROW</span>
-        <span className="col-span-2">NOTE</span>
-        <span className="col-span-2">INST</span>
-        <span className="col-span-2">VOL</span>
-        <span className="col-span-2">FX1</span>
-        <span className="col-span-2">FX2</span>
+    <div className="flex flex-col h-full bg-slate-950 text-slate-100 p-4 select-none touch-none">
+      {/* Header & Status */}
+      <div className="flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
+        <h2 className="text-lg font-mono font-bold tracking-wider text-emerald-400">
+          BREDFORGE // LIVE STEP RECORDER
+        </h2>
+        <div className="font-mono text-sm bg-slate-900 px-3 py-1 rounded border border-slate-700">
+          SEQ CURSOR: <span className="text-amber-400 font-bold">{String(currentCursor).padStart(2, '0')}</span>
+        </div>
       </div>
 
-      {/* Rows */}
-      <div className="divide-y divide-neutral-900">
-        {steps.map((step, index) => {
-          const isPlaying = index === activePlaybackRow;
-          const isSelected = index === selectedRow;
+      {/* 4x4 Touch Pad Grid optimized for iPad touch interaction */}
+      <div className="grid grid-cols-4 gap-3 flex-1 my-auto max-w-lg mx-auto w-full">
+        {padGrid.map(pad => (
+          <button
+            key={pad.id}
+            onTouchStart={() => handlePadTouch(pad)}
+            onMouseDown={() => handlePadTouch(pad)}
+            className="flex flex-col items-center justify-center aspect-square bg-slate-900 border-2 border-slate-700 rounded-xl active:bg-emerald-600 active:border-emerald-400 active:scale-95 transition-all shadow-lg cursor-pointer"
+          >
+            <span className="font-mono text-xl font-bold text-slate-200">{pad.note}</span>
+            <span className="font-sans text-xs text-slate-400 mt-1">{pad.label}</span>
+          </button>
+        ))}
+      </div>
 
-          // High-contrast Dirtywave pixel styling rules
-          let rowBg = 'bg-black text-neutral-300';
-          if (isPlaying) {
-            rowBg = 'bg-white text-black font-bold'; // Highlight playhead
-          } else if (isSelected) {
-            rowBg = 'bg-neutral-800 text-yellow-400 font-semibold'; // Editing cursor
-          }
-
-          const hexRow = index.toString(16).toUpperCase().padStart(2, '0');
-          const instVal = step?.instrument ?? 0;
-          const volVal = step?.volume ?? 64;
-
-          const instStr = instVal > 0 
-            ? instVal.toString(16).toUpperCase().padStart(2, '0') 
-            : '--';
-          const volStr = volVal > 0 
-            ? volVal.toString(16).toUpperCase().padStart(2, '0') 
-            : '--';
-
-          return (
-            <div
-              key={index}
-              onClick={() => handleRowClick(index)}
-              className={`grid grid-cols-12 px-2 py-0.5 cursor-pointer transition-colors ${rowBg}`}
-            >
-              <span className="col-span-2 opacity-60">{hexRow}</span>
-              <span className="col-span-2 tracking-tight">{step?.note || '---'}</span>
-              <span className="col-span-2">{instStr}</span>
-              <span className="col-span-2">{volStr}</span>
-              <span className="col-span-2 opacity-90">{step?.fx1 || '---'}</span>
-              <span className="col-span-2 opacity-90">{step?.fx2 || '---'}</span>
-            </div>
-          );
-        })}
+      {/* Footer Instructions */}
+      <div className="text-center font-mono text-xs text-slate-500 mt-4">
+        Tap pads to trigger sample buffers & write live steps at cursor position.
       </div>
     </div>
   );
