@@ -1,5 +1,5 @@
 // ============================================================================
-// STAGE D - TRANSPORT ACTIVATION & DUAL D-PAD CORE OVERHAUL (BredForgeCanvas.tsx)
+// STAGE D - MINIATURE-MASTER CORE AUDIO COUPLING & LIQUID RESIZING OVERHAUL (BredForgeCanvas.tsx)
 // ============================================================================
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -67,17 +67,18 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   const [isPlayingState, setIsPlayingState] = useState<boolean>(isPlaying);
   const [isRecordingState, setIsRecordingState] = useState<boolean>(isRecording);
 
-  // Focus Area & Dual D-Pad States
+  // Focus Area & Dual/Triple D-Pad States
   const [activeFocusArea, setActiveFocusArea] = useState<ActiveFocusArea>('TRACKER');
   const [waveformZoom, setWaveformZoom] = useState<number>(1.0);
   const [waveformPan, setWaveformPan] = useState<number>(0.0);
   const [secondaryPitchOffset, setSecondaryPitchOffset] = useState<number>(0);
 
-  // Multi-column M8 tracking cursor state
+  // Multi-column M8 tracking cursor state & Playhead Tick Row
   const [cursorRow, setCursorRow] = useState<number>(0);
   const [cursorCol, setCursorCol] = useState<ColumnType>('NOTE');
   const [isEditMode, setIsEditMode] = useState<boolean>(true);
   const [isHoldActive, setIsHoldActive] = useState<boolean>(false);
+  const [activePlayheadRow, setActivePlayheadRow] = useState<number>(-1);
 
   // Sample Waveform & FX Inspector States
   const [sampleStartPoint, setSampleStartPoint] = useState<number>(0.0);
@@ -92,6 +93,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 
   const [activePadStates, setActivePadStates] = useState<boolean[]>(Array(16).fill(false));
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const waveformCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Theme Color Configurations
@@ -136,7 +138,26 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 
   const currentTheme = themes[themeMode];
 
-  // RequestAnimationFrame 60fps UI Frame Proxy Draw Loop
+  // Active Ticker Loop: Synchronize Playhead Row with Play State
+  useEffect(() => {
+    let tickerInterval: number | null = null;
+    if (isPlayingState) {
+      let currentStep = 0;
+      const intervalMs = (60000 / currentBpm) / 4; // 16th note timing
+      tickerInterval = window.setInterval(() => {
+        setActivePlayheadRow(currentStep);
+        setCursorRow(currentStep);
+        currentStep = (currentStep + 1) % 16;
+      }, intervalMs);
+    } else {
+      setActivePlayheadRow(-1);
+    }
+    return () => {
+      if (tickerInterval !== null) clearInterval(tickerInterval);
+    };
+  }, [isPlayingState, currentBpm]);
+
+  // RequestAnimationFrame 60fps UI Frame Proxy Draw Loop & Authentic Waveform Renderer
   useEffect(() => {
     let animationFrameId: number;
 
@@ -146,7 +167,6 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
-          
           ctx.fillStyle = currentTheme.panel;
           ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -164,49 +184,93 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
           ctx.stroke();
         }
       }
+
+      // Render Authentic Waveform Transients from sampleManager buffers if available
+      const wfCanvas = waveformCanvasRef.current;
+      if (wfCanvas) {
+        const wfCtx = wfCanvas.getContext('2d');
+        if (wfCtx) {
+          wfCtx.clearRect(0, 0, wfCanvas.width, wfCanvas.height);
+          wfCtx.fillStyle = currentTheme.bg;
+          wfCtx.fillRect(0, 0, wfCanvas.width, wfCanvas.height);
+
+          wfCtx.strokeStyle = currentTheme.accent;
+          wfCtx.lineWidth = 2;
+          wfCtx.beginPath();
+
+          const sliceWidth = wfCanvas.width / 100;
+          let xCoord = 0;
+
+          // Check sampleManager for active buffer or render realistic transient waveform
+          const activeBuffer = sampleManager?.getActiveBuffer?.() || null;
+          if (activeBuffer && typeof activeBuffer.getChannelData === 'function') {
+            const rawData = activeBuffer.getChannelData(0);
+            const stepSize = Math.max(1, Math.floor(rawData.length / 100));
+            for (let i = 0; i < 100; i++) {
+              const sampleVal = rawData[i * stepSize] || 0;
+              const yCoord = (wfCanvas.height / 2) + (sampleVal * (wfCanvas.height / 2) * waveformZoom) + (waveformPan * 20);
+              if (i === 0) wfCtx.moveTo(xCoord, yCoord);
+              else wfCtx.lineTo(xCoord, yCoord);
+              xCoord += sliceWidth;
+            }
+          } else {
+            // Fallback synthetic transient waveform
+            for (let i = 0; i < 100; i++) {
+              const synthVal = Math.sin(i * 0.2 + waveformPan * 5) * Math.cos(i * 0.05) * 0.8;
+              const yCoord = (wfCanvas.height / 2) + (synthVal * (wfCanvas.height / 2) * waveformZoom);
+              if (i === 0) wfCtx.moveTo(xCoord, yCoord);
+              else wfCtx.lineTo(xCoord, yCoord);
+              xCoord += sliceWidth;
+            }
+          }
+          wfCtx.stroke();
+        }
+      }
+
       animationFrameId = requestAnimationFrame(renderLoop);
     };
 
     animationFrameId = requestAnimationFrame(renderLoop);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [currentTheme]);
+  }, [currentTheme, waveformZoom, waveformPan, sampleManager]);
 
-  // Primary D-Pad Navigation & Waveform Viewport Controls
-  const handlePrimaryDirectionalNav = useCallback((direction: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT') => {
-    if (activeFocusArea === 'WAVEFORM') {
+  // Sequencer Nav Diamond (Handles Column and Row Navigation)
+  const handleSequencerNav = useCallback((direction: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT') => {
+    const columns: ColumnType[] = ['NOTE', 'VOL', 'FX1', 'FX2'];
+    if (viewMode === 'PHRASE') {
       if (direction === 'UP') {
-        setWaveformZoom((prev) => Math.min(4.0, prev + 0.25));
+        setCursorRow((prev) => Math.max(0, prev - 1));
       } else if (direction === 'DOWN') {
-        setWaveformZoom((prev) => Math.max(1.0, prev - 0.25));
+        setCursorRow((prev) => Math.min(15, prev + 1));
       } else if (direction === 'LEFT') {
-        setWaveformPan((prev) => Math.max(-1.0, prev - 0.1));
+        setCursorCol((prev) => {
+          const idx = columns.indexOf(prev);
+          return idx > 0 ? columns[idx - 1] : columns[0];
+        });
       } else if (direction === 'RIGHT') {
-        setWaveformPan((prev) => Math.min(1.0, prev + 0.1));
-      }
-    } else {
-      const columns: ColumnType[] = ['NOTE', 'VOL', 'FX1', 'FX2'];
-      if (viewMode === 'PHRASE') {
-        if (direction === 'UP') {
-          setCursorRow((prev) => Math.max(0, prev - 1));
-        } else if (direction === 'DOWN') {
-          setCursorRow((prev) => Math.min(15, prev + 1));
-        } else if (direction === 'LEFT') {
-          setCursorCol((prev) => {
-            const idx = columns.indexOf(prev);
-            return idx > 0 ? columns[idx - 1] : columns[0];
-          });
-        } else if (direction === 'RIGHT') {
-          setCursorCol((prev) => {
-            const idx = columns.indexOf(prev);
-            return idx < columns.length - 1 ? columns[idx + 1] : columns[columns.length - 1];
-          });
-        }
+        setCursorCol((prev) => {
+          const idx = columns.indexOf(prev);
+          return idx < columns.length - 1 ? columns[idx + 1] : columns[columns.length - 1];
+        });
       }
     }
-  }, [activeFocusArea, viewMode]);
+  }, [viewMode]);
 
-  // Secondary Parameter Control Diamond (Pitch Fine-Tuning & Marker Shifts)
-  const handleSecondaryDirectionalNav = useCallback((direction: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT') => {
+  // Waveform HUD Diamond (Handles Zoom Magnification & Pan Scrolling)
+  const handleWaveformNav = useCallback((direction: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT') => {
+    if (direction === 'UP') {
+      setWaveformZoom((prev) => Math.min(4.0, prev + 0.25));
+    } else if (direction === 'DOWN') {
+      setWaveformZoom((prev) => Math.max(1.0, prev - 0.25));
+    } else if (direction === 'LEFT') {
+      setWaveformPan((prev) => Math.max(-1.0, prev - 0.1));
+    } else if (direction === 'RIGHT') {
+      setWaveformPan((prev) => Math.min(1.0, prev + 0.1));
+    }
+  }, []);
+
+  // Pitch / Marker Diamond (Handles Pitch Fine-Tuning & Marker Nudges)
+  const handlePitchMarkerNav = useCallback((direction: 'UP' | 'DOWN' | 'LEFT' | 'RIGHT') => {
     if (direction === 'UP') {
       setSecondaryPitchOffset((prev) => Math.min(12, prev + 1));
     } else if (direction === 'DOWN') {
@@ -218,7 +282,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     }
   }, []);
 
-  // Handle Dynamic 64-Pad Matrix Presses
+  // Handle Dynamic 64-Pad Matrix Presses & High-Priority Hardware Auditioning
   const handlePadPress = useCallback((padIndex: number) => {
     const absolutePadIndex = padIndex + activeBankOffset;
 
@@ -239,6 +303,15 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     const bankIndex = Math.floor(activeBankOffset / 16);
     if (onPadTrigger) {
       onPadTrigger(bankIndex, padIndex);
+    }
+
+    // Hardware preview audition trigger
+    if (sampleManager && typeof sampleManager.triggerPad === 'function') {
+      try {
+        sampleManager.triggerPad(bankIndex, padIndex);
+      } catch (err) {
+        console.warn("SampleManager audition trigger error:", err);
+      }
     }
 
     if (audioGraph) {
@@ -282,7 +355,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         };
       });
     }
-  }, [audioGraph, isEditMode, viewMode, activePhraseKey, cursorRow, cursorCol, onPadTrigger, activeBankOffset]);
+  }, [audioGraph, isEditMode, viewMode, activePhraseKey, cursorRow, cursorCol, onPadTrigger, activeBankOffset, sampleManager]);
 
   const currentPhraseBlock: PhraseBlock = projectState.phrases[activePhraseKey] || Array.from({ length: 16 }, (_, i) => ({
     step: i + 1,
@@ -307,6 +380,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
     setIsPlayingState(false);
     setIsRecordingState(false);
     setCursorRow(0);
+    setActivePlayheadRow(-1);
     onStop();
   };
 
@@ -321,24 +395,17 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
   return (
     <div
       {...restProps}
+      className="w-screen h-screen overflow-hidden flex flex-col p-3 bg-neutral-900 select-none box-border"
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        width: '100%',
-        height: '100%',
         backgroundColor: currentTheme.bg,
         color: currentTheme.text,
         fontFamily: currentTheme.font,
-        padding: '16px',
-        boxSizing: 'border-box',
-        overflow: 'hidden',
-        userSelect: 'none',
         ...restProps.style,
       }}
     >
       {/* HEADER TOP BAR & VIEW SELECTORS */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: `2px solid ${currentTheme.border}`, paddingBottom: '12px' }}>
-        <div style={{ display: 'flex', gap: '8px' }}>
+      <div className="flex justify-between items-center mb-3 pb-2 border-b-2" style={{ borderColor: currentTheme.border }}>
+        <div className="flex gap-2">
           {(['SONG', 'CHAIN', 'PHRASE'] as ViewMode[]).map((mode) => (
             <button
               key={mode}
@@ -347,7 +414,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 backgroundColor: viewMode === mode ? currentTheme.accent : currentTheme.panel,
                 color: viewMode === mode ? currentTheme.textBright : currentTheme.text,
                 border: `1px solid ${currentTheme.border}`,
-                padding: '8px 16px',
+                padding: '6px 14px',
                 fontWeight: 'bold',
                 cursor: 'pointer',
                 borderRadius: '4px',
@@ -360,7 +427,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         </div>
 
         {/* DYNAMIC 64-PAD BANK SELECTORS ([A]=0, [B]=16, [C]=32, [D]=48) */}
-        <div style={{ display: 'flex', gap: '6px' }}>
+        <div className="flex gap-1">
           {[
             { label: 'A', offset: 0 },
             { label: 'B', offset: 16 },
@@ -376,7 +443,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                   backgroundColor: isActiveBank ? currentTheme.accent : currentTheme.panel,
                   color: isActiveBank ? currentTheme.textBright : currentTheme.text,
                   border: `1px solid ${currentTheme.border}`,
-                  padding: '6px 12px',
+                  padding: '5px 10px',
                   fontWeight: 'bold',
                   cursor: 'pointer',
                   borderRadius: '4px',
@@ -389,8 +456,8 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         </div>
 
         {/* THEME & ACTIVE TRANSPORT CONTROLS */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ display: 'flex', gap: '4px' }}>
+        <div className="flex items-center gap-4">
+          <div className="flex gap-1">
             {(['retro', 'cyber', 'amber'] as ThemeMode[]).map((t) => (
               <button
                 key={t}
@@ -410,14 +477,14 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
             ))}
           </div>
 
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div className="flex gap-2">
             <button
               onClick={handlePlayClick}
               style={{
                 backgroundColor: isPlayingState ? '#22c55e' : currentTheme.panel,
                 color: isPlayingState ? '#000' : currentTheme.text,
                 border: `1px solid ${currentTheme.border}`,
-                padding: '6px 14px',
+                padding: '5px 12px',
                 fontWeight: 'bold',
                 cursor: 'pointer',
               }}
@@ -430,7 +497,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 backgroundColor: currentTheme.panel,
                 color: currentTheme.text,
                 border: `1px solid ${currentTheme.border}`,
-                padding: '6px 14px',
+                padding: '5px 12px',
                 fontWeight: 'bold',
                 cursor: 'pointer',
               }}
@@ -443,7 +510,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 backgroundColor: isRecordingState ? '#ef4444' : currentTheme.panel,
                 color: isRecordingState ? '#fff' : currentTheme.text,
                 border: `1px solid ${currentTheme.border}`,
-                padding: '6px 14px',
+                padding: '5px 12px',
                 fontWeight: 'bold',
                 cursor: 'pointer',
                 animation: isRecordingState ? 'pulse 1s infinite' : 'none',
@@ -455,11 +522,11 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
         </div>
       </div>
 
-      {/* CENTRAL DUAL SPLIT WORKSPACE */}
-      <div style={{ display: 'flex', flex: 1, gap: '16px', minHeight: 0 }}>
+      {/* CENTRAL LIQUID SPLIT WORKSPACE */}
+      <div className="flex flex-1 gap-3 min-h-0">
         
-        {/* LEFT COLUMN: M8 16-ROW SEQUENCER GRID & WAVEFORM HUD */}
-        <div style={{ flex: 3, display: 'flex', flexDirection: 'column', gap: '16px', minHeight: 0 }}>
+        {/* LEFT COLUMN: M8 16-ROW SEQUENCER GRID & AUTHENTIC WAVEFORM HUD */}
+        <div className="flex-[3] flex flex-col gap-3 min-h-0">
           
           {/* M8 16-ROW TRACKER GRID */}
           <div 
@@ -469,7 +536,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
               backgroundColor: currentTheme.panel, 
               border: `2px solid ${activeFocusArea === 'TRACKER' ? currentTheme.accent : currentTheme.border}`, 
               borderRadius: '6px', 
-              padding: '12px', 
+              padding: '10px', 
               display: 'flex', 
               flexDirection: 'column', 
               position: 'relative', 
@@ -477,9 +544,9 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
               cursor: 'pointer'
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: `1px solid ${currentTheme.border}`, paddingBottom: '6px' }}>
-              <span style={{ fontSize: '12px', fontWeight: 'bold' }}>PHRASE SEQUENCE [{activePhraseKey}] - ACTIVE COL: [{cursorCol}] (FOCUS: TRACKER)</span>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div className="flex justify-between items-center mb-2 pb-1 border-b" style={{ borderColor: currentTheme.border }}>
+              <span className="text-xs font-bold">PHRASE SEQUENCE [{activePhraseKey}] - ACTIVE COL: [{cursorCol}] (FOCUS: TRACKER)</span>
+              <div className="flex gap-2 items-center">
                 <button
                   onClick={(e) => { e.stopPropagation(); setIsHoldActive(!isHoldActive); }}
                   style={{
@@ -494,12 +561,12 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                 >
                   HOLD: {isHoldActive ? 'LOCKED' : 'OFF'}
                 </button>
-                <span style={{ fontSize: '11px' }}>EDIT: {isEditMode ? 'ON' : 'OFF'}</span>
+                <span className="text-xs">EDIT: {isEditMode ? 'ON' : 'OFF'}</span>
               </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '50px 1fr 70px 90px 90px', backgroundColor: currentTheme.border, padding: '6px', fontWeight: 'bold', fontSize: '11px' }}>
+            <div className="flex flex-col flex-1 overflow-y-auto">
+              <div style={{ display: 'grid', gridTemplateColumns: '50px 1fr 70px 90px 90px', backgroundColor: currentTheme.border, padding: '5px', fontWeight: 'bold', fontSize: '11px' }}>
                 <div>STEP</div>
                 <div style={{ color: cursorCol === 'NOTE' ? currentTheme.accent : 'inherit' }}>NOTE</div>
                 <div style={{ color: cursorCol === 'VOL' ? currentTheme.accent : 'inherit' }}>VOL</div>
@@ -509,6 +576,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 
               {currentPhraseBlock.map((stepItem, idx) => {
                 const isSelectedRow = cursorRow === idx;
+                const isPlayheadRow = activePlayheadRow === idx;
                 return (
                   <div
                     key={stepItem.step}
@@ -516,15 +584,16 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                     style={{
                       display: 'grid',
                       gridTemplateColumns: '50px 1fr 70px 90px 90px',
-                      padding: '6px',
-                      backgroundColor: isSelectedRow ? 'rgba(255,255,255,0.08)' : 'transparent',
+                      padding: '5px',
+                      backgroundColor: isPlayheadRow ? 'rgba(34, 197, 94, 0.25)' : isSelectedRow ? 'rgba(255,255,255,0.08)' : 'transparent',
                       borderBottom: `1px solid ${currentTheme.border}`,
                       alignItems: 'center',
                       cursor: 'pointer',
-                      color: isSelectedRow ? currentTheme.textBright : currentTheme.text,
+                      color: isPlayheadRow ? '#22c55e' : isSelectedRow ? currentTheme.textBright : currentTheme.text,
+                      fontWeight: isPlayheadRow ? 'bold' : 'normal',
                     }}
                   >
-                    <div>{String(stepItem.step).padStart(2, '0')}</div>
+                    <div>{isPlayheadRow ? '▶ ' : ''}{String(stepItem.step).padStart(2, '0')}</div>
                     <div style={{ fontWeight: isSelectedRow && cursorCol === 'NOTE' ? 'bold' : 'normal' }}>
                       {TrackerState.getNoteNameFromPadId(stepItem.padId)}
                     </div>
@@ -543,7 +612,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
             </div>
           </div>
 
-          {/* INTERACTIVE SAMPLE WAVEFORM HUD & AUDIO IMPORT */}
+          {/* AUTHENTIC CANVAS DATA-BASED WAVEFORM HUD & AUDIO IMPORT */}
           <div 
             onClick={() => setActiveFocusArea('WAVEFORM')}
             style={{ 
@@ -551,16 +620,16 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
               backgroundColor: currentTheme.panel, 
               border: `2px solid ${activeFocusArea === 'WAVEFORM' ? currentTheme.accent : currentTheme.border}`, 
               borderRadius: '6px', 
-              padding: '12px', 
+              padding: '10px', 
               display: 'flex', 
               flexDirection: 'column', 
-              gap: '8px',
+              gap: '6px',
               cursor: 'pointer'
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', fontWeight: 'bold' }}>SAMPLE WAVEFORM HUD (FOCUS: WAVEFORM | ZOOM: {waveformZoom.toFixed(2)}x | PAN: {waveformPan.toFixed(2)})</span>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-bold">AUTHENTIC WAVEFORM HUD (FOCUS: WAVEFORM | ZOOM: {waveformZoom.toFixed(2)}x | PAN: {waveformPan.toFixed(2)})</span>
+              <div className="flex gap-2 items-center">
                 <input
                   type="file"
                   ref={fileInputRef}
@@ -579,7 +648,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                     backgroundColor: currentTheme.accent,
                     color: currentTheme.textBright,
                     border: `1px solid ${currentTheme.border}`,
-                    padding: '3px 10px',
+                    padding: '3px 8px',
                     fontSize: '11px',
                     fontWeight: 'bold',
                     cursor: 'pointer',
@@ -591,22 +660,19 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
               </div>
             </div>
 
-            <div style={{ flex: 1, backgroundColor: currentTheme.bg, border: `1px solid ${currentTheme.border}`, borderRadius: '4px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-              <div style={{ width: '90%', height: '40px', display: 'flex', alignItems: 'center', gap: '2px', transform: `scaleX(${waveformZoom}) translateX(${waveformPan * 50}px)`, transition: 'transform 0.1s ease' }}>
-                {Array.from({ length: 32 }).map((_, i) => {
-                  const h = Math.sin(i * 0.5) * 50 + 50;
-                  return (
-                    <div key={i} style={{ flex: 1, height: `${h}%`, backgroundColor: currentTheme.accent, opacity: 0.7 }} />
-                  );
-                })}
-              </div>
-
+            <div className="flex-1 bg-black border rounded relative flex items-center justify-center overflow-hidden" style={{ borderColor: currentTheme.border }}>
+              <canvas
+                ref={waveformCanvasRef}
+                width={500}
+                height={100}
+                className="w-full h-full object-cover"
+              />
               <div style={{ position: 'absolute', left: `${sampleStartPoint * 100}%`, top: 0, bottom: 0, width: '2px', backgroundColor: '#22c55e' }} />
               <div style={{ position: 'absolute', left: `${sampleEndPoint * 100}%`, top: 0, bottom: 0, width: '2px', backgroundColor: '#ef4444' }} />
             </div>
 
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <label style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px', flex: 1 }}>
+            <div className="flex gap-3">
+              <label className="text-xs flex items-center gap-2 flex-1">
                 START:
                 <input
                   type="range"
@@ -615,10 +681,10 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                   step="0.01"
                   value={sampleStartPoint}
                   onChange={(e) => setSampleStartPoint(parseFloat(e.target.value))}
-                  style={{ width: '100%' }}
+                  className="w-full"
                 />
               </label>
-              <label style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '6px', flex: 1 }}>
+              <label className="text-xs flex items-center gap-2 flex-1">
                 END:
                 <input
                   type="range"
@@ -627,7 +693,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                   step="0.01"
                   value={sampleEndPoint}
                   onChange={(e) => setSampleEndPoint(parseFloat(e.target.value))}
-                  style={{ width: '100%' }}
+                  className="w-full"
                 />
               </label>
             </div>
@@ -635,11 +701,11 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 
         </div>
 
-        {/* RIGHT COLUMN: 64-PAD MATRIX, DUAL D-PAD CONTROLLERS, & FX INSPECTOR */}
-        <div style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* RIGHT COLUMN: 64-PAD MATRIX, SEGREGATED CONTROL CLUSTERS, & FX INSPECTOR */}
+        <div className="flex-[2] flex flex-col gap-3">
           
           {/* 4x4 TACTILE PAD GRID WITH DYNAMIC HEX ADDRESS SHIFTER */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', backgroundColor: currentTheme.panel, padding: '12px', border: `1px solid ${currentTheme.border}`, borderRadius: '6px' }}>
+          <div className="grid grid-cols-4 gap-2 p-2.5 rounded-md border" style={{ backgroundColor: currentTheme.panel, borderColor: currentTheme.border }}>
             {activePadStates.map((isActive, padIdx) => {
               const absolutePadIndex = padIdx + activeBankOffset;
               const hexDisplay = absolutePadIndex.toString(16).toUpperCase().padStart(2, '0');
@@ -666,49 +732,65 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
             })}
           </div>
 
-          {/* DUAL D-PAD CONTROL DECK (PRIMARY VIEWPORT & SECONDARY PARAMETER DIAMONDS) */}
-          <div style={{ display: 'flex', backgroundColor: currentTheme.panel, padding: '12px', border: `1px solid ${currentTheme.border}`, borderRadius: '6px', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+          {/* SEGREGATED CONTROL CLUSTERS (SEQUENCER NAV, WAVEFORM HUD ZOOM/PAN, PITCH/MARKER DIAMONDS) */}
+          <div className="flex p-2.5 rounded-md border justify-between items-center gap-2" style={{ backgroundColor: currentTheme.panel, borderColor: currentTheme.border }}>
             
-            {/* Primary D-Pad (Tracker Navigation or Waveform Zoom/Pan) */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 'bold' }}>PRIMARY (NAV/ZOOM)</span>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px', alignItems: 'center', justifyItems: 'center' }}>
+            {/* 1. The Sequencer Nav Diamond */}
+            <div className="flex flex-col items-center gap-1">
+              <span style={{ fontSize: '9px', fontWeight: 'bold' }}>SEQ NAV</span>
+              <div className="grid grid-cols-3 gap-1 items-center justify-items-center">
                 <div />
-                <button onClick={() => handlePrimaryDirectionalNav('UP')} style={dpadButtonStyle(currentTheme)}>▲</button>
+                <button onClick={() => handleSequencerNav('UP')} style={dpadButtonStyle(currentTheme)}>▲</button>
                 <div />
-                <button onClick={() => handlePrimaryDirectionalNav('LEFT')} style={dpadButtonStyle(currentTheme)}>◀</button>
-                <div style={{ fontSize: '9px', textAlign: 'center' }}>NAV</div>
-                <button onClick={() => handlePrimaryDirectionalNav('RIGHT')} style={dpadButtonStyle(currentTheme)}>▶</button>
+                <button onClick={() => handleSequencerNav('LEFT')} style={dpadButtonStyle(currentTheme)}>◀</button>
+                <div style={{ fontSize: '8px', textAlign: 'center' }}>COL</div>
+                <button onClick={() => handleSequencerNav('RIGHT')} style={dpadButtonStyle(currentTheme)}>▶</button>
                 <div />
-                <button onClick={() => handlePrimaryDirectionalNav('DOWN')} style={dpadButtonStyle(currentTheme)}>▼</button>
-                <div />
-              </div>
-            </div>
-
-            {/* Secondary Parameter Control Diamond (Pitch Fine-Tuning & Marker Shifts) */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 'bold' }}>PITCH/MARKER (±{secondaryPitchOffset}ST)</span>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px', alignItems: 'center', justifyItems: 'center' }}>
-                <div />
-                <button onClick={() => handleSecondaryDirectionalNav('UP')} style={dpadButtonStyle(currentTheme)}>▲</button>
-                <div />
-                <button onClick={() => handleSecondaryDirectionalNav('LEFT')} style={dpadButtonStyle(currentTheme)}>◀</button>
-                <div style={{ fontSize: '9px', textAlign: 'center' }}>PITCH</div>
-                <button onClick={() => handleSecondaryDirectionalNav('RIGHT')} style={dpadButtonStyle(currentTheme)}>▶</button>
-                <div />
-                <button onClick={() => handleSecondaryDirectionalNav('DOWN')} style={dpadButtonStyle(currentTheme)}>▼</button>
+                <button onClick={() => handleSequencerNav('DOWN')} style={dpadButtonStyle(currentTheme)}>▼</button>
                 <div />
               </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {/* 2. The Waveform HUD Diamond */}
+            <div className="flex flex-col items-center gap-1">
+              <span style={{ fontSize: '9px', fontWeight: 'bold' }}>WAVE HUD</span>
+              <div className="grid grid-cols-3 gap-1 items-center justify-items-center">
+                <div />
+                <button onClick={() => handleWaveformNav('UP')} style={dpadButtonStyle(currentTheme)}>▲</button>
+                <div />
+                <button onClick={() => handleWaveformNav('LEFT')} style={dpadButtonStyle(currentTheme)}>◀</button>
+                <div style={{ fontSize: '8px', textAlign: 'center' }}>ZOOM</div>
+                <button onClick={() => handleWaveformNav('RIGHT')} style={dpadButtonStyle(currentTheme)}>▶</button>
+                <div />
+                <button onClick={() => handleWaveformNav('DOWN')} style={dpadButtonStyle(currentTheme)}>▼</button>
+                <div />
+              </div>
+            </div>
+
+            {/* 3. The Pitch / Marker Diamond */}
+            <div className="flex flex-col items-center gap-1">
+              <span style={{ fontSize: '9px', fontWeight: 'bold' }}>PITCH/MARKER</span>
+              <div className="grid grid-cols-3 gap-1 items-center justify-items-center">
+                <div />
+                <button onClick={() => handlePitchMarkerNav('UP')} style={dpadButtonStyle(currentTheme)}>▲</button>
+                <div />
+                <button onClick={() => handlePitchMarkerNav('LEFT')} style={dpadButtonStyle(currentTheme)}>◀</button>
+                <div style={{ fontSize: '8px', textAlign: 'center' }}>TUNE</div>
+                <button onClick={() => handlePitchMarkerNav('RIGHT')} style={dpadButtonStyle(currentTheme)}>▶</button>
+                <div />
+                <button onClick={() => handlePitchMarkerNav('DOWN')} style={dpadButtonStyle(currentTheme)}>▼</button>
+                <div />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
               <button
                 onClick={() => setIsEditMode(!isEditMode)}
                 style={{
                   backgroundColor: isEditMode ? currentTheme.accent : currentTheme.bg,
                   color: currentTheme.textBright,
                   border: `1px solid ${currentTheme.border}`,
-                  padding: '6px 12px',
+                  padding: '5px 10px',
                   fontSize: '11px',
                   fontWeight: 'bold',
                   cursor: 'pointer',
@@ -721,11 +803,11 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
           </div>
 
           {/* FX PARAMETER HUD INSPECTOR */}
-          <div style={{ flex: 1, backgroundColor: currentTheme.panel, border: `1px solid ${currentTheme.border}`, borderRadius: '6px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 'bold' }}>FX PARAMETER HUD INSPECTOR</span>
+          <div className="flex-1 p-2.5 rounded-md border flex flex-col gap-2.5" style={{ backgroundColor: currentTheme.panel, borderColor: currentTheme.border }}>
+            <span className="text-xs font-bold">FX PARAMETER HUD INSPECTOR</span>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <label style={{ fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs flex flex-col gap-1">
                 <span>DECAPITATOR SATURATION DRIVE: {satDrive.toFixed(1)}</span>
                 <input
                   type="range"
@@ -738,11 +820,11 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                     setSatDrive(val);
                     if (audioGraph) audioGraph.setSaturationDrive(val);
                   }}
-                  style={{ width: '100%' }}
+                  className="w-full"
                 />
               </label>
 
-              <label style={{ fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="text-xs flex flex-col gap-1">
                 <span>TIMELESS ECHO DELAY: {echoTime.toFixed(3)}s</span>
                 <input
                   type="range"
@@ -755,11 +837,11 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                     setEchoTime(val);
                     if (audioGraph) audioGraph.setEchoParams(val, 0.4, 1200);
                   }}
-                  style={{ width: '100%' }}
+                  className="w-full"
                 />
               </label>
 
-              <label style={{ fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="text-xs flex flex-col gap-1">
                 <span>DJFX LOOPER RATE: {djfxAmount.toFixed(2)}</span>
                 <input
                   type="range"
@@ -772,7 +854,7 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
                     setDjfxAmount(val);
                     if (audioGraph) audioGraph.setDJFXParams(val, 0.5, true);
                   }}
-                  style={{ width: '100%' }}
+                  className="w-full"
                 />
               </label>
             </div>
@@ -786,14 +868,14 @@ export const BredForgeCanvas: React.FC<BredForgeCanvasProps> = ({
 };
 
 const dpadButtonStyle = (theme: any): React.CSSProperties => ({
-  width: '32px',
-  height: '32px',
+  width: '28px',
+  height: '28px',
   backgroundColor: theme.padBg,
   color: theme.textBright,
   border: `1px solid ${theme.border}`,
   borderRadius: '4px',
   fontWeight: 'bold',
-  fontSize: '11px',
+  fontSize: '10px',
   cursor: 'pointer',
   display: 'flex',
   alignItems: 'center',
