@@ -2,38 +2,34 @@
 // BREDFORGE v1.0 — GROOVE VIEW PATTERN LAUNCHER (3,0) (GrooveView.tsx)
 // ============================================================================
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { PatternSequencer } from '../../services/audio/PatternSequencerEngine';
 
 export interface PatternSlot {
   id: number;
   name: string;
   length: number;
-  isQueued: boolean;
-  isPlaying: boolean;
 }
 
 export const GrooveView: React.FC = () => {
-  const [patterns, setPatterns] = useState<PatternSlot[]>(
-    Array.from({ length: 16 }).map((_, idx) => ({
-      id: idx,
-      name: `PAT ${idx.toString(16).toUpperCase().padStart(2, '0')}`,
-      length: 16,
-      isQueued: false,
-      isPlaying: idx === 0,
-    }))
-  );
-
+  const [activePattern, setActivePattern] = useState<number>(PatternSequencer.getActivePatternId());
+  const [queuedPattern, setQueuedPattern] = useState<number | null>(PatternSequencer.getQueuedPatternId());
   const [activeBank, setActiveBank] = useState<string>('A');
   const [swing, setSwing] = useState<number>(50); // % swing
 
+  // Optional: Poll or listen to sequencer state if needed
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActivePattern(PatternSequencer.getActivePatternId());
+      setQueuedPattern(PatternSequencer.getQueuedPatternId());
+    }, 100);
+    return () => clearInterval(interval);
+  }, []);
+
   const handlePatternClick = (id: number) => {
-    setPatterns((prev) =>
-      prev.map((p) => ({
-        ...p,
-        isQueued: p.id === id ? !p.isQueued : false,
-        isPlaying: p.id === id ? true : p.isPlaying,
-      }))
-    );
+    PatternSequencer.queuePattern(id);
+    setActivePattern(PatternSequencer.getActivePatternId());
+    setQueuedPattern(id);
   };
 
   return (
@@ -45,7 +41,7 @@ export const GrooveView: React.FC = () => {
             GROOVE VIEW // PATTERN LAUNCHER (3,0)
           </h2>
           <p className="text-[10px] text-slate-400 font-sans">
-            Live clip triggering, scene orchestration, and groove swing control.
+            Live quantized clip triggering, scene orchestration, and groove swing control.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -69,35 +65,42 @@ export const GrooveView: React.FC = () => {
 
       {/* Pattern Grid (4x4 Matrix) */}
       <div className="grid grid-cols-4 gap-3 flex-1 overflow-auto p-1">
-        {patterns.map((pat) => (
-          <button
-            key={pat.id}
-            onClick={() => handlePatternClick(pat.id)}
-            className={`flex flex-col justify-between p-3 rounded-xl border transition-all text-left relative overflow-hidden ${
-              pat.isPlaying
-                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-200 shadow-lg shadow-emerald-500/10'
-                : pat.isQueued
-                ? 'bg-amber-500/20 border-amber-500 text-amber-200 animate-pulse'
-                : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-900'
-            }`}
-          >
-            <div className="flex justify-between items-center w-full">
-              <span className="text-[10px] text-slate-500 font-bold">
-                {activeBank}-{pat.id.toString(16).toUpperCase().padStart(2, '0')}
-              </span>
-              {pat.isPlaying && (
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              )}
-            </div>
-            <div className="my-2">
-              <div className="font-bold text-sm tracking-tight">{pat.name}</div>
-              <div className="text-[9px] text-slate-400">{pat.length} Steps</div>
-            </div>
-            <div className="text-[9px] text-slate-500 uppercase tracking-widest">
-              {pat.isPlaying ? 'Playing' : pat.isQueued ? 'Queued' : 'Ready'}
-            </div>
-          </button>
-        ))}
+        {Array.from({ length: 16 }).map((_, idx) => {
+          const isPlaying = activePattern === idx;
+          const isQueued = queuedPattern === idx;
+
+          return (
+            <button
+              key={idx}
+              onClick={() => handlePatternClick(idx)}
+              className={`flex flex-col justify-between p-3 rounded-xl border transition-all text-left relative overflow-hidden ${
+                isPlaying
+                  ? 'bg-emerald-500/20 border-emerald-500 text-emerald-200 shadow-lg shadow-emerald-500/10'
+                  : isQueued
+                  ? 'bg-amber-500/20 border-amber-500 text-amber-200 animate-pulse'
+                  : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-900'
+              }`}
+            >
+              <div className="flex justify-between items-center w-full">
+                <span className="text-[10px] text-slate-500 font-bold">
+                  {activeBank}-{idx.toString(16).toUpperCase().padStart(2, '0')}
+                </span>
+                {isPlaying && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                )}
+              </div>
+              <div className="my-2">
+                <div className="font-bold text-sm tracking-tight">
+                  PAT {idx.toString(16).toUpperCase().padStart(2, '0')}
+                </div>
+                <div className="text-[9px] text-slate-400">16 Steps</div>
+              </div>
+              <div className="text-[9px] text-slate-500 uppercase tracking-widest">
+                {isPlaying ? 'Playing' : isQueued ? 'Queued' : 'Ready'}
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       {/* Groove & Swing Controls Footer */}
@@ -113,7 +116,7 @@ export const GrooveView: React.FC = () => {
             className="w-24 accent-emerald-500 cursor-pointer"
           />
         </div>
-        <div>[CLICK]: Queue/Launch Pattern | [BANK A-D]: Switch Banks</div>
+        <div>[CLICK]: Quantized Queue / Trigger Pattern | [BANK A-D]: Switch Banks</div>
       </div>
     </div>
   );
