@@ -30,7 +30,8 @@ export class SequencerAudioBridge {
     this.channels.set(0, new AudioInstrumentChannel(this.ctx, this.masterGain));
   }
 
-  public triggerVoice(channelId: number, noteOrFreq: string | number, duration?: number): void;
+  // TypeScript method overloads placed correctly before the implementation
+  public triggerVoice(channelId?: number, frequencyOrNote?: number | string, duration?: number): void;
   public triggerVoice(channelId: number = 0, frequencyOrNote: any = 440, duration: number = 0.2): void {
     if (!this.channels.has(channelId)) {
       this.channels.set(channelId, new AudioInstrumentChannel(this.ctx, this.masterGain));
