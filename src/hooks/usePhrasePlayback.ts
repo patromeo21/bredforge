@@ -1,12 +1,20 @@
+// ============================================================================
+// BREDFORGE v1.0 — PHRASE PLAYBACK SYNC HOOK (usePhrasePlayback.ts)
+// ============================================================================
+
 import { useState, useEffect, useRef } from 'react';
 import { PhraseAudioScheduler, PhraseStepData } from '../services/audio/PhraseAudioScheduler';
 
+interface UsePhrasePlaybackReturn {
+  activeStep: number;
+}
+
 export const usePhrasePlayback = (
-  steps: PhraseStepData[],
-  sampleBuffer: AudioBuffer | null,
-  audioContext: AudioContext | null,
-  masterDestination: AudioNode | null
-) => {
+  steps: PhraseStepData[] = [],
+  sampleBuffer: AudioBuffer | null = null,
+  audioContext: AudioContext | null = null,
+  masterDestination: AudioNode | null = null
+): UsePhrasePlaybackReturn => {
   const [activeStep, setActiveStep] = useState<number>(0);
   const schedulerRef = useRef<PhraseAudioScheduler | null>(null);
 
@@ -22,7 +30,6 @@ export const usePhrasePlayback = (
         const nextStep = (prevStep + 1) % 16;
         const stepData = steps[nextStep];
 
-        // Trigger sample buffer audio when playhead hits active step note
         if (schedulerRef.current && sampleBuffer && masterDestination && stepData) {
           schedulerRef.current.triggerStep(stepData, sampleBuffer, masterDestination);
         }
