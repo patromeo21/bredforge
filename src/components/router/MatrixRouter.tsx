@@ -4,14 +4,14 @@
 
 import React from 'react';
 import { MatrixCoordinate, HardwareMode } from '../../types/matrix';
-import { LiveView } from '../views/LiveView';
-import { SongView } from '../views/SongView';
-import { ChainView } from '../views/ChainView';
+import { LiveView } from '../view/LiveView';
+import { SongView } from '../view/SongView';
+import { ChainView } from '../view/ChainView';
 import { PhraseGrid } from '../tracker/PhraseGrid';
 import { InstrumentView } from '../instrument/InstrumentView';
-import { MixerView } from '../views/MixerView';
-import { GlobalFxView } from '../views/GlobalFxView';
-import { ProjectView } from '../views/ProjectView';
+import { MixerView } from '../view/MixerView';
+import { GlobalFxView } from '../view/GlobalFxView';
+import { ProjectView } from '../view/ProjectView';
 
 interface MatrixRouterProps {
   coord: MatrixCoordinate;
