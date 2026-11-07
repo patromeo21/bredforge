@@ -17,9 +17,6 @@ interface PhraseStep {
 export const PhraseGrid: React.FC = () => {
   const [cursorRow, setCursorRow] = useState<number>(0);
   const [cursorCol, setCursorCol] = useState<number>(0);
-  
-  // Hook into SequencerAudioBridge clock via custom playback hook
-  const { activeStep } = usePhrasePlayback();
 
   const [steps] = useState<PhraseStep[]>(
     Array.from({ length: 16 }).map((_, idx) => ({
@@ -31,6 +28,9 @@ export const PhraseGrid: React.FC = () => {
       fx2: '---',
     }))
   );
+
+  // Hook into playback clock with steps state
+  const { activeStep } = usePhrasePlayback(steps);
 
   const columns = ['STEP', 'NOTE', 'VEL', 'INST', 'FX1', 'FX2'];
 
