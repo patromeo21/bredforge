@@ -3,6 +3,7 @@
 // ============================================================================
 
 export type PunchEffectType = 'NONE' | 'ISOLATOR' | 'DJFX_LOOPER' | 'FILTER' | 'REVERB';
+export type PunchInEffectType = PunchEffectType; // Alias for compatibility
 
 export class PunchInEffectBus {
   private ctx: AudioContext;
@@ -11,43 +12,63 @@ export class PunchInEffectBus {
   
   // DSP Effect Nodes
   private filterNode: BiquadFilterNode;
-  private looperNode: GainNode; // Simulated buffer feedback loop
+  private looperNode: GainNode;
   private activeEffect: PunchEffectType = 'NONE';
 
-  constructor(ctx: AudioContext, destination: AudioNode) {
+  constructor(ctx: AudioContext, destination?: AudioNode) {
     this.ctx = ctx;
     
-    // Create bus input and output nodes
     this.inputNode = this.ctx.createGain();
     this.outputNode = this.ctx.createGain();
 
-    // Create intermediate DSP nodes
     this.filterNode = this.ctx.createBiquadFilter();
     this.filterNode.type = 'lowpass';
-    this.filterNode.frequency.value = 20000; // Open by default
+    this.filterNode.frequency.value = 20000;
 
     this.looperNode = this.ctx.createGain();
-    this.looperNode.gain.value = 0.0; // Muted by default
+    this.looperNode.gain.value = 0.0;
 
-    // Build initial dry signal chain: Input -> Output -> Destination
     this.inputNode.connect(this.outputNode);
-    this.outputNode.connect(destination);
+    if (destination) {
+      this.outputNode.connect(destination);
+    }
   }
 
-  /**
-   * Get the input node so sources (like SampleManager playback) can connect into the bus
-   */
   public getInputNode(): AudioNode {
     return this.inputNode;
   }
 
+  public getOutputNode(): AudioNode {
+    return this.outputNode;
+  }
+
   /**
-   * Dynamically engage an SP-404SX Punch-In Effect
+   * Connect bus output to another AudioNode or destination
+   */
+  public connect(destination: AudioNode): void {
+    this.outputNode.connect(destination);
+  }
+
+  /**
+   * Clean up and disconnect nodes
+   */
+  public dispose(): void {
+    try {
+      this.inputNode.disconnect();
+      this.outputNode.disconnect();
+      this.filterNode.disconnect();
+      this.looperNode.disconnect();
+    } catch (e) {
+      console.warn('[PunchInEffectBus] Error during dispose:', e);
+    }
+  }
+
+  /**
+   * Trigger or set an effect by type
    */
   public setEffect(effect: PunchEffectType): void {
     if (this.activeEffect === effect) return;
 
-    // Disconnect current routing
     this.inputNode.disconnect();
     this.filterNode.disconnect();
     this.looperNode.disconnect();
@@ -57,30 +78,31 @@ export class PunchInEffectBus {
 
     switch (effect) {
       case 'FILTER':
-        // Route through Lowpass Filter (e.g., Isolator / DJ filter knob)
         this.inputNode.connect(this.filterNode);
-        this.filterNode.frequency.setTargetAtTime(1000, now, 0.02); // Cutoff sweep
+        this.filterNode.frequency.setTargetAtTime(1000, now, 0.02);
         this.filterNode.connect(this.outputNode);
-        console.log('[PunchInEffectBus] Engaged: FILTER');
         break;
 
       case 'DJFX_LOOPER':
-        // Route through feedback loop
         this.inputNode.connect(this.looperNode);
         this.looperNode.gain.setTargetAtTime(0.7, now, 0.01);
         this.looperNode.connect(this.outputNode);
         this.inputNode.connect(this.outputNode);
-        console.log('[PunchInEffectBus] Engaged: DJFX_LOOPER');
         break;
 
       case 'NONE':
       default:
-        // Pure dry passthrough
         this.filterNode.frequency.setTargetAtTime(20000, now, 0.02);
         this.inputNode.connect(this.outputNode);
-        console.log('[PunchInEffectBus] Engaged: DRY (NONE)');
         break;
     }
+  }
+
+  /**
+   * Convenience trigger method used by PerformanceMacroEngine
+   */
+  public triggerPunchIn(effect: PunchEffectType, active: boolean): void {
+    this.setEffect(active ? effect : 'NONE');
   }
 
   public getActiveEffect(): PunchEffectType {
