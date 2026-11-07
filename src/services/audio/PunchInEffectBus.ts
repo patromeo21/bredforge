@@ -1,66 +1,89 @@
 // ============================================================================
-// BREDFORGE v1.0 — SP-STYLE PUNCH-IN EFFECT BUS (PunchInEffectBus.ts)
+// BREDFORGE v1.0 — SP-404SX PUNCH-IN DSP EFFECT BUS (PunchInEffectBus.ts)
 // ============================================================================
 
-export type PunchInEffectType = 'filterSlam' | 'bitcrush' | 'stutter' | 'tapeStop';
+export type PunchEffectType = 'NONE' | 'ISOLATOR' | 'DJFX_LOOPER' | 'FILTER' | 'REVERB';
 
 export class PunchInEffectBus {
   private ctx: AudioContext;
   private inputNode: GainNode;
   private outputNode: GainNode;
+  
+  // DSP Effect Nodes
   private filterNode: BiquadFilterNode;
-  private activeEffects: Set<PunchInEffectType> = new Set();
+  private looperNode: GainNode; // Simulated buffer feedback loop
+  private activeEffect: PunchEffectType = 'NONE';
 
-  constructor(ctx: AudioContext) {
+  constructor(ctx: AudioContext, destination: AudioNode) {
     this.ctx = ctx;
+    
+    // Create bus input and output nodes
     this.inputNode = this.ctx.createGain();
     this.outputNode = this.ctx.createGain();
+
+    // Create intermediate DSP nodes
     this.filterNode = this.ctx.createBiquadFilter();
-
-    this.inputNode.connect(this.filterNode);
-    this.filterNode.connect(this.outputNode);
-
     this.filterNode.type = 'lowpass';
-    this.filterNode.frequency.value = 20000;
-    this.filterNode.Q.value = 4.0;
+    this.filterNode.frequency.value = 20000; // Open by default
+
+    this.looperNode = this.ctx.createGain();
+    this.looperNode.gain.value = 0.0; // Muted by default
+
+    // Build initial dry signal chain: Input -> Output -> Destination
+    this.inputNode.connect(this.outputNode);
+    this.outputNode.connect(destination);
   }
 
+  /**
+   * Get the input node so sources (like SampleManager playback) can connect into the bus
+   */
   public getInputNode(): AudioNode {
     return this.inputNode;
   }
 
-  public connect(destination: AudioNode): void {
-    this.outputNode.connect(destination);
-  }
+  /**
+   * Dynamically engage an SP-404SX Punch-In Effect
+   */
+  public setEffect(effect: PunchEffectType): void {
+    if (this.activeEffect === effect) return;
 
-  public triggerPunchIn(effect: PunchInEffectType, active: boolean): void {
+    // Disconnect current routing
+    this.inputNode.disconnect();
+    this.filterNode.disconnect();
+    this.looperNode.disconnect();
+
+    this.activeEffect = effect;
     const now = this.ctx.currentTime;
-    
-    if (active) {
-      this.activeEffects.add(effect);
-      if (effect === 'filterSlam') {
-        this.filterNode.frequency.cancelScheduledValues(now);
-        this.filterNode.frequency.setValueAtTime(this.filterNode.frequency.value, now);
-        this.filterNode.frequency.exponentialRampToValueAtTime(250, now + 0.04);
-      }
-    } else {
-      this.activeEffects.delete(effect);
-      if (effect === 'filterSlam') {
-        this.filterNode.frequency.cancelScheduledValues(now);
-        this.filterNode.frequency.setValueAtTime(this.filterNode.frequency.value, now);
-        this.filterNode.frequency.exponentialRampToValueAtTime(20000, now + 0.06);
-      }
+
+    switch (effect) {
+      case 'FILTER':
+        // Route through Lowpass Filter (e.g., Isolator / DJ filter knob)
+        this.inputNode.connect(this.filterNode);
+        this.filterNode.frequency.setTargetAtTime(1000, now, 0.02); // Cutoff sweep
+        this.filterNode.connect(this.outputNode);
+        console.log('[PunchInEffectBus] Engaged: FILTER');
+        break;
+
+      case 'DJFX_LOOPER':
+        // Route through feedback loop
+        this.inputNode.connect(this.looperNode);
+        this.looperNode.gain.setTargetAtTime(0.7, now, 0.01);
+        this.looperNode.connect(this.outputNode);
+        this.inputNode.connect(this.outputNode);
+        console.log('[PunchInEffectBus] Engaged: DJFX_LOOPER');
+        break;
+
+      case 'NONE':
+      default:
+        // Pure dry passthrough
+        this.filterNode.frequency.setTargetAtTime(20000, now, 0.02);
+        this.inputNode.connect(this.outputNode);
+        console.log('[PunchInEffectBus] Engaged: DRY (NONE)');
+        break;
     }
   }
 
-  public isEffectActive(effect: PunchInEffectType): boolean {
-    return this.activeEffects.has(effect);
-  }
-
-  public dispose(): void {
-    this.inputNode.disconnect();
-    this.filterNode.disconnect();
-    this.outputNode.disconnect();
-    this.activeEffects.clear();
+  public getActiveEffect(): PunchEffectType {
+    return this.activeEffect;
   }
 }
