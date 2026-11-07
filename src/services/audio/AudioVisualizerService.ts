@@ -22,13 +22,12 @@ export class AudioVisualizerService {
   }
 
   public getFrequencyData(): Uint8Array {
-    // Cast through unknown to ArrayBuffer-backed Uint8Array type expected by TS DOM lib
-    this.analyser.getByteFrequencyData(this.dataArray as unknown as Uint8Array<ArrayBuffer>);
+    this.analyser.getByteFrequencyData(this.dataArray as any);
     return this.dataArray;
   }
 
   public getTimeDomainData(): Uint8Array {
-    this.analyser.getByteTimeDomainData(this.timeDataArray as unknown as Uint8Array<ArrayBuffer>);
+    this.analyser.getByteTimeDomainData(this.timeDataArray as any);
     return this.timeDataArray;
   }
 
