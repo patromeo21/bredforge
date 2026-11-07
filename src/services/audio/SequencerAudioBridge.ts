@@ -1,90 +1,53 @@
 // ============================================================================
-// BREDFORGE v1.0 — SEQUENCER AUDIO BRIDGE (SequencerAudioBridge.ts)
+// BREDFORGE v1.0 — SEQUENCER AUDIO BRIDGE & MASTER BUS (SequencerAudioBridge.ts)
 // ============================================================================
 
-import { TableEngine } from './TableEngine';
-
-export interface InstrumentChannel {
-  id: number;
-  setSampleBuffer(buffer: AudioBuffer, rootNote?: string): void;
-  playBuffer(note: string, volume: number): void;
-  applyModulation?(command: string, value: number): void;
-}
+import { AudioInstrumentChannel } from './AudioInstrumentChannel';
+import { PunchInEffectBus } from './PunchInEffectBus';
+import { SaturationBus } from './SaturationBus';
 
 export class SequencerAudioBridge {
-  private audioContext: AudioContext;
-  private channels: Map<string, InstrumentChannel> = new Map();
-  private tableEngine: TableEngine;
-  private isRunning: boolean = false;
-  private currentStep: number = 0;
-  private bpm: number = 125;
-  private timerId: number | null = null;
+  private ctx: AudioContext;
+  private masterGain: GainNode;
+  private saturationBus: SaturationBus;
+  private punchInBus: PunchInEffectBus;
+  private channels: Map<number, AudioInstrumentChannel> = new Map();
 
-  constructor(audioContext: AudioContext) {
-    this.audioContext = audioContext;
-    this.tableEngine = new TableEngine();
+  constructor(ctx: AudioContext) {
+    this.ctx = ctx;
+    this.masterGain = this.ctx.createGain();
+    this.saturationBus = new SaturationBus(this.ctx);
+    this.punchInBus = new PunchInEffectBus(this.ctx);
+
+    // Master Audio Chain: Master Gain -> Saturation Bus -> Punch-In Bus -> Speakers
+    this.masterGain.connect(this.saturationBus.getInputNode());
+    this.saturationBus.connect(this.punchInBus.getInputNode());
+    this.punchInBus.connect(this.ctx.destination);
+
+    this.masterGain.gain.value = 0.8;
   }
 
-  public registerChannel(key: string, channel: InstrumentChannel): void {
-    this.channels.set(key, channel);
+  public getMasterOutput(): GainNode {
+    return this.masterGain;
   }
 
-  public getTableEngine(): TableEngine {
-    return this.tableEngine;
+  public getPunchInBus(): PunchInEffectBus {
+    return this.punchInBus;
   }
 
-  public start(): void {
-    if (this.isRunning) return;
-    if (this.audioContext.state === 'suspended') {
-      this.audioContext.resume();
-    }
-    this.isRunning = true;
-    this.scheduleLoop();
+  public getSaturationBus(): SaturationBus {
+    return this.saturationBus;
   }
 
-  public stop(): void {
-    this.isRunning = false;
-    if (this.timerId !== null) {
-      window.clearTimeout(this.timerId);
-      this.timerId = null;
-    }
-    this.currentStep = 0;
+  public setMasterVolume(volume: number): void {
+    this.masterGain.gain.setValueAtTime(Math.max(0, Math.min(1.0, volume)), this.ctx.currentTime);
   }
 
-  private scheduleLoop(): void {
-    if (!this.isRunning) return;
-
-    // Calculate step interval in milliseconds based on BPM (16th notes = 4 steps per beat)
-    const stepIntervalMs = (60000 / this.bpm) / 4;
-
-    // Execute current step tick and micro-modulation updates
-    this.onSequencerTick(this.currentStep);
-
-    // Advance sequence step (0-63 standard tracker pattern length)
-    this.currentStep = (this.currentStep + 1) % 64;
-
-    this.timerId = window.setTimeout(() => {
-      this.scheduleLoop();
-    }, stepIntervalMs);
-  }
-
-  private onSequencerTick(stepIndex: number): void {
-    // 1. Tick micro-modulation tables for active voices and apply realtime modulation
-    this.tableEngine.tickTables((voiceKey, command, value) => {
-      const channel = this.channels.get(voiceKey);
-      if (channel && typeof channel.applyModulation === 'function') {
-        channel.applyModulation(command, value);
-      }
-    });
-  }
-
-  public triggerVoice(voiceKey: string, note: string, volume: number, tableId?: number): void {
-    const channel = this.channels.get(voiceKey);
-    if (channel) {
-      channel.playBuffer(note, volume);
-      if (tableId !== undefined) {
-        this.tableEngine.triggerTable(voiceKey, tableId);
-      }
-    }
+  public dispose(): void {
+    this.masterGain.disconnect();
+    this.saturationBus.dispose();
+    this.punchInBus.dispose();
+    this.channels.forEach(ch => ch.dispose());
+    this.channels.clear();
   }
 }
