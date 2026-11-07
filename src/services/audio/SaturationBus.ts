@@ -17,7 +17,7 @@ export class SaturationBus {
     this.driveNode = this.ctx.createGain();
 
     this.driveNode.gain.value = 1.2;
-    this.waveshaper.curve = this.createSaturationCurve(40) as Float32Array;
+    this.waveshaper.curve = this.createSaturationCurve(40) as any;
 
     this.inputNode.connect(this.driveNode);
     this.driveNode.connect(this.waveshaper);
