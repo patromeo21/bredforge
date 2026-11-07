@@ -15,10 +15,10 @@ import { ProjectView } from '../view/ProjectView';
 
 interface MatrixRouterProps {
   coord: MatrixCoordinate;
-  mode: HardwareMode;
+  hardwareMode: HardwareMode;
 }
 
-export const MatrixRouter: React.FC<MatrixRouterProps> = ({ coord }) => {
+export const MatrixRouter: React.FC<MatrixRouterProps> = ({ coord, hardwareMode }) => {
   // Map 2D Coordinates (x, y) to M8 Screen Views
   const renderActiveView = () => {
     switch (`${coord.x},${coord.y}`) {
