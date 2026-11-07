@@ -2,7 +2,17 @@
 // BREDFORGE v1.0 — SP-404SX PUNCH-IN DSP EFFECT BUS (PunchInEffectBus.ts)
 // ============================================================================
 
-export type PunchEffectType = 'NONE' | 'ISOLATOR' | 'DJFX_LOOPER' | 'FILTER' | 'REVERB';
+export type PunchEffectType = 
+  | 'NONE' 
+  | 'ISOLATOR' 
+  | 'DJFX_LOOPER' 
+  | 'FILTER' 
+  | 'REVERB'
+  | 'filterSlam'
+  | 'bitcrush'
+  | 'ringmod'
+  | 'delay';
+
 export type PunchInEffectType = PunchEffectType; // Alias for compatibility
 
 export class PunchInEffectBus {
@@ -42,16 +52,10 @@ export class PunchInEffectBus {
     return this.outputNode;
   }
 
-  /**
-   * Connect bus output to another AudioNode or destination
-   */
   public connect(destination: AudioNode): void {
     this.outputNode.connect(destination);
   }
 
-  /**
-   * Clean up and disconnect nodes
-   */
   public dispose(): void {
     try {
       this.inputNode.disconnect();
@@ -63,9 +67,6 @@ export class PunchInEffectBus {
     }
   }
 
-  /**
-   * Trigger or set an effect by type
-   */
   public setEffect(effect: PunchEffectType): void {
     if (this.activeEffect === effect) return;
 
@@ -78,12 +79,15 @@ export class PunchInEffectBus {
 
     switch (effect) {
       case 'FILTER':
+      case 'filterSlam':
         this.inputNode.connect(this.filterNode);
-        this.filterNode.frequency.setTargetAtTime(1000, now, 0.02);
+        this.filterNode.frequency.setTargetAtTime(800, now, 0.02);
         this.filterNode.connect(this.outputNode);
         break;
 
       case 'DJFX_LOOPER':
+      case 'bitcrush':
+      case 'ringmod':
         this.inputNode.connect(this.looperNode);
         this.looperNode.gain.setTargetAtTime(0.7, now, 0.01);
         this.looperNode.connect(this.outputNode);
@@ -98,9 +102,6 @@ export class PunchInEffectBus {
     }
   }
 
-  /**
-   * Convenience trigger method used by PerformanceMacroEngine
-   */
   public triggerPunchIn(effect: PunchEffectType, active: boolean): void {
     this.setEffect(active ? effect : 'NONE');
   }
