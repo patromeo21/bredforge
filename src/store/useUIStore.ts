@@ -4,9 +4,9 @@
 
 import { useState, useEffect } from 'react';
 
-type ViewMode = 'tracker' | 'groove' | 'mixer';
+export type ViewMode = 'tracker' | 'groove' | 'mixer';
 
-interface UIState {
+export interface UIState {
   activeView: ViewMode;
   setActiveView: (view: ViewMode) => void;
   isMenuOpen: boolean;
