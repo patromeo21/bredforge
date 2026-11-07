@@ -1,70 +1,92 @@
 // ============================================================================
-// BREDFORGE v1.0 — M8 HARDWARE SHELL (App.tsx)
+// BREDFORGE v1.0 — 100DVH BOUNDING CANVAS & UI SHELL (App.tsx)
 // ============================================================================
 
-import React, { useState } from 'react';
+import React from 'react';
+import { useUIStore } from './store/useUIStore';
 import { PhraseGrid } from './components/tracker/PhraseGrid';
 import { GrooveView } from './components/tracker/GrooveView';
 
 export function App() {
-  const [activeView, setActiveView] = useState<'tracker' | 'groove'>('tracker');
-  const [hardwareMode, setHardwareMode] = useState<string>('EDIT');
+  const { activeView, setActiveView, isMenuOpen, toggleMenu } = useUIStore();
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-black p-2 md:p-4 text-zinc-100 font-mono overflow-hidden">
-      {/* M8 Handheld Console Bezel Container */}
-      <div className="flex flex-col flex-1 m8-console-bezel rounded-2xl border border-zinc-800 p-3 overflow-hidden">
+    <div className="h-screen max-h-[100dvh] w-screen max-w-[100dvw] overflow-hidden bg-black text-zinc-100 font-mono flex flex-col p-2 select-none">
+      {/* Hero Canvas / Viewport Container with 100dvh lockdown */}
+      <div className="relative flex-1 flex flex-col m8-console-bezel rounded-2xl border border-zinc-800 p-3 overflow-hidden">
         
-        {/* Top Hardware Status Bar */}
-        <div className="flex justify-between items-center bg-zinc-900/80 border border-zinc-800 rounded-lg px-3 py-1.5 mb-3 text-xs">
+        {/* Top Status Bar */}
+        <div className="flex justify-between items-center bg-zinc-900/80 border border-zinc-800 rounded-lg px-3 py-1.5 mb-2 text-xs shrink-0">
           <div className="flex items-center gap-3">
             <span className="font-bold tracking-widest text-emerald-400">BREDFORGE</span>
             <span className="text-zinc-500">|</span>
-            <span className="text-zinc-300">M8-OS v1.0</span>
-            <span className="text-zinc-500">|</span>
-            <span className="text-cyan-400 font-bold">120 BPM</span>
+            <span className="text-zinc-300">100DVH WORKSPACE</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[10px] font-bold border border-zinc-700">
-              MODE: {hardwareMode}
-            </span>
-            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/40">
-              DSP: ACTIVE
-            </span>
+          <button 
+            onClick={toggleMenu}
+            className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 text-[10px]"
+          >
+            {isMenuOpen ? 'CLOSE MENU' : 'MENU'}
+          </button>
+        </div>
+
+        {/* Main Canvas Viewport (Non-Destructive Layer Container) */}
+        <div className="relative flex-1 overflow-hidden">
+          {/* Tracker View */}
+          <div className={`absolute inset-0 transition-opacity duration-150 ${activeView === 'tracker' ? 'opacity-100 z-10 pointer-events-auto' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <PhraseGrid />
+          </div>
+
+          {/* Groove View */}
+          <div className={`absolute inset-0 transition-opacity duration-150 ${activeView === 'groove' ? 'opacity-100 z-10 pointer-events-auto' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <GrooveView />
           </div>
         </div>
 
-        {/* Main Viewport (Tracker vs Groove Matrix) */}
-        <div className="flex-1 overflow-hidden">
-          {activeView === 'tracker' ? <PhraseGrid /> : <GrooveView />}
+        {/* Sliding Menu Overlay (Non-Destructive Drawer) */}
+        <div className={`absolute top-0 right-0 h-full w-72 bg-zinc-900/95 border-l border-zinc-800 p-4 transform transition-transform duration-200 z-30 ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+          <div className="flex justify-between items-center border-b border-zinc-800 pb-3 mb-4">
+            <h3 className="font-bold text-sm text-zinc-200">SYSTEM MENU</h3>
+            <button onClick={toggleMenu} className="text-zinc-400 hover:text-white text-xs">[ESC]</button>
+          </div>
+          <div className="flex flex-col gap-2 text-xs">
+            <button 
+              onClick={() => { setActiveView('tracker'); toggleMenu(); }}
+              className={`p-2 rounded text-left transition-colors ${activeView === 'tracker' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800'}`}
+            >
+              [1,0] Phrase Grid (Tracker)
+            </button>
+            <button 
+              onClick={() => { setActiveView('groove'); toggleMenu(); }}
+              className={`p-2 rounded text-left transition-colors ${activeView === 'groove' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800'}`}
+            >
+              [3,0] Groove View (Launcher)
+            </button>
+          </div>
         </div>
 
-        {/* Bottom Hardware Navigation / View Switcher Bar */}
-        <div className="flex justify-between items-center bg-zinc-900/80 border border-zinc-800 rounded-lg px-3 py-2 mt-3 text-xs">
+        {/* Bottom Navigation Bar */}
+        <div className="flex justify-between items-center bg-zinc-900/80 border border-zinc-800 rounded-lg px-3 py-2 mt-2 text-xs shrink-0">
           <div className="flex gap-2">
             <button
               onClick={() => setActiveView('tracker')}
               className={`px-3 py-1 rounded font-bold text-xs transition-colors ${
-                activeView === 'tracker'
-                  ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20'
-                  : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
+                activeView === 'tracker' ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              [1,0] PHRASE GRID
+              [1,0] TRACKER
             </button>
             <button
               onClick={() => setActiveView('groove')}
               className={`px-3 py-1 rounded font-bold text-xs transition-colors ${
-                activeView === 'groove'
-                  ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20'
-                  : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
+                activeView === 'groove' ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              [3,0] GROOVE VIEW
+              [3,0] GROOVE
             </button>
           </div>
-          <div className="text-[10px] text-zinc-500 hidden sm:block">
-            IPAD 9TH GEN // TOUCH & KEYBOARD OPTIMIZED
+          <div className="text-[10px] text-zinc-500">
+            IPAD 9TH GEN // 100DVH LOCKED
           </div>
         </div>
 
