@@ -1,0 +1,56 @@
+/* ============================================================================
+   BREDFORGE v1.0 — M8 VISUAL HIERARCHY & GPU LAYER THEME (TrackerTheme.css)
+   ============================================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+
+.bredforge-root {
+  font-family: 'JetBrains Mono', monospace;
+  background-color: #030712;
+  color: #f3f4f6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* GPU Composite Layer Promotion for High-Frequency Animation Elements */
+.gpu-accelerated-cell {
+  will-change: transform, background-color;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* M8 Tracker High-Contrast Grid Styles */
+.tracker-grid-row {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  border-bottom: 1px solid #1f2937;
+  font-size: 0.875rem;
+  letter-spacing: 0.05em;
+}
+
+.tracker-cell-active {
+  background-color: #065f46;
+  color: #34d399;
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px #10b981;
+}
+
+.tracker-playhead-cursor {
+  background-color: #1e3a8a;
+  border-left: 3px solid #3b82f6;
+}
+
+/* Viewport and Touch Lock */
+.bredforge-viewport-lock {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
