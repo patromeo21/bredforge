@@ -11,7 +11,7 @@ export class SequencerAudioBridge {
   private masterGain: GainNode;
   private saturationBus: SaturationBus;
   private punchInBus: PunchInEffectBus;
-  private channels: Map<number, AudioInstrumentChannel> = new Map();
+  private channels: Map<string | number, AudioInstrumentChannel> = new Map();
 
   constructor(ctx: AudioContext) {
     this.ctx = ctx;
@@ -26,20 +26,20 @@ export class SequencerAudioBridge {
 
     this.masterGain.gain.value = 0.8;
 
-    // Initialize default channel 0
+    // Initialize default channel
+    this.channels.set('channel-1', new AudioInstrumentChannel(this.ctx, this.masterGain));
     this.channels.set(0, new AudioInstrumentChannel(this.ctx, this.masterGain));
   }
 
-  // Implementation signature explicitly allows string | number for frequencyOrNote
-  public triggerVoice(channelId: number = 0, frequencyOrNote: number | string = 440, duration: number = 0.2): void {
-    if (!this.channels.has(channelId)) {
-      this.channels.set(channelId, new AudioInstrumentChannel(this.ctx, this.masterGain));
+  public triggerVoice(channelKey: string | number = 'channel-1', noteOrFreq: string | number = 440, duration: number = 0.2): void {
+    if (!this.channels.has(channelKey)) {
+      this.channels.set(channelKey, new AudioInstrumentChannel(this.ctx, this.masterGain));
     }
-    const channel = this.channels.get(channelId);
+    const channel = this.channels.get(channelKey);
     if (channel) {
-      const freq = typeof frequencyOrNote === 'number' ? frequencyOrNote : 440;
-      const dur = typeof duration === 'number' ? duration : 0.2;
-      channel.trigger(freq, dur);
+      // Simple frequency resolver or default Hz
+      const freq = typeof noteOrFreq === 'number' ? noteOrFreq : 440;
+      channel.trigger(freq, duration);
     }
   }
 
