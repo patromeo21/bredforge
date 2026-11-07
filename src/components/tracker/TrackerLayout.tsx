@@ -1,14 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { PunchInEffectBus } from '../../services/audio/PunchInEffectBus';
 import { PerformanceMacroEngine, MacroMode } from '../../services/audio/PerformanceMacroEngine';
-import './TrackerTheme.css';
 
 export const TrackerLayout: React.FC = () => {
   const macroEngineRef = useRef<PerformanceMacroEngine | null>(null);
   const [activeMacro, setActiveMacro] = useState<MacroMode>('none');
 
   useEffect(() => {
-    // Initialize AudioContext and DSP buses on first user interaction
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const effectBus = new PunchInEffectBus(audioCtx);
     effectBus.connect(audioCtx.destination);
@@ -35,7 +33,10 @@ export const TrackerLayout: React.FC = () => {
   };
 
   return (
-    <div className="bredforge-root bredforge-viewport-lock flex flex-col justify-between p-4">
+    <div 
+      className="fixed inset-0 w-screen h-[100dvh] overflow-hidden select-none bg-gray-950 text-gray-100 flex flex-col justify-between p-4 font-mono"
+      style={{ touchAction: 'none', WebkitUserSelect: 'none' }}
+    >
       {/* Top Header */}
       <header className="flex justify-between items-center border-b border-gray-800 pb-2">
         <h1 className="text-xl font-bold tracking-widest text-emerald-400">BREDFORGE v1.0</h1>
@@ -52,11 +53,12 @@ export const TrackerLayout: React.FC = () => {
             onPointerDown={() => handleMacroDown('punchInFilter')}
             onPointerUp={handleMacroUp}
             onPointerCancel={handleMacroUp}
-            className={`p-6 rounded-lg font-bold text-center gpu-accelerated-cell transition-all touch-none select-none ${
+            className={`p-6 rounded-lg font-bold text-center transition-all transform translateZ(0) ${
               activeMacro === 'punchInFilter'
                 ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/50 scale-95'
                 : 'bg-gray-800 text-emerald-400 border border-emerald-500/30'
             }`}
+            style={{ willChange: 'transform, background-color' }}
           >
             FILTER SLAM
           </button>
@@ -65,11 +67,12 @@ export const TrackerLayout: React.FC = () => {
             onPointerDown={() => handleMacroDown('bitcrushSlam')}
             onPointerUp={handleMacroUp}
             onPointerCancel={handleMacroUp}
-            className={`p-6 rounded-lg font-bold text-center gpu-accelerated-cell transition-all touch-none select-none ${
+            className={`p-6 rounded-lg font-bold text-center transition-all transform translateZ(0) ${
               activeMacro === 'bitcrushSlam'
                 ? 'bg-amber-600 text-white shadow-lg shadow-amber-900/50 scale-95'
                 : 'bg-gray-800 text-amber-400 border border-amber-500/30'
             }`}
+            style={{ willChange: 'transform, background-color' }}
           >
             BITCRUSH SLAM
           </button>
