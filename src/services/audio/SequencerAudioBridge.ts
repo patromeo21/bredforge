@@ -30,13 +30,13 @@ export class SequencerAudioBridge {
     this.channels.set(0, new AudioInstrumentChannel(this.ctx, this.masterGain));
   }
 
-  public triggerVoice(channelId: number = 0, frequency: number = 440): void {
+  public triggerVoice(channelId: number = 0, frequency: number = 440, duration: number = 0.2): void {
     if (!this.channels.has(channelId)) {
       this.channels.set(channelId, new AudioInstrumentChannel(this.ctx, this.masterGain));
     }
     const channel = this.channels.get(channelId);
     if (channel) {
-      channel.trigger(frequency);
+      channel.trigger(frequency, duration);
     }
   }
 
