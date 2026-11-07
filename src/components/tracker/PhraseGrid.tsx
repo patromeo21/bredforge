@@ -1,100 +1,115 @@
 // ============================================================================
-// BREDFORGE v1.0 — PHRASE GRID & LIVE RECORDING COMPONENT (PhraseGrid.tsx)
+// BREDFORGE v1.0 — TRACKER PHRASE GRID (PhraseGrid.tsx) [PHASE 15 ROLLBACK]
 // ============================================================================
 
 import React, { useState } from 'react';
-import { useLiveStepRecord } from '../../hooks/useLiveStepRecord';
-import { SequencerAudioBridge } from '../../services/audio/SequencerAudioBridge';
 
-interface PhraseGridProps {
-  audioBridge?: SequencerAudioBridge;
-  totalRows?: number;
-  activeRowIndex?: number;
+interface PhraseStep {
+  step: number;
+  note: string;     // e.g., "C-4", "---"
+  velocity: string; // Hex 00-7F
+  instrument: string; // Hex 00-FF
+  fx1: string;      // Command FX 1
+  fx2: string;      // Command FX 2
 }
 
-export const PhraseGrid: React.FC<PhraseGridProps> = ({ audioBridge, totalRows = 64, activeRowIndex }) => {
-  const [activeVoiceKey] = useState<string>('channel-1');
-  const { isRecording, setIsRecording, activeInstrument, setActiveInstrument, recordPadHit } = useLiveStepRecord(
-    {} as any,
-    [],
-    () => {}
+export const PhraseGrid: React.FC = () => {
+  const [cursorRow, setCursorRow] = useState<number>(0);
+  const [cursorCol, setCursorCol] = useState<number>(0);
+
+  // Initialize 16-step M8 phrase pattern
+  const [steps] = useState<PhraseStep[]>(
+    Array.from({ length: 16 }).map((_, idx) => ({
+      step: idx,
+      note: idx % 4 === 0 ? 'C-4' : '---',
+      velocity: idx % 4 === 0 ? '64' : '--',
+      instrument: idx % 4 === 0 ? '00' : '--',
+      fx1: idx === 0 ? 'V08' : '---',
+      fx2: '---',
+    }))
   );
 
-  // Use external activeRowIndex if provided by TrackerLayout, otherwise fallback to 0
-  const effectiveCursor = activeRowIndex !== undefined ? activeRowIndex : 0;
-
-  // 4x4 interactive pad layout mapping to notes & instruments
-  const padGrid = [
-    { id: 0, note: 'C-4', label: 'C4 (Kick)' },
-    { id: 1, note: 'D-4', label: 'D4 (Snare)' },
-    { id: 2, note: 'E-4', label: 'E4 (Hat)' },
-    { id: 3, note: 'F-4', label: 'F4 (Clap)' },
-    { id: 4, note: 'G-4', label: 'G4 (Perc 1)' },
-    { id: 5, note: 'A-4', label: 'A4 (Perc 2)' },
-    { id: 6, note: 'B-4', label: 'B4 (Bass)' },
-    { id: 7, note: 'C-5', label: 'C5 (Lead)' },
-    { id: 8, note: 'C#3', label: 'C#3 (Sub)' },
-    { id: 9, note: 'D#3', label: 'D#3 (Sub 2)' },
-    { id: 10, note: 'F#3', label: 'F#3 (Chord)' },
-    { id: 11, note: 'G#3', label: 'G#3 (Chord 2)' },
-    { id: 12, note: 'A#3', label: 'A#3 (FX 1)' },
-    { id: 13, note: 'C#4', label: 'C#4 (FX 2)' },
-    { id: 14, note: 'D#4', label: 'D#4 (FX 3)' },
-    { id: 15, note: 'F#4', label: 'F#4 (FX 4)' },
-  ];
-
-  const handlePadTouch = (pad: { id: number; note: string }) => {
-    // 1. Trigger audio playback via audio bridge if available
-    if (audioBridge) {
-      audioBridge.triggerVoice(activeVoiceKey, pad.note, 64);
-    }
-
-    // 2. Invoke live recording hook method
-    recordPadHit(pad.note, 64);
-  };
+  const columns = ['STEP', 'NOTE', 'VEL', 'INST', 'FX1', 'FX2'];
 
   return (
-    <div className="flex flex-col h-full bg-slate-950 text-slate-100 p-4 select-none touch-none">
-      {/* Header & Status */}
-      <div className="flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
-        <h2 className="text-lg font-mono font-bold tracking-wider text-emerald-400">
-          BREDFORGE // LIVE STEP RECORDER
-        </h2>
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setIsRecording(!isRecording)}
-            className={`px-3 py-1 rounded font-mono text-xs font-bold border transition-colors ${
-              isRecording 
-                ? 'bg-red-600 border-red-400 text-white animate-pulse' 
-                : 'bg-slate-800 border-slate-700 text-slate-300'
-            }`}
-          >
-            {isRecording ? 'REC ACTIVE' : 'REC IDLE'}
-          </button>
-          <div className="font-mono text-sm bg-slate-900 px-3 py-1 rounded border border-slate-700">
-            CURSOR: <span className="text-amber-400 font-bold">{String(effectiveCursor).padStart(2, '0')}</span>
-          </div>
+    <div className="flex flex-col h-full bg-slate-950 border border-slate-800 rounded-2xl p-4 gap-4 shadow-xl select-none font-mono text-xs">
+      {/* Header */}
+      <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+        <div>
+          <h2 className="font-bold text-slate-100 text-sm tracking-wider">
+            PHRASE GRID // PATTERN 01
+          </h2>
+          <p className="text-[10px] text-slate-400 font-sans">
+            16-Step Monospace Command Columns (Note, Velocity, Instrument, FX)
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[9px] font-bold animate-pulse">
+            [ROLLBACK: PHASE 15]
+          </span>
+          <span className="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] font-bold">
+            PHRASE (3,1)
+          </span>
         </div>
       </div>
 
-      {/* 4x4 Touch Pad Grid optimized for iPad touch interaction */}
-      <div className="grid grid-cols-4 gap-3 flex-1 my-auto max-w-lg mx-auto w-full">
-        {padGrid.map(pad => (
-          <button
-            key={pad.id}
-            onTouchStart={() => handlePadTouch(pad)}
-            onMouseDown={() => handlePadTouch(pad)}
-            className="flex flex-col items-center justify-center aspect-square bg-slate-900 border-2 border-slate-700 rounded-xl active:bg-emerald-600 active:border-emerald-400 active:scale-95 transition-all shadow-lg cursor-pointer"
-          >
-            <span className="font-mono text-xl font-bold text-slate-200">{pad.note}</span>
-            <span className="font-sans text-xs text-slate-400 mt-1">{pad.label}</span>
-          </button>
-        ))}
+      {/* Tracker Grid Table */}
+      <div className="flex-1 overflow-auto border border-slate-800 rounded-xl bg-slate-900/40 p-2">
+        {/* Column Headers */}
+        <div className="grid grid-cols-6 gap-2 border-b border-slate-800 pb-2 text-[10px] text-slate-500 font-bold text-center">
+          {columns.map((col, idx) => (
+            <div key={col} className={cursorCol === idx ? 'text-emerald-400 underline' : ''}>
+              {col}
+            </div>
+          ))}
+        </div>
+
+        {/* 16 Step Rows */}
+        <div className="flex flex-col gap-1 mt-2">
+          {steps.map((s, rowIdx) => {
+            const isCurrentRow = cursorRow === rowIdx;
+            return (
+              <div
+                key={s.step}
+                onClick={() => setCursorRow(rowIdx)}
+                className={`grid grid-cols-6 gap-2 items-center text-center py-1 rounded cursor-pointer transition-colors ${
+                  isCurrentRow
+                    ? 'bg-emerald-500/10 border border-emerald-500/40 text-emerald-300 font-bold'
+                    : 'bg-slate-950 border border-slate-800 text-slate-300 hover:bg-slate-900'
+                }`}
+              >
+                {/* Step Index */}
+                <div className="text-slate-500 font-bold">
+                  {rowIdx.toString(16).toUpperCase().padStart(2, '0')}
+                </div>
+                {/* Note */}
+                <div className={isCurrentRow && cursorCol === 1 ? 'bg-emerald-500 text-slate-950 px-1 rounded' : ''}>
+                  {s.note}
+                </div>
+                {/* Velocity */}
+                <div className={isCurrentRow && cursorCol === 2 ? 'bg-emerald-500 text-slate-950 px-1 rounded' : ''}>
+                  {s.velocity}
+                </div>
+                {/* Instrument */}
+                <div className={isCurrentRow && cursorCol === 3 ? 'bg-emerald-500 text-slate-950 px-1 rounded' : ''}>
+                  {s.instrument}
+                </div>
+                {/* FX 1 */}
+                <div className={isCurrentRow && cursorCol === 4 ? 'bg-emerald-500 text-slate-950 px-1 rounded' : ''}>
+                  {s.fx1}
+                </div>
+                {/* FX 2 */}
+                <div className={isCurrentRow && cursorCol === 5 ? 'bg-emerald-500 text-slate-950 px-1 rounded' : ''}>
+                  {s.fx2}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Footer Instructions */}
-      <div className="text-center font-mono text-xs text-slate-500 mt-4">
-        Tap pads to trigger sample buffers & record live sequence steps.
+      <div className="text-[10px] text-slate-500 text-center pt-2 border-t border-slate-800">
+        Use ARROWS to navigate steps/columns. EDIT + ARROWS to modify values.
       </div>
     </div>
   );
