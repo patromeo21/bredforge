@@ -1,5 +1,6 @@
-// src/services/audio/SampleManager.ts
-// Decoupled Sample Management & AudioBuffer Decoding Engine
+// ============================================================================
+// BREDFORGE v1.0 — DECOUPLED SAMPLE MANAGEMENT & AUDIOBUFFER ENGINE (SampleManager.ts)
+// ============================================================================
 
 class SampleManagerEngine {
   private ctx: AudioContext | null = null;
@@ -17,7 +18,7 @@ class SampleManagerEngine {
     return this.ctx;
   }
 
-  // Load and decode an ArrayBuffer into an AudioBuffer cache
+  // Load and decode a browser File object (WAV, MP3, FLAC, AAC) into the buffer cache
   public async loadSample(bank: string, padIndex: number, file: File): Promise<AudioBuffer | null> {
     try {
       const context = this.getContext();
@@ -30,6 +31,31 @@ class SampleManagerEngine {
       return decodedData;
     } catch (err) {
       console.error(`[SampleManager] Error decoding audio file for Bank ${bank} Pad ${padIndex + 1}:`, err);
+      return null;
+    }
+  }
+
+  // Load and decode an audio file from a URL (WAV, MP3, etc.) into the buffer cache
+  public async loadSampleFromUrl(bank: string, padIndex: number, url: string): Promise<AudioBuffer | null> {
+    const key = `${bank}_${padIndex}`;
+    if (this.bufferCache.has(key)) {
+      return this.bufferCache.get(key)!;
+    }
+
+    try {
+      const context = this.getContext();
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch sample from ${url}: ${response.statusText}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      const decodedData = await context.decodeAudioData(arrayBuffer);
+
+      this.bufferCache.set(key, decodedData);
+      console.log(`[SampleManager] Successfully cached AudioBuffer from URL for ${key} (${decodedData.duration.toFixed(2)}s)`);
+      return decodedData;
+    } catch (err) {
+      console.error(`[SampleManager] Error fetching audio from URL for Bank ${bank} Pad ${padIndex + 1}:`, err);
       return null;
     }
   }
