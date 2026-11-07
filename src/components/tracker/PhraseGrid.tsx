@@ -1,23 +1,26 @@
 // ============================================================================
-// BREDFORGE v1.0 — TRACKER PHRASE GRID (PhraseGrid.tsx) [PHASE 15 ROLLBACK]
+// BREDFORGE v1.0 — TRACKER PHRASE GRID WITH PLAYHEAD (PhraseGrid.tsx)
 // ============================================================================
 
 import React, { useState } from 'react';
+import { usePhrasePlayback } from '../../hooks/usePhrasePlayback';
 
 interface PhraseStep {
   step: number;
-  note: string;     // e.g., "C-4", "---"
-  velocity: string; // Hex 00-7F
-  instrument: string; // Hex 00-FF
-  fx1: string;      // Command FX 1
-  fx2: string;      // Command FX 2
+  note: string;
+  velocity: string;
+  instrument: string;
+  fx1: string;
+  fx2: string;
 }
 
 export const PhraseGrid: React.FC = () => {
   const [cursorRow, setCursorRow] = useState<number>(0);
   const [cursorCol, setCursorCol] = useState<number>(0);
+  
+  // Hook into SequencerAudioBridge clock via custom playback hook
+  const { activeStep } = usePhrasePlayback();
 
-  // Initialize 16-step M8 phrase pattern
   const [steps] = useState<PhraseStep[]>(
     Array.from({ length: 16 }).map((_, idx) => ({
       step: idx,
@@ -37,25 +40,21 @@ export const PhraseGrid: React.FC = () => {
       <div className="flex justify-between items-center border-b border-slate-800 pb-3">
         <div>
           <h2 className="font-bold text-slate-100 text-sm tracking-wider">
-            PHRASE GRID // PATTERN 01
+            PHRASE GRID // CLOCK-SYNCED
           </h2>
           <p className="text-[10px] text-slate-400 font-sans">
-            16-Step Monospace Command Columns (Note, Velocity, Instrument, FX)
+            16-Step Monospace Command Columns Linked to SequencerAudioBridge
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[9px] font-bold animate-pulse">
-            [ROLLBACK: PHASE 15]
-          </span>
-          <span className="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] font-bold">
-            PHRASE (3,1)
+          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[9px] font-bold">
+            PLAYHEAD: STEP {activeStep.toString(16).toUpperCase().padStart(2, '0')}
           </span>
         </div>
       </div>
 
       {/* Tracker Grid Table */}
       <div className="flex-1 overflow-auto border border-slate-800 rounded-xl bg-slate-900/40 p-2">
-        {/* Column Headers */}
         <div className="grid grid-cols-6 gap-2 border-b border-slate-800 pb-2 text-[10px] text-slate-500 font-bold text-center">
           {columns.map((col, idx) => (
             <div key={col} className={cursorCol === idx ? 'text-emerald-400 underline' : ''}>
@@ -64,44 +63,31 @@ export const PhraseGrid: React.FC = () => {
           ))}
         </div>
 
-        {/* 16 Step Rows */}
         <div className="flex flex-col gap-1 mt-2">
           {steps.map((s, rowIdx) => {
-            const isCurrentRow = cursorRow === rowIdx;
+            const isCursorRow = cursorRow === rowIdx;
+            const isPlayheadRow = activeStep === rowIdx;
+
             return (
               <div
                 key={s.step}
                 onClick={() => setCursorRow(rowIdx)}
                 className={`grid grid-cols-6 gap-2 items-center text-center py-1 rounded cursor-pointer transition-colors ${
-                  isCurrentRow
-                    ? 'bg-emerald-500/10 border border-emerald-500/40 text-emerald-300 font-bold'
+                  isCursorRow
+                    ? 'bg-emerald-500/20 border border-emerald-500 text-emerald-300 font-bold'
+                    : isPlayheadRow
+                    ? 'bg-cyan-500/10 border border-cyan-500/50 text-cyan-200'
                     : 'bg-slate-950 border border-slate-800 text-slate-300 hover:bg-slate-900'
                 }`}
               >
-                {/* Step Index */}
-                <div className="text-slate-500 font-bold">
-                  {rowIdx.toString(16).toUpperCase().padStart(2, '0')}
+                <div className={`font-bold ${isPlayheadRow ? 'text-cyan-400' : 'text-slate-500'}`}>
+                  {isPlayheadRow ? '▶ ' : ''}{rowIdx.toString(16).toUpperCase().padStart(2, '0')}
                 </div>
-                {/* Note */}
-                <div className={isCurrentRow && cursorCol === 1 ? 'bg-emerald-500 text-slate-950 px-1 rounded' : ''}>
-                  {s.note}
-                </div>
-                {/* Velocity */}
-                <div className={isCurrentRow && cursorCol === 2 ? 'bg-emerald-500 text-slate-950 px-1 rounded' : ''}>
-                  {s.velocity}
-                </div>
-                {/* Instrument */}
-                <div className={isCurrentRow && cursorCol === 3 ? 'bg-emerald-500 text-slate-950 px-1 rounded' : ''}>
-                  {s.instrument}
-                </div>
-                {/* FX 1 */}
-                <div className={isCurrentRow && cursorCol === 4 ? 'bg-emerald-500 text-slate-950 px-1 rounded' : ''}>
-                  {s.fx1}
-                </div>
-                {/* FX 2 */}
-                <div className={isCurrentRow && cursorCol === 5 ? 'bg-emerald-500 text-slate-950 px-1 rounded' : ''}>
-                  {s.fx2}
-                </div>
+                <div>{s.note}</div>
+                <div>{s.velocity}</div>
+                <div>{s.instrument}</div>
+                <div>{s.fx1}</div>
+                <div>{s.fx2}</div>
               </div>
             );
           })}
@@ -109,7 +95,7 @@ export const PhraseGrid: React.FC = () => {
       </div>
 
       <div className="text-[10px] text-slate-500 text-center pt-2 border-t border-slate-800">
-        Use ARROWS to navigate steps/columns. EDIT + ARROWS to modify values.
+        Cyan row indicates active audio playhead tick from SequencerAudioBridge.
       </div>
     </div>
   );
