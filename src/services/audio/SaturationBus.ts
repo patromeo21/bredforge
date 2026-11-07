@@ -16,11 +16,9 @@ export class SaturationBus {
     this.waveshaper = this.ctx.createWaveShaper();
     this.driveNode = this.ctx.createGain();
 
-    // Set initial drive level
     this.driveNode.gain.value = 1.2;
-    this.waveshaper.curve = this.createSaturationCurve(40);
+    this.waveshaper.curve = this.createSaturationCurve(40) as Float32Array;
 
-    // Route audio chain: input -> drive -> waveshaper -> output
     this.inputNode.connect(this.driveNode);
     this.driveNode.connect(this.waveshaper);
     this.waveshaper.connect(this.outputNode);
@@ -34,7 +32,6 @@ export class SaturationBus {
     
     for (let i = 0; i < n_samples; ++i) {
       const x = (i * 2) / n_samples - 1;
-      // Asymmetric soft-clipping curve for tape/vinyl warmth
       curve[i] = ((3 + k) * x * 20 * deg) / (Math.PI + k * Math.abs(x));
     }
     return curve;
@@ -49,7 +46,6 @@ export class SaturationBus {
   }
 
   public setDrive(amount: number): void {
-    // Clamp drive between 1.0 (clean) and 5.0 (heavy saturation)
     const clamped = Math.max(1.0, Math.min(5.0, amount));
     this.driveNode.gain.setValueAtTime(clamped, this.ctx.currentTime);
   }
