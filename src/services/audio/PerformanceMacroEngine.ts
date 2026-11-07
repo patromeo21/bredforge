@@ -17,7 +17,6 @@ export class PerformanceMacroEngine {
   public pressMacroButton(macro: MacroMode): void {
     this.activeMacro = macro;
     
-    // Map macro selection to underlying DSP effect bus nodes
     if (macro === 'punchInFilter') {
       this.effectBus.triggerPunchIn('filterSlam', true);
     } else if (macro === 'bitcrushSlam') {
@@ -26,7 +25,6 @@ export class PerformanceMacroEngine {
   }
 
   public releaseMacroButton(): void {
-    // Release active effects back to pass-through state (momentary behavior)
     if (this.activeMacro === 'punchInFilter') {
       this.effectBus.triggerPunchIn('filterSlam', false);
     } else if (this.activeMacro === 'bitcrushSlam') {
