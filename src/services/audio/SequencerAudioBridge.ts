@@ -25,6 +25,19 @@ export class SequencerAudioBridge {
     this.punchInBus.connect(this.ctx.destination);
 
     this.masterGain.gain.value = 0.8;
+
+    // Initialize default channel 0
+    this.channels.set(0, new AudioInstrumentChannel(this.ctx, this.masterGain));
+  }
+
+  public triggerVoice(channelId: number = 0, frequency: number = 440): void {
+    if (!this.channels.has(channelId)) {
+      this.channels.set(channelId, new AudioInstrumentChannel(this.ctx, this.masterGain));
+    }
+    const channel = this.channels.get(channelId);
+    if (channel) {
+      channel.trigger(frequency);
+    }
   }
 
   public getMasterOutput(): GainNode {
