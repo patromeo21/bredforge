@@ -1,89 +1,147 @@
 // ============================================================================
-// BREDFORGE v1.0 — ASYNCHRONOUS SAMPLE & BUFFER MANAGER (SampleManager.ts)
+// BREDFORGE v1.0 — CENTRALIZED SAMPLE MANAGER & MPC ADSR ENGINE [REF: M65]
 // ============================================================================
 
-export interface SampleSlot {
-  id: string;
-  name: string;
-  buffer: AudioBuffer | null;
-  duration: number;
+export type PlaybackMode = 'one-shot' | 'gate' | 'loop';
+
+export interface PadAssignment {
+  padIndex: number;          // 0 - 15
+  bank: 'A' | 'B' | 'C' | 'D';
+  sampleName: string;
+  audioBuffer?: AudioBuffer | null;
+  playbackMode: PlaybackMode;
+  attack: number;    // seconds
+  decay: number;     // seconds
+  sustain: number;   // 0 - 1
+  release: number;   // seconds
+  startTrim: number; // 0 - 1
+  endTrim: number;   // 0 - 1
 }
 
-export class SampleManager {
-  private static instance: SampleManager | null = null;
-  private ctx: AudioContext | null = null;
-  private buffers: Map<string, AudioBuffer> = new Map();
-  private metadata: Map<string, { name: string; duration: number }> = new Map();
+class SampleManager {
+  private assignments: Map<string, PadAssignment> = new Map();
+  private audioCtx: AudioContext | null = null;
+  private activeSources: Map<string, { source: AudioBufferSourceNode; gain: GainNode }> = new Map();
 
-  constructor() {
-    if (SampleManager.instance) {
-      return SampleManager.instance;
+  private getAudioContext(): AudioContext {
+    if (!this.audioCtx) {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      this.audioCtx = new AudioContextClass();
     }
-    SampleManager.instance = this;
-  }
-
-  public static getInstance(): SampleManager {
-    if (!SampleManager.instance) {
-      SampleManager.instance = new SampleManager();
+    if (this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume();
     }
-    return SampleManager.instance;
+    return this.audioCtx;
   }
 
-  public static getContext(): AudioContext {
-    const inst = SampleManager.getInstance();
-    if (!inst.ctx) {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      inst.ctx = new AudioCtx();
+  public async loadAndAssignSample(
+    bank: 'A' | 'B' | 'C' | 'D',
+    padIndex: number,
+    file: File
+  ): Promise<PadAssignment> {
+    const ctx = this.getAudioContext();
+    const arrayBuffer = await file.arrayBuffer();
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+    const assignment: PadAssignment = {
+      padIndex,
+      bank,
+      sampleName: file.name,
+      audioBuffer,
+      playbackMode: 'one-shot',
+      attack: 0.005,
+      decay: 0.1,
+      sustain: 0.8,
+      release: 0.15,
+      startTrim: 0,
+      endTrim: 1,
+    };
+
+    this.assignments.set(`${bank}-${padIndex}`, assignment);
+    return assignment;
+  }
+
+  public getAssignment(bank: 'A' | 'B' | 'C' | 'D', padIndex: number): PadAssignment | undefined {
+    return this.assignments.get(`${bank}-${padIndex}`);
+  }
+
+  public updateParameters(
+    bank: 'A' | 'B' | 'C' | 'D',
+    padIndex: number,
+    updates: Partial<PadAssignment>
+  ): void {
+    const key = `${bank}-${padIndex}`;
+    const existing = this.assignments.get(key);
+    if (existing) {
+      this.assignments.set(key, { ...existing, ...updates });
+    } else {
+      this.assignments.set(key, {
+        padIndex,
+        bank,
+        sampleName: `Pad ${padIndex + 1}`,
+        playbackMode: updates.playbackMode || 'one-shot',
+        attack: updates.attack ?? 0.005,
+        decay: updates.decay ?? 0.1,
+        sustain: updates.sustain ?? 0.8,
+        release: updates.release ?? 0.15,
+        startTrim: updates.startTrim ?? 0,
+        endTrim: updates.endTrim ?? 1,
+        ...updates,
+      });
     }
-    if (inst.ctx.state === 'suspended') {
-      inst.ctx.resume();
+  }
+
+  public triggerPad(bank: 'A' | 'B' | 'C' | 'D', padIndex: number): void {
+    const ctx = this.getAudioContext();
+    const assignment = this.getAssignment(bank, padIndex);
+    const key = `${bank}-${padIndex}`;
+
+    if (this.activeSources.has(key)) {
+      try {
+        this.activeSources.get(key)!.source.stop();
+      } catch (e) {}
+      this.activeSources.delete(key);
     }
-    return inst.ctx;
-  }
 
-  public static async loadSampleFromUrl(id: string | number, name: string, url: string): Promise<AudioBuffer | null> {
-    const inst = SampleManager.getInstance();
-    const context = SampleManager.getContext();
-    return inst.loadSample(id, name, url, context);
-  }
+    const gainNode = ctx.createGain();
+    gainNode.connect(ctx.destination);
 
-  public async loadSample(id: string | number, name: string, url: string, ctx: AudioContext): Promise<AudioBuffer | null> {
-    const stringId = String(id);
-    try {
-      const response = await fetch(url);
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+    const now = ctx.currentTime;
+    const attack = assignment?.attack ?? 0.005;
+    const decay = assignment?.decay ?? 0.1;
+    const sustain = assignment?.sustain ?? 0.8;
+    const release = assignment?.release ?? 0.15;
+    const mode = assignment?.playbackMode ?? 'one-shot';
 
-      this.buffers.set(stringId, audioBuffer);
-      this.metadata.set(stringId, { name, duration: audioBuffer.duration });
+    gainNode.gain.setValueAtTime(0, now);
+    gainNode.gain.linearRampToValueAtTime(1, now + attack);
+    gainNode.gain.linearRampToValueAtTime(sustain, now + attack + decay);
 
-      console.log(`[SampleManager] Successfully loaded sample '${name}' (${stringId}), duration: ${audioBuffer.duration.toFixed(2)}s`);
-      return audioBuffer;
-    } catch (err) {
-      console.error(`[SampleManager] Failed to load sample '${name}' from URL: ${url}`, err);
-      return null;
+    if (assignment && assignment.audioBuffer) {
+      const source = ctx.createBufferSource();
+      source.buffer = assignment.audioBuffer;
+      source.loop = mode === 'loop';
+
+      const duration = assignment.audioBuffer.duration * ((assignment.endTrim || 1) - (assignment.startTrim || 0));
+      source.connect(gainNode);
+
+      source.start(now, assignment.audioBuffer.duration * (assignment.startTrim || 0));
+      if (mode !== 'loop') {
+        source.stop(now + duration);
+      }
+
+      this.activeSources.set(key, { source, gain: gainNode });
+    } else {
+      // Fallback synthetic click for unassigned pads
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(220 + padIndex * 20, now);
+      osc.connect(gainNode);
+      osc.start(now);
+      gainNode.gain.linearRampToValueAtTime(0, now + 0.15);
+      osc.stop(now + 0.2);
     }
-  }
-
-  public getBuffer(id: string | number): AudioBuffer | undefined {
-    return this.buffers.get(String(id));
-  }
-
-  public getMetadata(id: string | number) {
-    return this.metadata.get(String(id));
-  }
-
-  public clearBuffer(id: string | number) {
-    const stringId = String(id);
-    this.buffers.delete(stringId);
-    this.metadata.delete(stringId);
-  }
-
-  public clearAll() {
-    this.buffers.clear();
-    this.metadata.clear();
-    console.log('[SampleManager] Cleared all audio buffers from memory.');
   }
 }
 
-export const sampleManager = SampleManager.getInstance();
+export const sampleManager = new SampleManager();
