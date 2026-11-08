@@ -1,5 +1,5 @@
 // ============================================================================
-// BREDFORGE v1.0 — DUAL-SCREEN WORKSPACE & MPC SAMPLE EDITOR [REF: M65]
+// BREDFORGE v1.0 — DUAL-SCREEN WORKSPACE & NON-BLOCKING MPC EDITOR [REF: M67]
 // ============================================================================
 
 import React, { useState } from 'react';
@@ -15,7 +15,7 @@ export function DualScreenWorkspace() {
   const [swingPercent, setSwingPercent] = useState<number>(54);
   const [activeModalStep, setActiveModalStep] = useState<{ row: number; col: number; lock?: ParameterLock } | null>(null);
 
-  // Right-side 4x4 Pad States
+  // Right-side 4x4 Pad & Editor States
   const [padMode, setPadMode] = useState<PadMode>('performance');
   const [activeBank, setActiveBank] = useState<BankKey>('A');
   const [selectedPadIndex, setSelectedPadIndex] = useState<number>(0);
@@ -29,8 +29,6 @@ export function DualScreenWorkspace() {
   const [decay, setDecay] = useState<number>(0.1);
   const [sustain, setSustain] = useState<number>(0.8);
   const [release, setRelease] = useState<number>(0.15);
-  const [startTrim, setStartTrim] = useState<number>(0);
-  const [endTrim, setEndTrim] = useState<number>(1);
 
   const handleSaveLock = (newLock: ParameterLock) => {
     if (!activeModalStep) return;
@@ -84,7 +82,7 @@ export function DualScreenWorkspace() {
         <div className="flex justify-between items-center pb-2 mb-2 border-b border-zinc-800 shrink-0">
           <div className="flex items-center gap-2">
             <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-[10px] rounded border border-amber-500/40">
-              [M65]
+              [M67]
             </span>
             <span className="font-bold tracking-wider text-xs text-zinc-200">
               TRACKER // STEP GRID
@@ -132,14 +130,16 @@ export function DualScreenWorkspace() {
         </div>
       </div>
 
-      {/* RIGHT SIDE: 4X4 PERFORMANCE MATRIX & MPC SAMPLE EDITOR */}
-      <div className="w-full md:w-[400px] flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-lg p-3 relative shrink-0">
+      {/* RIGHT SIDE: PERFORMANCE MATRIX & NON-BLOCKING SAMPLE EDITOR */}
+      <div className="w-full md:w-[420px] flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-lg p-3 relative shrink-0">
+        
+        {/* Top Header & Action Controls */}
         <div className="flex justify-between items-center pb-2 mb-2 border-b border-zinc-800 shrink-0">
           <div className="flex flex-col">
             <span className="text-[10px] text-amber-500 font-bold">
               {padMode === 'performance' ? `SP-404 / MPC [BANK ${activeBank}]` : 'M8 DIRTYWAVE & FX'}
             </span>
-            <span className="text-xs text-zinc-200 font-bold truncate max-w-[170px]">
+            <span className="text-xs text-zinc-200 font-bold truncate max-w-[160px]">
               {activePadState || `PAD ${selectedPadIndex + 1} SELECTED`}
             </span>
           </div>
@@ -148,20 +148,97 @@ export function DualScreenWorkspace() {
             <button
               onClick={() => setIsSampleEditorOpen(!isSampleEditorOpen)}
               className={`px-2 py-1 text-[9px] font-bold rounded border transition-colors ${
-                isSampleEditorOpen ? 'bg-amber-500 text-zinc-950 border-amber-400' : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                isSampleEditorOpen ? 'bg-amber-500 text-zinc-950 border-amber-400' : 'bg-zinc-900 text-amber-400 border-amber-500/50'
               }`}
             >
-              {isSampleEditorOpen ? 'HIDE EDIT' : 'SAMPLE EDIT'}
+              {isSampleEditorOpen ? 'CLOSE EDIT' : 'SAMPLE EDIT'}
             </button>
             <button
               onClick={() => setPadMode(padMode === 'performance' ? 'm8_dirtywave' : 'performance')}
-              className="px-2.5 py-1 bg-amber-500 text-zinc-950 text-[10px] font-bold rounded border border-amber-400 hover:bg-amber-400"
+              className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-bold rounded border border-zinc-700"
             >
               {padMode === 'performance' ? 'FLIP ➔ M8' : 'FLIP ➔ SP404'}
             </button>
           </div>
         </div>
 
+        {/* NON-BLOCKING MPC SAMPLE EDITOR POP-UP (Sits above pads, leaving pads fully accessible) */}
+        {isSampleEditorOpen && (
+          <div className="bg-zinc-950 border border-amber-500/60 rounded-lg p-2.5 mb-2 flex flex-col gap-2 shadow-xl shrink-0 animate-fadeIn">
+            <div className="flex justify-between items-center border-b border-zinc-800 pb-1">
+              <span className="text-[9px] text-amber-400 font-bold">
+                MPC EDITOR // BANK {activeBank} - PAD {selectedPadIndex + 1} (LIVE AUDITION ACTIVE)
+              </span>
+              <span className="text-[8px] text-emerald-400 font-bold">● PADS READY</span>
+            </div>
+
+            {/* File Loader & Trigger Mode */}
+            <div className="flex gap-2 items-center">
+              <div className="flex-1 h-8 bg-zinc-900 rounded border border-zinc-800 flex items-center justify-between px-2 text-[9px] text-zinc-300">
+                <span className="truncate">{assignedSamples[`${activeBank}-${selectedPadIndex}`] || 'NO FILE LOADED'}</span>
+                <label className="px-2 py-0.5 bg-amber-500 text-zinc-950 font-bold rounded cursor-pointer hover:bg-amber-400 text-[9px]">
+                  LOAD
+                  <input type="file" accept="audio/*" onChange={handleFileUpload} className="hidden" />
+                </label>
+              </div>
+
+              <div className="flex gap-1">
+                {(['one-shot', 'gate', 'loop'] as PlaybackMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => {
+                      setPlaybackMode(mode);
+                      handleParamUpdate({ playbackMode: mode });
+                    }}
+                    className={`px-1.5 py-1 text-[8px] font-bold rounded border uppercase ${
+                      playbackMode === mode ? 'bg-amber-500 text-zinc-950 border-amber-400' : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                    }`}
+                  >
+                    {mode === 'one-shot' ? '1-SHOT' : mode}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Compact ADSR Sliders */}
+            <div className="grid grid-cols-4 gap-1.5 bg-zinc-900/60 p-1.5 rounded border border-zinc-800">
+              <div className="flex flex-col">
+                <span className="text-[8px] text-zinc-400">ATK: {attack.toFixed(2)}s</span>
+                <input
+                  type="range" min="0.001" max="1" step="0.005" value={attack}
+                  onChange={(e) => { const val = Number(e.target.value); setAttack(val); handleParamUpdate({ attack: val }); }}
+                  className="w-full h-1 bg-zinc-800 rounded accent-amber-500"
+                />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] text-zinc-400">DEC: {decay.toFixed(2)}s</span>
+                <input
+                  type="range" min="0.01" max="1" step="0.01" value={decay}
+                  onChange={(e) => { const val = Number(e.target.value); setDecay(val); handleParamUpdate({ decay: val }); }}
+                  className="w-full h-1 bg-zinc-800 rounded accent-amber-500"
+                />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] text-zinc-400">SUS: {Math.round(sustain * 100)}%</span>
+                <input
+                  type="range" min="0" max="1" step="0.05" value={sustain}
+                  onChange={(e) => { const val = Number(e.target.value); setSustain(val); handleParamUpdate({ sustain: val }); }}
+                  className="w-full h-1 bg-zinc-800 rounded accent-amber-500"
+                />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[8px] text-zinc-400">REL: {release.toFixed(2)}s</span>
+                <input
+                  type="range" min="0.01" max="2" step="0.01" value={release}
+                  onChange={(e) => { const val = Number(e.target.value); setRelease(val); handleParamUpdate({ release: val }); }}
+                  className="w-full h-1 bg-zinc-800 rounded accent-amber-500"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bank Selectors (Performance Mode) */}
         {padMode === 'performance' && (
           <div className="grid grid-cols-4 gap-1 mb-2 shrink-0">
             {(['A', 'B', 'C', 'D'] as BankKey[]).map((bank) => (
@@ -178,7 +255,8 @@ export function DualScreenWorkspace() {
           </div>
         )}
 
-        <div className="flex-1 grid grid-cols-4 grid-rows-4 gap-2 relative">
+        {/* 4x4 Pad Grid (Always Visible & Fully Clickable for Live Auditioning) */}
+        <div className="flex-1 grid grid-cols-4 grid-rows-4 gap-2">
           {Array.from({ length: 16 }).map((_, idx) => {
             const sampleKey = `${activeBank}-${idx}`;
             const hasSample = !!assignedSamples[sampleKey];
@@ -189,7 +267,7 @@ export function DualScreenWorkspace() {
                 key={idx}
                 onClick={() => handlePadClick(idx)}
                 className={`flex flex-col items-center justify-center rounded-lg border transition-all active:scale-95 p-1 ${
-                  isSelected ? 'border-amber-400 bg-zinc-800/80' : 'border-zinc-800 bg-zinc-900'
+                  isSelected ? 'border-amber-400 bg-zinc-800/80 shadow-[0_0_8px_rgba(245,158,11,0.2)]' : 'border-zinc-800 bg-zinc-900'
                 }`}
               >
                 <span className="text-xs font-bold text-zinc-200">{idx + 1}</span>
@@ -199,154 +277,6 @@ export function DualScreenWorkspace() {
               </button>
             );
           })}
-
-          {/* MPC-Style Sample Editor Floating Window Overlay */}
-          {isSampleEditorOpen && (
-            <div className="absolute inset-0 bg-zinc-950/98 border border-amber-500/50 rounded-lg p-3 flex flex-col justify-between shadow-2xl backdrop-blur-md z-20 overflow-y-auto">
-              {/* Header */}
-              <div className="flex justify-between items-center border-b border-zinc-800 pb-1.5 shrink-0">
-                <span className="text-[10px] text-amber-400 font-bold">
-                  MPC SAMPLE EDITOR // BANK {activeBank} - PAD {selectedPadIndex + 1}
-                </span>
-                <button
-                  onClick={() => setIsSampleEditorOpen(false)}
-                  className="w-5 h-5 flex items-center justify-center bg-zinc-900 text-zinc-400 rounded text-xs hover:text-zinc-200"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* File Loader & Waveform View */}
-              <div className="py-2 flex flex-col gap-2 shrink-0">
-                <div className="w-full h-10 bg-zinc-900 rounded border border-zinc-800 flex items-center justify-between px-2 text-[10px] text-zinc-300">
-                  <span className="truncate">{assignedSamples[`${activeBank}-${selectedPadIndex}`] || 'NO FILE LOADED'}</span>
-                  <label className="px-2 py-1 bg-amber-500 text-zinc-950 font-bold rounded cursor-pointer hover:bg-amber-400">
-                    LOAD
-                    <input type="file" accept="audio/*" onChange={handleFileUpload} className="hidden" />
-                  </label>
-                </div>
-
-                {/* Trigger Mode Selector (One-Shot, Gate, Loop) */}
-                <div className="grid grid-cols-3 gap-1">
-                  {(['one-shot', 'gate', 'loop'] as PlaybackMode[]).map((mode) => (
-                    <button
-                      key={mode}
-                      onClick={() => {
-                        setPlaybackMode(mode);
-                        handleParamUpdate({ playbackMode: mode });
-                      }}
-                      className={`py-1 text-[9px] font-bold rounded border uppercase ${
-                        playbackMode === mode
-                          ? 'bg-amber-500 text-zinc-950 border-amber-400'
-                          : 'bg-zinc-900 text-zinc-400 border-zinc-800'
-                      }`}
-                    >
-                      {mode}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* ADSR Envelope Controls */}
-              <div className="bg-zinc-900/60 p-2 rounded border border-zinc-800 flex flex-col gap-2 shrink-0">
-                <span className="text-[9px] text-amber-500 font-bold">ADSR ENVELOPE</span>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="flex flex-col gap-1">
-                    <div className="flex justify-between text-[9px] text-zinc-400">
-                      <span>ATTACK</span>
-                      <span>{attack.toFixed(2)}s</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0.001"
-                      max="1"
-                      step="0.005"
-                      value={attack}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        setAttack(val);
-                        handleParamUpdate({ attack: val });
-                      }}
-                      className="w-full h-1 bg-zinc-800 rounded accent-amber-500"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <div className="flex justify-between text-[9px] text-zinc-400">
-                      <span>DECAY</span>
-                      <span>{decay.toFixed(2)}s</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0.01"
-                      max="1"
-                      step="0.01"
-                      value={decay}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        setDecay(val);
-                        handleParamUpdate({ decay: val });
-                      }}
-                      className="w-full h-1 bg-zinc-800 rounded accent-amber-500"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <div className="flex justify-between text-[9px] text-zinc-400">
-                      <span>SUSTAIN</span>
-                      <span>{Math.round(sustain * 100)}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.05"
-                      value={sustain}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        setSustain(val);
-                        handleParamUpdate({ sustain: val });
-                      }}
-                      className="w-full h-1 bg-zinc-800 rounded accent-amber-500"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <div className="flex justify-between text-[9px] text-zinc-400">
-                      <span>RELEASE</span>
-                      <span>{release.toFixed(2)}s</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0.01"
-                      max="2"
-                      step="0.01"
-                      value={release}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        setRelease(val);
-                        handleParamUpdate({ release: val });
-                      }}
-                      className="w-full h-1 bg-zinc-800 rounded accent-amber-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Actions Footer */}
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-800 shrink-0">
-                <button
-                  onClick={() => setIsSampleEditorOpen(false)}
-                  className="py-1.5 bg-zinc-900 text-zinc-300 text-[10px] font-bold rounded border border-zinc-700"
-                >
-                  CLOSE
-                </button>
-                <button
-                  onClick={() => sampleManager.triggerPad(activeBank, selectedPadIndex)}
-                  className="py-1.5 bg-amber-500 text-zinc-950 text-[10px] font-bold rounded border border-amber-400 font-bold"
-                >
-                  TEST PAD
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
