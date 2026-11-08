@@ -1,47 +1,46 @@
 // ============================================================================
-// BREDFORGE v1.0 — AUDIBLE TACTILE MIXER MATRIX [REF: M52]
+// BREDFORGE v1.0 — TACTILE MIXER MATRIX WITH DOUBLE-TAP RESET [REF: M60]
 // ============================================================================
 
-import React, { useState } from 'react';
-// Import underlying audio bus controllers if available in your project path
-// e.g., import { saturationBus } from '../../services/audio/SaturationBus';
+import React, { useState, useRef } from 'react';
 
 interface Channel {
   id: number;
   name: string;
-  volume: number;     // 0 - 100
-  pan: number;        // -50 (L) to +50 (R)
-  saturation: number; // 0 - 100
+  volume: number;        // 0 - 100
+  pan: number;           // -50 (L) to +50 (R)
+  saturation: number;    // 0 - 100
+  masterCompressor: number; // 0 - 100 (% Mix)
   muted: boolean;
   soloed: boolean;
+  activeMeterLevel: number; // 0 - 100 live meter simulation
 }
 
 export function MixerMatrix() {
   const [channels, setChannels] = useState<Channel[]>([
-    { id: 1, name: 'TRK 1 [KICK]', volume: 85, pan: 0, saturation: 40, muted: false, soloed: false },
-    { id: 2, name: 'TRK 2 [SNARE]', volume: 80, pan: -10, saturation: 60, muted: false, soloed: false },
-    { id: 3, name: 'TRK 3 [CHORD]', volume: 75, pan: 15, saturation: 20, muted: false, soloed: false },
-    { id: 4, name: 'TRK 4 [LEAD]', volume: 90, pan: 0, saturation: 80, muted: false, soloed: false },
+    { id: 1, name: 'TRK 1 [KICK]', volume: 85, pan: 0, saturation: 40, masterCompressor: 50, muted: false, soloed: false, activeMeterLevel: 75 },
+    { id: 2, name: 'TRK 2 [SNARE]', volume: 80, pan: -10, saturation: 60, masterCompressor: 50, muted: false, soloed: false, activeMeterLevel: 60 },
+    { id: 3, name: 'TRK 3 [CHORD]', volume: 75, pan: 15, saturation: 20, masterCompressor: 50, muted: false, soloed: false, activeMeterLevel: 45 },
+    { id: 4, name: 'TRK 4 [LEAD]', volume: 90, pan: 0, saturation: 80, masterCompressor: 50, muted: false, soloed: false, activeMeterLevel: 85 },
   ]);
+
+  // Track tap timestamps for mobile/iPad double-tap detection
+  const lastTapRef = useRef<{ [key: string]: number }>({});
+
+  const handleDoubleTap = (key: string, resetValue: number, callback: (val: number) => void) => {
+    const now = Date.now();
+    const lastTap = lastTapRef.current[key] || 0;
+    if (now - lastTap < 300) {
+      callback(resetValue);
+      lastTapRef.current[key] = 0;
+    } else {
+      lastTapRef.current[key] = now;
+    }
+  };
 
   const updateChannel = (id: number, updates: Partial<Channel>) => {
     setChannels((prev) =>
-      prev.map((ch) => {
-        if (ch.id === id) {
-          const updated = { ...ch, ...updates };
-          
-          // Hook into Web Audio parameters in real time
-          if ('volume' in updates) {
-            // e.g., masterChannelVolumes.set(id, updated.volume / 100);
-          }
-          if ('saturation' in updates) {
-            // saturationBus.setDrive(id, updated.saturation / 100);
-          }
-
-          return updated;
-        }
-        return ch;
-      })
+      prev.map((ch) => (ch.id === id ? { ...ch, ...updates } : ch))
     );
   };
 
@@ -51,13 +50,13 @@ export function MixerMatrix() {
       <div className="flex justify-between items-center pb-2 mb-3 border-b border-zinc-900">
         <div className="flex items-center gap-2">
           <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-[10px] rounded border border-amber-500/40">
-            [M52]
+            [M60]
           </span>
           <span className="font-bold tracking-wider text-xs text-zinc-200">
-            MIXER // ACTIVE DSP BUS ROUTING
+            MIXER // 4-CHANNEL DSP BUS & METERING
           </span>
         </div>
-        <span className="text-[10px] text-zinc-500">TOUCH READY</span>
+        <span className="text-[10px] text-zinc-500">DOUBLE-TAP SLIDER TO RESET</span>
       </div>
 
       {/* Channel Strips Grid */}
@@ -73,16 +72,27 @@ export function MixerMatrix() {
                 : 'border-zinc-800'
             }`}
           >
-            {/* Channel Title & Stats */}
-            <div className="text-center pb-2 border-b border-zinc-800/80">
+            {/* Channel Title & Stats + Colorful Meter */}
+            <div className="text-center pb-2 border-b border-zinc-800/80 flex flex-col gap-1.5">
               <span className="text-[10px] text-zinc-300 font-bold block truncate">
                 {ch.name}
               </span>
-              <span className="text-[9px] text-zinc-500">VOL: {ch.volume}%</span>
+              
+              {/* Active Colorful Volume Meter Bar */}
+              <div className="w-full h-1.5 bg-zinc-950 rounded-full overflow-hidden p-0.5 border border-zinc-800">
+                <div
+                  className="h-full rounded-full transition-all duration-75 bg-gradient-to-r from-emerald-500 via-amber-500 to-red-500"
+                  style={{ width: `${ch.muted ? 0 : ch.activeMeterLevel}%` }}
+                ></div>
+              </div>
             </div>
 
             {/* Vertical Volume Fader Area */}
-            <div className="flex-1 flex items-center justify-center py-3 relative">
+            <div
+              className="flex-1 flex items-center justify-center py-3 relative cursor-pointer"
+              onClick={() => handleDoubleTap(`vol-${ch.id}`, 0, (val) => updateChannel(ch.id, { volume: val }))}
+              title="Double-tap to reset volume to 0%"
+            >
               <input
                 type="range"
                 min="0"
@@ -94,9 +104,13 @@ export function MixerMatrix() {
             </div>
 
             {/* Saturation Send Control */}
-            <div className="mb-2 px-1">
+            <div
+              className="mb-1.5 px-1 cursor-pointer"
+              onClick={() => handleDoubleTap(`sat-${ch.id}`, 0, (val) => updateChannel(ch.id, { saturation: val }))}
+              title="Double-tap to reset saturation to 0%"
+            >
               <div className="flex justify-between text-[9px] text-zinc-500 mb-1">
-                <span>SAT SEND</span>
+                <span>SAT</span>
                 <span>{ch.saturation}%</span>
               </div>
               <input
@@ -109,8 +123,32 @@ export function MixerMatrix() {
               />
             </div>
 
+            {/* Master Compressor Mix % Slider (Placed directly under Saturation) */}
+            <div
+              className="mb-2 px-1 cursor-pointer"
+              onClick={() => handleDoubleTap(`comp-${ch.id}`, 0, (val) => updateChannel(ch.id, { masterCompressor: val }))}
+              title="Double-tap to reset compressor mix to 0%"
+            >
+              <div className="flex justify-between text-[9px] text-zinc-500 mb-1">
+                <span>COMP MIX</span>
+                <span>{ch.masterCompressor}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={ch.masterCompressor}
+                onChange={(e) => updateChannel(ch.id, { masterCompressor: Number(e.target.value) })}
+                className="w-full h-1 bg-zinc-800 rounded appearance-none cursor-pointer accent-amber-500"
+              />
+            </div>
+
             {/* Pan Control */}
-            <div className="mb-2 px-1">
+            <div
+              className="mb-2 px-1 cursor-pointer"
+              onClick={() => handleDoubleTap(`pan-${ch.id}`, 0, (val) => updateChannel(ch.id, { pan: val }))}
+              title="Double-tap to center pan"
+            >
               <div className="flex justify-between text-[9px] text-zinc-500 mb-1">
                 <span>PAN</span>
                 <span>{ch.pan < 0 ? `L${Math.abs(ch.pan)}` : ch.pan > 0 ? `R${ch.pan}` : 'C'}</span>
