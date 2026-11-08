@@ -1,94 +1,116 @@
 // ============================================================================
-// STAGE E - PHASE 31 REPAIR: HYPER-CLEAN IMMUTABLE ENTRY MATRIX (GridController.tsx)
+// BREDFORGE v1.0 — GRID CONTROLLER WITH P-LOCK MODAL [REF: M56]
 // ============================================================================
 
-import React from 'react';
-import { ProjectStateSchema, TrackerStep } from '../../services/tracker/TrackerState';
+import React, { useState } from 'react';
+import { trackerEngine, PatternState, ParameterLock } from '../../services/tracker/TrackerEngine';
+import { ParameterLockModal } from './ParameterLockModal';
 
-export type TrackerColumn = 'NOTE' | 'VOL' | 'FX1' | 'FX2';
+export function GridController() {
+  const [pattern, setPattern] = useState<PatternState>(() => trackerEngine.generateDefaultPattern());
+  const [activeModalStep, setActiveModalStep] = useState<{ row: number; col: number; lock?: ParameterLock } | null>(null);
 
-export interface GridSelectionState {
-  rowIndex: number;
-  columnIndex: TrackerColumn;
-}
-
-/**
- * Immutable grid cell editor function supporting step-entry programming.
- * Uses explicit conditional assignments to prevent syntax leakage and deep-clones state.
- */
-export function handleGridCellEdit(
-  currentState: ProjectStateSchema,
-  selection: GridSelectionState,
-  incomingValue: any,
-  activePhraseId: string
-): ProjectStateSchema {
-  const targetPhraseKey = activePhraseId || currentState.activePhrase || '01';
-  const currentPhrase = currentState.phrases[targetPhraseKey] || Array.from({ length: 16 }, (_, i) => ({
-    step: i + 1,
-    padId: null,
-    vol: 1.0,
-    fxType: 'bypass',
-    fxParam: null,
-  }));
-
-  const targetRowIndex = Math.max(0, Math.min(15, selection.rowIndex));
-
-  // Deep-clone the phrase block array and target step object
-  const updatedPhrase: TrackerStep[] = currentPhrase.map((stepItem, idx) => {
-    if (idx === targetRowIndex) {
-      const clonedStep = { ...stepItem };
-      
-      if (selection.columnIndex === 'NOTE') {
-        clonedStep.padId = incomingValue;
-      } else if (selection.columnIndex === 'VOL') {
-        clonedStep.vol = typeof incomingValue === 'number' ? Math.max(0.0, Math.min(1.0, incomingValue)) : 1.0;
-      } else if (selection.columnIndex === 'FX1') {
-        clonedStep.fxType = typeof incomingValue === 'string' ? incomingValue : 'bypass';
-      } else if (selection.columnIndex === 'FX2') {
-        clonedStep.fxParam = typeof incomingValue === 'number' ? incomingValue : null;
-      }
-
-      return clonedStep;
-    }
-    return { ...stepItem };
-  });
-
-  const updatedState: ProjectStateSchema = {
-    ...currentState,
-    phrases: {
-      ...currentState.phrases,
-      [targetPhraseKey]: updatedPhrase,
-    },
-    timestamp: Date.now(),
+  const handleOpenModal = (row: number, col: number) => {
+    const currentLock = pattern.rows[row]?.columns[col]?.paramLock;
+    setActiveModalStep({ row, col, lock: currentLock });
   };
 
-  return updatedState;
-}
+  const handleSaveLock = (newLock: ParameterLock) => {
+    if (!activeModalStep) return;
+    const { row, col } = activeModalStep;
 
-export interface GridControllerProps extends React.HTMLAttributes<HTMLDivElement> {
-  selection: GridSelectionState;
-  onSelectionChange?: (newSelection: GridSelectionState) => void;
-  [key: string]: any;
-}
+    // Update in engine
+    trackerEngine.setParameterLock(pattern, row, col, newLock);
 
-export const GridController: React.FC<GridControllerProps> = ({
-  selection,
-  onSelectionChange,
-  ...restProps
-}) => {
+    // Force React state update
+    setPattern({
+      ...pattern,
+      rows: pattern.rows.map((r, rIdx) => {
+        if (rIdx !== row) return r;
+        return {
+          ...r,
+          columns: r.columns.map((c, cIdx) => {
+            if (cIdx !== col) return c;
+            return { ...c, paramLock: newLock };
+          }),
+        };
+      }),
+    });
+
+    setActiveModalStep(null);
+  };
+
   return (
-    <div
-      {...restProps}
-      className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-emerald-500/30 rounded font-mono text-xs text-emerald-400 select-none shadow-[0_0_10px_rgba(16,185,129,0.1)]"
-    >
-      <span className="text-emerald-600 font-bold uppercase tracking-wider">CURSOR:</span>
-      <span className="font-extrabold text-emerald-300">
-        ROW [{selection.rowIndex.toString(16).toUpperCase().padStart(2, '0')}]
-      </span>
-      <span className="text-emerald-600">/</span>
-      <span className="font-extrabold text-emerald-300 tracking-widest">
-        COL [{selection.columnIndex}]
-      </span>
+    <div className="absolute inset-0 flex flex-col bg-zinc-950 border border-zinc-800 rounded-lg p-3 font-mono select-none overflow-hidden relative">
+      
+      {/* Grid Controller Header */}
+      <div className="flex justify-between items-center pb-2 mb-3 border-b border-zinc-900">
+        <div className="flex items-center gap-2">
+          <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-[10px] rounded border border-amber-500/40">
+            [M56]
+          </span>
+          <span className="font-bold tracking-wider text-xs text-zinc-200">
+            TRACKER // STEP GRID & P-LOCKS
+          </span>
+        </div>
+        <span className="text-[10px] text-zinc-500">TAP STEP TO EDIT P-LOCK</span>
+      </div>
+
+      {/* Scrollable Step Rows Container */}
+      <div className="flex-1 overflow-y-auto space-y-1 pr-1">
+        {pattern.rows.map((row, rIdx) => (
+          <div key={rIdx} className="flex items-center gap-2 bg-zinc-900/40 p-1.5 rounded border border-zinc-800/50">
+            <span className="text-[10px] text-zinc-500 w-8 text-right font-mono">
+              {(rIdx + 1).toString().padStart(2, '0')}
+            </span>
+
+            <div className="grid grid-cols-1 gap-2 flex-1">
+              {row.columns.map((col, cIdx) => {
+                const hasLock = col.paramLock && Object.keys(col.paramLock).length > 0;
+                return (
+                  <div key={cIdx} className="flex items-center justify-between bg-zinc-900 px-3 py-1.5 rounded border border-zinc-800">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-amber-500">
+                        {col.note || '----'}
+                      </span>
+                      <span className="text-[10px] text-zinc-400">
+                        INS: {col.instrumentID ?? '--'}
+                      </span>
+                      {hasLock && (
+                        <span className="px-1 py-0.5 bg-amber-500/10 text-amber-400 text-[9px] rounded border border-amber-500/30">
+                          P-LOCK ACTIVE
+                        </span>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => handleOpenModal(rIdx, cIdx)}
+                      className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-bold rounded border border-zinc-700 transition-colors"
+                    >
+                      EDIT P-LOCK
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Parameter Lock Modal HUD Overlay */}
+      {activeModalStep && (
+        <ParameterLockModal
+          isOpen={true}
+          rowIndex={activeModalStep.row}
+          colIndex={activeModalStep.col}
+          currentLock={activeModalStep.lock}
+          onSave={handleSaveLock}
+          onClose={() => setActiveModalStep(null)}
+        />
+      )}
+
     </div>
   );
-};
+}
+
+export default GridController;
