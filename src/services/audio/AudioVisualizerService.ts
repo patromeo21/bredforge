@@ -26,14 +26,14 @@ export class AudioVisualizerService {
 
   public getByteFrequencyData(): Uint8Array {
     if (this.analyser) {
-      this.analyser.getByteFrequencyData(this.dataArray);
+      this.analyser.getByteFrequencyData(this.dataArray as unknown as Uint8Array<ArrayBuffer>);
     }
     return this.dataArray;
   }
 
   public getByteTimeDomainData(): Uint8Array {
     if (this.analyser) {
-      this.analyser.getByteTimeDomainData(this.dataArray);
+      this.analyser.getByteTimeDomainData(this.dataArray as unknown as Uint8Array<ArrayBuffer>);
     }
     return this.dataArray;
   }
@@ -41,7 +41,7 @@ export class AudioVisualizerService {
   public getFrequencyData(array?: Uint8Array): Uint8Array {
     const target = array || this.dataArray;
     if (this.analyser) {
-      this.analyser.getByteFrequencyData(target);
+      this.analyser.getByteFrequencyData(target as unknown as Uint8Array<ArrayBuffer>);
     }
     return target;
   }
@@ -49,7 +49,7 @@ export class AudioVisualizerService {
   public getTimeDomainData(array?: Uint8Array): Uint8Array {
     const target = array || this.dataArray;
     if (this.analyser) {
-      this.analyser.getByteTimeDomainData(target);
+      this.analyser.getByteTimeDomainData(target as unknown as Uint8Array<ArrayBuffer>);
     }
     return target;
   }
