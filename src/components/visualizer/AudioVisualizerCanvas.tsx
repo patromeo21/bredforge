@@ -1,123 +1,118 @@
 // ============================================================================
-// BREDFORGE v1.0 — 60FPS CANVAS AUDIO VISUALIZER (AudioVisualizerCanvas.tsx)
+// BREDFORGE v1.0 — HIGH-DENSITY OSCILLOSCOPE CANVAS [REF: M49]
 // ============================================================================
 
 import React, { useEffect, useRef } from 'react';
-import { AudioVisualizerService } from '../../services/audio/AudioVisualizerService';
+import { audioVisualizerService } from '../../services/audio/AudioVisualizerService';
 
-interface AudioVisualizerCanvasProps {
-  visualizerService?: AudioVisualizerService;
-  width?: number;
-  height?: number;
-}
-
-export const AudioVisualizerCanvas: React.FC<AudioVisualizerCanvasProps> = ({
-  visualizerService,
-  width = 400,
-  height = 120,
-}) => {
+export function AudioVisualizerCanvas() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
     let animationFrameId: number;
+    let lastTime = performance.now();
+    let frameCount = 0;
+    let fps = 60;
 
-    // Handle high-DPI scaling for Retina / iPad displays
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    ctx.scale(dpr, dpr);
+    // Handle high-DPI retina scaling for iPad 9th Gen
+    const updateCanvasSize = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      
+      ctx.scale(dpr, dpr);
+    };
 
-    const render = () => {
+    updateCanvasSize();
+    window.addEventListener('resize', updateCanvasSize);
+
+    const render = (currentTime: number) => {
       animationFrameId = requestAnimationFrame(render);
 
-      // Clear canvas with deep industrial background
-      ctx.fillStyle = '#020617'; // slate-950
+      // Measure performance stats
+      frameCount++;
+      if (currentTime - lastTime >= 1000) {
+        fps = Math.round((frameCount * 1000) / (currentTime - lastTime));
+        frameCount = 0;
+        lastTime = currentTime;
+      }
+
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+
+      // Double-buffer background clear & grid matrix
+      ctx.fillStyle = '#09090b'; // zinc-950
       ctx.fillRect(0, 0, width, height);
 
-      if (!visualizerService) {
-        // Draw idle line if no service connected
-        ctx.strokeStyle = '#334155';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(0, height / 2);
-        ctx.lineTo(width, height / 2);
-        ctx.stroke();
-        return;
-      }
+      // Draw subtle oscilloscope grid lines
+      ctx.strokeStyle = 'rgba(39, 39, 42, 0.4)'; // zinc-800
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, height / 2);
+      ctx.lineTo(width, height / 2);
+      ctx.stroke();
 
-      // 1. Render Frequency Spectrum (Bars)
-      const freqData = visualizerService.getFrequencyData();
-      const barWidth = (width / freqData.length) * 2.2;
-      let x = 0;
+      // Fetch pre-allocated time domain data from visualizer service
+      const timeData = audioVisualizerService.getByteTimeDomainData();
+      if (!timeData || timeData.length === 0) return;
 
-      for (let i = 0; i < freqData.length; i++) {
-        const barHeight = (freqData[i] / 255) * (height * 0.75);
-
-        // Cyberpunk gradient: Emerald to Amber
-        const gradient = ctx.createLinearGradient(0, height, 0, 0);
-        gradient.addColorStop(0, '#059669'); // emerald-600
-        gradient.addColorStop(0.7, '#10b981'); // emerald-500
-        gradient.addColorStop(1, '#f59e0b'); // amber-500
-
-        ctx.fillStyle = gradient;
-        ctx.fillRect(x, height - barHeight - 10, barWidth - 1, barHeight);
-
-        x += barWidth + 1;
-      }
-
-      // 2. Render Oscilloscope Waveform Overlay
-      const timeData = visualizerService.getTimeDomainData();
-      ctx.strokeStyle = '#34d399'; // emerald-400
+      // Draw high-density waveform trace
+      ctx.strokeStyle = '#f59e0b'; // amber-500
       ctx.lineWidth = 2;
+      ctx.shadowColor = 'rgba(245, 158, 11, 0.4)';
+      ctx.shadowBlur = 8;
       ctx.beginPath();
 
       const sliceWidth = width / timeData.length;
-      let currX = 0;
+      let x = 0;
 
       for (let i = 0; i < timeData.length; i++) {
-        const v = timeData[i] / 128.0;
-        const currY = (v * height) / 2;
+        const v = timeData[i] / 128.0; // normalize around 1.0 center
+        const y = (v * height) / 2;
 
         if (i === 0) {
-          ctx.moveTo(currX, currY);
+          ctx.moveTo(x, y);
         } else {
-          ctx.lineTo(currX, currY);
+          ctx.lineTo(x, y);
         }
-        currX += sliceWidth;
-      }
-      ctx.stroke();
 
-      // 3. Render Peak VU Level Indicator
-      const rms = visualizerService.calculateRMS();
-      const vuWidth = Math.min(width, rms * width * 1.5);
-      
-      ctx.fillStyle = rms > 0.85 ? '#ef4444' : '#10b981'; // Red on clip, emerald normal
-      ctx.fillRect(0, height - 4, vuWidth, 4);
+        x += sliceWidth;
+      }
+
+      ctx.lineTo(width, height / 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0; // reset shadow for performance
+
+      // Render diagnostic HUD overlay on canvas
+      ctx.fillStyle = 'rgba(245, 158, 11, 0.7)';
+      ctx.font = '9px monospace';
+      ctx.fillText(`FPS: ${fps} // 120HZ TARGET`, 10, 16);
     };
 
-    render();
+    animationFrameId = requestAnimationFrame(render);
 
     return () => {
       cancelAnimationFrame(animationFrameId);
+      window.removeEventListener('resize', updateCanvasSize);
     };
-  }, [visualizerService, width, height]);
+  }, []);
 
   return (
-    <div className="relative rounded-xl overflow-hidden border border-slate-800 bg-slate-950 shadow-inner">
+    <div className="w-full h-full relative overflow-hidden rounded-lg bg-zinc-950">
       <canvas
         ref={canvasRef}
-        style={{ width: `${width}px`, height: `${height}px` }}
-        className="block w-full h-auto"
+        className="w-full h-full block cursor-crosshair touch-none"
       />
-      <div className="absolute top-2 right-2 px-2 py-0.5 bg-slate-900/80 backdrop-blur border border-slate-700/50 rounded font-mono text-[10px] text-emerald-400 tracking-wider">
-        60FPS // VISUALIZER
-      </div>
     </div>
   );
-};
+}
+
+export default AudioVisualizerCanvas;
