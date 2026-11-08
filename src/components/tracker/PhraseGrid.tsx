@@ -1,61 +1,104 @@
 // ============================================================================
-// BREDFORGE v1.0 — PHRASE GRID TRACKER VIEW (PhraseGrid.tsx)
+// BREDFORGE v1.0 — TRACKER PHRASE GRID & STEP VIEW [REF: M44]
 // ============================================================================
 
-import React, { useState } from 'react';
-import { SampleManager } from '../../services/audio/SampleManager';
+import React, { useEffect, useState } from 'react';
+import { trackerSequenceEngine } from '../../services/audio/TrackerSequenceEngine';
 
 export function PhraseGrid() {
   const [activeStep, setActiveStep] = useState<number>(0);
-  const [trackSlots, setTrackSlots] = useState<{ [key: number]: string }>({
-    1: 'KICK_01',
-    2: 'SNARE_01',
-    3: 'CHORD_01',
-    4: 'LEAD_01',
-  });
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [bpm, setBpm] = useState<number>(trackerSequenceEngine.getBpm());
 
-  // Example handler where slot index (number) is converted to a strict string ID
-  const handleLoadDefaultSample = async (slotIndex: number) => {
-    const stringId = `slot-${slotIndex}`;
-    const name = trackSlots[slotIndex] || `SAMPLE_${slotIndex}`;
-    const url = `/assets/samples/${name.toLowerCase()}.wav`;
+  useEffect(() => {
+    trackerSequenceEngine.setOnStep((step) => {
+      setActiveStep(step);
+    });
+  }, []);
 
-    // Explicitly passing a string ID to satisfy strict typing
-    await SampleManager.loadSampleFromUrl(stringId, name, url);
+  const togglePlayback = () => {
+    // Requires an active AudioContext instance from user gesture
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new AudioContextClass();
+
+    if (isPlaying) {
+      trackerSequenceEngine.stop();
+      setIsPlaying(false);
+    } else {
+      trackerSequenceEngine.start(ctx);
+      setIsPlaying(true);
+    }
   };
 
+  const handleBpmChange = (newBpm: number) => {
+    setBpm(newBpm);
+    trackerSequenceEngine.setBpm(newBpm);
+  };
+
+  // Generate 16 visible rows for demonstration of a pattern block
+  const rows = Array.from({ length: 16 }, (_, i) => i);
+
   return (
-    <div className="absolute inset-0 flex flex-col bg-zinc-950 border border-zinc-800 rounded-xl p-3 font-mono text-xs select-none overflow-hidden">
-      
-      {/* Header */}
-      <div className="flex justify-between items-center border-b border-zinc-800 pb-2 mb-3 shrink-0">
+    <div className="flex flex-col h-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 shadow-inner font-mono text-xs select-none">
+      {/* Tracker Header / Transport Bar */}
+      <div className="flex items-center justify-between pb-3 mb-2 border-b border-zinc-800">
         <div className="flex items-center gap-2">
-          <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded text-[10px] font-bold">
-            [1,0]
-          </span>
-          <span className="font-bold tracking-wider text-zinc-200">PHRASE GRID // TRACKER</span>
+          <button
+            onClick={togglePlayback}
+            className={`px-3 py-1.5 rounded font-bold transition-all ${
+              isPlaying
+                ? 'bg-amber-500 text-zinc-950 shadow-[0_0_12px_rgba(251,191,36,0.5)]'
+                : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+            }`}
+          >
+            {isPlaying ? 'STOP [■]' : 'PLAY [▶]'}
+          </button>
+          <span className="text-zinc-400 text-[10px]">TRACKER // PHRASE 00</span>
         </div>
-        <div className="text-[10px] text-zinc-500">
-          STEP: {activeStep} / 64
+
+        <div className="flex items-center gap-2">
+          <span className="text-zinc-500 text-[10px]">BPM</span>
+          <input
+            type="number"
+            min="40"
+            max="300"
+            value={bpm}
+            onChange={(e) => handleBpmChange(Number(e.target.value))}
+            className="w-14 bg-zinc-900 border border-zinc-700 text-amber-400 text-center rounded px-1 py-0.5 focus:outline-none focus:border-amber-500"
+          />
         </div>
       </div>
 
-      {/* Grid Container */}
-      <div className="flex-1 flex flex-col gap-1 overflow-y-auto">
-        {[1, 2, 3, 4].map((trackId) => (
-          <div key={trackId} className="flex items-center gap-2 bg-zinc-900/60 border border-zinc-800 p-2 rounded">
-            <span className="text-emerald-400 font-bold w-12">TRK {trackId}</span>
-            <span className="text-zinc-300 flex-1">{trackSlots[trackId]}</span>
-            <button 
-              onClick={() => handleLoadDefaultSample(trackId)}
-              className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-[10px] border border-zinc-700"
+      {/* Tracker Step Grid */}
+      <div className="flex-1 overflow-y-auto space-y-1 pr-1">
+        <div className="grid grid-cols-5 text-[10px] text-zinc-500 pb-1 px-2 border-b border-zinc-900">
+          <span>STEP</span>
+          <span>NOTE</span>
+          <span>INST</span>
+          <span>FX</span>
+          <span>VAL</span>
+        </div>
+
+        {rows.map((row) => {
+          const isCurrent = isPlaying && activeStep % 16 === row;
+          return (
+            <div
+              key={row}
+              className={`grid grid-cols-5 items-center px-2 py-1.5 rounded transition-colors ${
+                isCurrent
+                  ? 'bg-amber-500/20 border border-amber-500/50 text-amber-300 font-bold'
+                  : 'bg-zinc-900/50 text-zinc-400 hover:bg-zinc-900'
+              }`}
             >
-              LOAD BUFFER
-            </button>
-          </div>
-        ))}
+              <span className="text-zinc-500">{row.toString().padStart(2, '0')}</span>
+              <span className="text-zinc-200">C-4</span>
+              <span className="text-amber-500/80">01</span>
+              <span className="text-zinc-400">--</span>
+              <span className="text-zinc-500">00</span>
+            </div>
+          );
+        })}
       </div>
-
     </div>
   );
 }
