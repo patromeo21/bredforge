@@ -9,7 +9,7 @@ export interface SampleSlot {
   duration: number;
 }
 
-class SampleManagerService {
+export class SampleManager {
   private buffers: Map<string, AudioBuffer> = new Map();
   private metadata: Map<string, { name: string; duration: number }> = new Map();
 
@@ -50,4 +50,4 @@ class SampleManagerService {
   }
 }
 
-export const sampleManager = new SampleManagerService();
+export const sampleManager = new SampleManager();
