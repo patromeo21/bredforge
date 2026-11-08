@@ -6,6 +6,7 @@ import React from 'react';
 import { useUIStore } from './store/useUIStore';
 import { PhraseGrid } from './components/tracker/PhraseGrid';
 import { GrooveView } from './components/tracker/GrooveView';
+import { MixerMatrix } from './components/tracker/MixerMatrix';
 
 export function App() {
   const { activeView, setActiveView, isMenuOpen, toggleMenu } = useUIStore();
@@ -32,14 +33,19 @@ export function App() {
 
         {/* Main Canvas Viewport (Non-Destructive Layer Container) */}
         <div className="relative flex-1 overflow-hidden">
-          {/* Tracker View */}
+          {/* Tracker View [1,0] */}
           <div className={`absolute inset-0 transition-opacity duration-150 ${activeView === 'tracker' ? 'opacity-100 z-10 pointer-events-auto' : 'opacity-0 z-0 pointer-events-none'}`}>
             <PhraseGrid />
           </div>
 
-          {/* Groove View */}
+          {/* Groove View [3,0] */}
           <div className={`absolute inset-0 transition-opacity duration-150 ${activeView === 'groove' ? 'opacity-100 z-10 pointer-events-auto' : 'opacity-0 z-0 pointer-events-none'}`}>
             <GrooveView />
+          </div>
+
+          {/* Mixer View [2,0] */}
+          <div className={`absolute inset-0 transition-opacity duration-150 ${activeView === 'mixer' ? 'opacity-100 z-10 pointer-events-auto' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <MixerMatrix />
           </div>
         </div>
 
@@ -55,6 +61,12 @@ export function App() {
               className={`p-2 rounded text-left transition-colors ${activeView === 'tracker' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800'}`}
             >
               [1,0] Phrase Grid (Tracker)
+            </button>
+            <button 
+              onClick={() => { setActiveView('mixer'); toggleMenu(); }}
+              className={`p-2 rounded text-left transition-colors ${activeView === 'mixer' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800'}`}
+            >
+              [2,0] Mixer & Bus Matrix
             </button>
             <button 
               onClick={() => { setActiveView('groove'); toggleMenu(); }}
@@ -75,6 +87,14 @@ export function App() {
               }`}
             >
               [1,0] TRACKER
+            </button>
+            <button
+              onClick={() => setActiveView('mixer')}
+              className={`px-3 py-1 rounded font-bold text-xs transition-colors ${
+                activeView === 'mixer' ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              [2,0] MIXER
             </button>
             <button
               onClick={() => setActiveView('groove')}
