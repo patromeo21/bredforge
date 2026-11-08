@@ -10,8 +10,42 @@ export interface SampleSlot {
 }
 
 export class SampleManager {
+  private static instance: SampleManager | null = null;
+  private ctx: AudioContext | null = null;
   private buffers: Map<string, AudioBuffer> = new Map();
   private metadata: Map<string, { name: string; duration: number }> = new Map();
+
+  constructor() {
+    if (SampleManager.instance) {
+      return SampleManager.instance;
+    }
+    SampleManager.instance = this;
+  }
+
+  public static getInstance(): SampleManager {
+    if (!SampleManager.instance) {
+      SampleManager.instance = new SampleManager();
+    }
+    return SampleManager.instance;
+  }
+
+  public static getContext(): AudioContext {
+    const inst = SampleManager.getInstance();
+    if (!inst.ctx) {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      inst.ctx = new AudioCtx();
+    }
+    if (inst.ctx.state === 'suspended') {
+      inst.ctx.resume();
+    }
+    return inst.ctx;
+  }
+
+  public static async loadSampleFromUrl(id: string, name: string, url: string): Promise<AudioBuffer | null> {
+    const inst = SampleManager.getInstance();
+    const context = SampleManager.getContext();
+    return inst.loadSample(id, name, url, context);
+  }
 
   public async loadSample(id: string, name: string, url: string, ctx: AudioContext): Promise<AudioBuffer | null> {
     try {
@@ -50,4 +84,4 @@ export class SampleManager {
   }
 }
 
-export const sampleManager = new SampleManager();
+export const sampleManager = SampleManager.getInstance();
