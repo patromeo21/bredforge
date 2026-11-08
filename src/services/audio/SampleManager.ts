@@ -1,79 +1,53 @@
 // ============================================================================
-// BREDFORGE v1.0 — DECOUPLED SAMPLE MANAGEMENT & AUDIOBUFFER ENGINE (SampleManager.ts)
+// BREDFORGE v1.0 — ASYNCHRONOUS SAMPLE & BUFFER MANAGER (SampleManager.ts)
 // ============================================================================
 
-class SampleManagerEngine {
-  private ctx: AudioContext | null = null;
-  private bufferCache: Map<string, AudioBuffer> = new Map();
+export interface SampleSlot {
+  id: string;
+  name: string;
+  buffer: AudioBuffer | null;
+  duration: number;
+}
 
-  // Initialize or resume the AudioContext instance
-  public getContext(): AudioContext {
-    if (!this.ctx) {
-      const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.ctx = new AudioCtxClass();
-    }
-    if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
-    return this.ctx;
-  }
+class SampleManagerService {
+  private buffers: Map<string, AudioBuffer> = new Map();
+  private metadata: Map<string, { name: string; duration: number }> = new Map();
 
-  // Load and decode a browser File object (WAV, MP3, FLAC, AAC) into the buffer cache
-  public async loadSample(bank: string, padIndex: number, file: File): Promise<AudioBuffer | null> {
+  public async loadSample(id: string, name: string, url: string, ctx: AudioContext): Promise<AudioBuffer | null> {
     try {
-      const context = this.getContext();
-      const arrayBuffer = await file.arrayBuffer();
-      const decodedData = await context.decodeAudioData(arrayBuffer);
-      
-      const key = `${bank}_${padIndex}`;
-      this.bufferCache.set(key, decodedData);
-      console.log(`[SampleManager] Successfully cached AudioBuffer for ${key} (${decodedData.duration.toFixed(2)}s)`);
-      return decodedData;
-    } catch (err) {
-      console.error(`[SampleManager] Error decoding audio file for Bank ${bank} Pad ${padIndex + 1}:`, err);
-      return null;
-    }
-  }
-
-  // Load and decode an audio file from a URL (WAV, MP3, etc.) into the buffer cache
-  public async loadSampleFromUrl(bank: string, padIndex: number, url: string): Promise<AudioBuffer | null> {
-    const key = `${bank}_${padIndex}`;
-    if (this.bufferCache.has(key)) {
-      return this.bufferCache.get(key)!;
-    }
-
-    try {
-      const context = this.getContext();
       const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch sample from ${url}: ${response.statusText}`);
-      }
       const arrayBuffer = await response.arrayBuffer();
-      const decodedData = await context.decodeAudioData(arrayBuffer);
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
 
-      this.bufferCache.set(key, decodedData);
-      console.log(`[SampleManager] Successfully cached AudioBuffer from URL for ${key} (${decodedData.duration.toFixed(2)}s)`);
-      return decodedData;
+      this.buffers.set(id, audioBuffer);
+      this.metadata.set(id, { name, duration: audioBuffer.duration });
+
+      console.log(`[SampleManager] Successfully loaded sample '${name}' (${id}), duration: ${audioBuffer.duration.toFixed(2)}s`);
+      return audioBuffer;
     } catch (err) {
-      console.error(`[SampleManager] Error fetching audio from URL for Bank ${bank} Pad ${padIndex + 1}:`, err);
+      console.error(`[SampleManager] Failed to load sample '${name}' from URL: ${url}`, err);
       return null;
     }
   }
 
-  // Retrieve decoded buffer
-  public getBuffer(bank: string, padIndex: number): AudioBuffer | undefined {
-    return this.bufferCache.get(`${bank}_${padIndex}`);
+  public getBuffer(id: string): AudioBuffer | undefined {
+    return this.buffers.get(id);
   }
 
-  // Check if a sample buffer is present
-  public hasBuffer(bank: string, padIndex: number): boolean {
-    return this.bufferCache.has(`${bank}_${padIndex}`);
+  public getMetadata(id: string) {
+    return this.metadata.get(id);
   }
 
-  // Clear a pad buffer assignment
-  public removeBuffer(bank: string, padIndex: number): void {
-    this.bufferCache.delete(`${bank}_${padIndex}`);
+  public clearBuffer(id: string) {
+    this.buffers.delete(id);
+    this.metadata.delete(id);
+  }
+
+  public clearAll() {
+    this.buffers.clear();
+    this.metadata.clear();
+    console.log('[SampleManager] Cleared all audio buffers from memory.');
   }
 }
 
-export const SampleManager = new SampleManagerEngine();
+export const sampleManager = new SampleManagerService();
