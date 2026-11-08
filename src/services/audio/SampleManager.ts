@@ -41,22 +41,23 @@ export class SampleManager {
     return inst.ctx;
   }
 
-  public static async loadSampleFromUrl(id: string, name: string, url: string): Promise<AudioBuffer | null> {
+  public static async loadSampleFromUrl(id: string | number, name: string, url: string): Promise<AudioBuffer | null> {
     const inst = SampleManager.getInstance();
     const context = SampleManager.getContext();
     return inst.loadSample(id, name, url, context);
   }
 
-  public async loadSample(id: string, name: string, url: string, ctx: AudioContext): Promise<AudioBuffer | null> {
+  public async loadSample(id: string | number, name: string, url: string, ctx: AudioContext): Promise<AudioBuffer | null> {
+    const stringId = String(id);
     try {
       const response = await fetch(url);
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
 
-      this.buffers.set(id, audioBuffer);
-      this.metadata.set(id, { name, duration: audioBuffer.duration });
+      this.buffers.set(stringId, audioBuffer);
+      this.metadata.set(stringId, { name, duration: audioBuffer.duration });
 
-      console.log(`[SampleManager] Successfully loaded sample '${name}' (${id}), duration: ${audioBuffer.duration.toFixed(2)}s`);
+      console.log(`[SampleManager] Successfully loaded sample '${name}' (${stringId}), duration: ${audioBuffer.duration.toFixed(2)}s`);
       return audioBuffer;
     } catch (err) {
       console.error(`[SampleManager] Failed to load sample '${name}' from URL: ${url}`, err);
@@ -64,17 +65,18 @@ export class SampleManager {
     }
   }
 
-  public getBuffer(id: string): AudioBuffer | undefined {
-    return this.buffers.get(id);
+  public getBuffer(id: string | number): AudioBuffer | undefined {
+    return this.buffers.get(String(id));
   }
 
-  public getMetadata(id: string) {
-    return this.metadata.get(id);
+  public getMetadata(id: string | number) {
+    return this.metadata.get(String(id));
   }
 
-  public clearBuffer(id: string) {
-    this.buffers.delete(id);
-    this.metadata.delete(id);
+  public clearBuffer(id: string | number) {
+    const stringId = String(id);
+    this.buffers.delete(stringId);
+    this.metadata.delete(stringId);
   }
 
   public clearAll() {
