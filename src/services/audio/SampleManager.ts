@@ -1,5 +1,5 @@
 // ============================================================================
-// BREDFORGE v1.0 — CENTRALIZED SAMPLE MANAGER & MPC ADSR ENGINE [REF: M65]
+// BREDFORGE v1.0 — CENTRALIZED SAMPLE MANAGER & MPC ADSR ENGINE [REF: M66]
 // ============================================================================
 
 export type PlaybackMode = 'one-shot' | 'gate' | 'loop';
@@ -18,7 +18,7 @@ export interface PadAssignment {
   endTrim: number;   // 0 - 1
 }
 
-class SampleManager {
+export class SampleManager {
   private assignments: Map<string, PadAssignment> = new Map();
   private audioCtx: AudioContext | null = null;
   private activeSources: Map<string, { source: AudioBufferSourceNode; gain: GainNode }> = new Map();
