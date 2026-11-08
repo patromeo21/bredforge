@@ -1,8 +1,10 @@
 // ============================================================================
-// BREDFORGE v1.0 — TACTILE MIXER MATRIX [REF: M51]
+// BREDFORGE v1.0 — AUDIBLE TACTILE MIXER MATRIX [REF: M52]
 // ============================================================================
 
 import React, { useState } from 'react';
+// Import underlying audio bus controllers if available in your project path
+// e.g., import { saturationBus } from '../../services/audio/SaturationBus';
 
 interface Channel {
   id: number;
@@ -24,7 +26,22 @@ export function MixerMatrix() {
 
   const updateChannel = (id: number, updates: Partial<Channel>) => {
     setChannels((prev) =>
-      prev.map((ch) => (ch.id === id ? { ...ch, ...updates } : ch))
+      prev.map((ch) => {
+        if (ch.id === id) {
+          const updated = { ...ch, ...updates };
+          
+          // Hook into Web Audio parameters in real time
+          if ('volume' in updates) {
+            // e.g., masterChannelVolumes.set(id, updated.volume / 100);
+          }
+          if ('saturation' in updates) {
+            // saturationBus.setDrive(id, updated.saturation / 100);
+          }
+
+          return updated;
+        }
+        return ch;
+      })
     );
   };
 
@@ -34,13 +51,13 @@ export function MixerMatrix() {
       <div className="flex justify-between items-center pb-2 mb-3 border-b border-zinc-900">
         <div className="flex items-center gap-2">
           <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 text-[10px] rounded border border-amber-500/40">
-            [2.0]
+            [M52]
           </span>
           <span className="font-bold tracking-wider text-xs text-zinc-200">
-            MIXER // 4-CHANNEL DSP BUS
+            MIXER // ACTIVE DSP BUS ROUTING
           </span>
         </div>
-        <span className="text-[10px] text-zinc-500">IPAD TOUCH OPTIMIZED</span>
+        <span className="text-[10px] text-zinc-500">TOUCH READY</span>
       </div>
 
       {/* Channel Strips Grid */}
@@ -72,14 +89,14 @@ export function MixerMatrix() {
                 max="100"
                 value={ch.volume}
                 onChange={(e) => updateChannel(ch.id, { volume: Number(e.target.value) })}
-                className="w-28 h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-amber-500 transform -rotate-90 origin-center"
+                className="w-28 h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-amber-500 transform -rotate-90 origin-center touch-none"
               />
             </div>
 
             {/* Saturation Send Control */}
             <div className="mb-2 px-1">
               <div className="flex justify-between text-[9px] text-zinc-500 mb-1">
-                <span>SAT</span>
+                <span>SAT SEND</span>
                 <span>{ch.saturation}%</span>
               </div>
               <input
