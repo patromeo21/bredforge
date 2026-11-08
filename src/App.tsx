@@ -7,6 +7,7 @@ import { useUIStore } from './store/useUIStore';
 import { PhraseGrid } from './components/tracker/PhraseGrid';
 import { GrooveView } from './components/tracker/GrooveView';
 import { MixerMatrix } from './components/tracker/MixerMatrix';
+import { PadMatrix } from './components/tracker/PadMatrix';
 
 export function App() {
   const { activeView, setActiveView, isMenuOpen, toggleMenu } = useUIStore();
@@ -38,18 +39,23 @@ export function App() {
             <PhraseGrid />
           </div>
 
-          {/* Groove View [3,0] */}
-          <div className={`absolute inset-0 transition-opacity duration-150 ${activeView === 'groove' ? 'opacity-100 z-10 pointer-events-auto' : 'opacity-0 z-0 pointer-events-none'}`}>
-            <GrooveView />
-          </div>
-
           {/* Mixer View [2,0] */}
           <div className={`absolute inset-0 transition-opacity duration-150 ${activeView === 'mixer' ? 'opacity-100 z-10 pointer-events-auto' : 'opacity-0 z-0 pointer-events-none'}`}>
             <MixerMatrix />
           </div>
+
+          {/* Pad Matrix View [2,1] */}
+          <div className={`absolute inset-0 transition-opacity duration-150 ${activeView === 'pads' ? 'opacity-100 z-10 pointer-events-auto' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <PadMatrix />
+          </div>
+
+          {/* Groove View [3,0] */}
+          <div className={`absolute inset-0 transition-opacity duration-150 ${activeView === 'groove' ? 'opacity-100 z-10 pointer-events-auto' : 'opacity-0 z-0 pointer-events-none'}`}>
+            <GrooveView />
+          </div>
         </div>
 
-        {/* Sliding Menu Overlay (Non-Destructive Drawer) */}
+        {/* Sliding Menu Overlay */}
         <div className={`absolute top-0 right-0 h-full w-72 bg-zinc-900/95 border-l border-zinc-800 p-4 transform transition-transform duration-200 z-30 ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}>
           <div className="flex justify-between items-center border-b border-zinc-800 pb-3 mb-4">
             <h3 className="font-bold text-sm text-zinc-200">SYSTEM MENU</h3>
@@ -69,6 +75,12 @@ export function App() {
               [2,0] Mixer & Bus Matrix
             </button>
             <button 
+              onClick={() => { setActiveView('pads'); toggleMenu(); }}
+              className={`p-2 rounded text-left transition-colors ${activeView === 'pads' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800'}`}
+            >
+              [2,1] SP Pad Matrix
+            </button>
+            <button 
               onClick={() => { setActiveView('groove'); toggleMenu(); }}
               className={`p-2 rounded text-left transition-colors ${activeView === 'groove' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800'}`}
             >
@@ -79,33 +91,41 @@ export function App() {
 
         {/* Bottom Navigation Bar */}
         <div className="flex justify-between items-center bg-zinc-900/80 border border-zinc-800 rounded-lg px-3 py-2 mt-2 text-xs shrink-0">
-          <div className="flex gap-2">
+          <div className="flex gap-1.5 overflow-x-auto">
             <button
               onClick={() => setActiveView('tracker')}
-              className={`px-3 py-1 rounded font-bold text-xs transition-colors ${
+              className={`px-2.5 py-1 rounded font-bold text-xs transition-colors ${
                 activeView === 'tracker' ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              [1,0] TRACKER
+              [1,0] TRK
             </button>
             <button
               onClick={() => setActiveView('mixer')}
-              className={`px-3 py-1 rounded font-bold text-xs transition-colors ${
+              className={`px-2.5 py-1 rounded font-bold text-xs transition-colors ${
                 activeView === 'mixer' ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              [2,0] MIXER
+              [2,0] MIX
+            </button>
+            <button
+              onClick={() => setActiveView('pads')}
+              className={`px-2.5 py-1 rounded font-bold text-xs transition-colors ${
+                activeView === 'pads' ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              [2,1] PADS
             </button>
             <button
               onClick={() => setActiveView('groove')}
-              className={`px-3 py-1 rounded font-bold text-xs transition-colors ${
+              className={`px-2.5 py-1 rounded font-bold text-xs transition-colors ${
                 activeView === 'groove' ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
               }`}
             >
               [3,0] GROOVE
             </button>
           </div>
-          <div className="text-[10px] text-zinc-500">
+          <div className="text-[10px] text-zinc-500 hidden md:block">
             IPAD 9TH GEN // 100DVH LOCKED
           </div>
         </div>

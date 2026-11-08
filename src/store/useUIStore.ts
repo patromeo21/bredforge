@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 
-export type ViewMode = 'tracker' | 'groove' | 'mixer';
+export type ViewMode = 'tracker' | 'groove' | 'mixer' | 'pads';
 
 export interface UIState {
   activeView: ViewMode;
