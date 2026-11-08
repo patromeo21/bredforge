@@ -1,5 +1,5 @@
 // ============================================================================
-// BREDFORGE v1.0 — HARDWARE SCOPE VISUALIZER (AudioVisualizerCanvas.tsx)
+// BREDFORGE v1.0 — HARDWARE SCOPE VISUALIZER [REF: M42]
 // ============================================================================
 
 import React, { useEffect, useRef } from 'react';
@@ -22,11 +22,9 @@ export function AudioVisualizerCanvas() {
       const width = canvas.width;
       const height = canvas.height;
 
-      // Hardware screen backing (Dark CRT / LCD recess)
       ctx.fillStyle = '#09090b';
       ctx.fillRect(0, 0, width, height);
 
-      // Subtle scanline grid overlay
       ctx.strokeStyle = 'rgba(39, 39, 42, 0.2)';
       ctx.lineWidth = 1;
       for (let y = 0; y < height; y += 4) {
@@ -39,13 +37,12 @@ export function AudioVisualizerCanvas() {
       const data = audioVisualizerService.getByteTimeDomainData();
       if (!data || data.length === 0) return;
 
-      // Oscilloscope waveform trace (Amber backlit hardware glow)
       ctx.beginPath();
       const sliceWidth = width / data.length;
       let x = 0;
 
       for (let i = 0; i < data.length; i++) {
-        const v = data[i] / 128.0; // 128 is center line
+        const v = data[i] / 128.0;
         const y = (v * height) / 2;
 
         if (i === 0) {
@@ -57,7 +54,7 @@ export function AudioVisualizerCanvas() {
         x += sliceWidth;
       }
 
-      ctx.strokeStyle = '#fbbf24'; // Signature BredForge Amber Glow
+      ctx.strokeStyle = '#fbbf24';
       ctx.lineWidth = 2;
       ctx.stroke();
     };
@@ -78,7 +75,7 @@ export function AudioVisualizerCanvas() {
         className="w-full h-full rounded border border-zinc-900"
       />
       <div className="absolute top-2 left-3 text-[9px] text-amber-500/70 font-mono tracking-widest pointer-events-none">
-        DSP // SCOPE OUT
+        DSP // SCOPE OUT [REF: M42]
       </div>
     </div>
   );

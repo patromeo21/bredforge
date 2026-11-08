@@ -1,5 +1,5 @@
 // ============================================================================
-// BREDFORGE v1.0 — SEQUENCER AUDIO BRIDGE & MASTER BUS (SequencerAudioBridge.ts)
+// BREDFORGE v1.0 — SEQUENCER AUDIO BRIDGE & MASTER BUS [REF: M42]
 // ============================================================================
 
 import { AudioInstrumentChannel } from './AudioInstrumentChannel';
@@ -20,17 +20,19 @@ export class SequencerAudioBridge {
     this.masterGain = this.ctx.createGain();
     this.saturationBus = new SaturationBus(this.ctx);
     this.punchInBus = new PunchInEffectBus(this.ctx);
-    this.visualizerService = new AudioVisualizerService(this.ctx);
+    this.visualizerService = new AudioVisualizerService();
 
     // Master Audio Chain: Master Gain -> Saturation Bus -> Punch-In Bus -> Visualizer -> Speakers
     this.masterGain.connect(this.saturationBus.getInputNode());
     this.saturationBus.connect(this.punchInBus.getInputNode());
-    this.punchInBus.connect(this.visualizerService.getAnalyserNode());
-    this.visualizerService.getAnalyserNode().connect(this.ctx.destination);
+
+    // Attach visualizer service securely to the chain destination
+    const analyser = this.visualizerService.attach(this.ctx, this.punchInBus.getInputNode());
+    analyser.connect(this.ctx.destination);
 
     this.masterGain.gain.value = 0.8;
 
-    // Initialize default channel
+    // Initialize default channels
     this.channels.set('channel-1', new AudioInstrumentChannel(this.ctx, this.masterGain));
     this.channels.set(0, new AudioInstrumentChannel(this.ctx, this.masterGain));
   }
