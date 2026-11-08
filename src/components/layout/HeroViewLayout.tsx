@@ -1,10 +1,10 @@
 // ============================================================================
-// BREDFORGE v1.0 — MASTER HERO VIEW LAYOUT & SHELL [REF: M58]
+// BREDFORGE v1.0 — MASTER HERO VIEW LAYOUT & DUAL-SCREEN SHELL [REF: M61]
 // ============================================================================
 
 import React, { useState, useRef } from 'react';
 import { useFullscreen } from '../../hooks/useFullscreen';
-import { GridController } from '../tracker/GridController';
+import { DualScreenWorkspace } from '../tracker/DualScreenWorkspace';
 import { MixerMatrix } from '../tracker/MixerMatrix';
 import { AudioVisualizerCanvas } from '../visualizer/AudioVisualizerCanvas';
 
@@ -30,7 +30,7 @@ export function HeroViewLayout() {
             </span>
           </div>
           <span className="text-[10px] text-zinc-500 hidden sm:inline">
-            IPAD 9TH GEN // 120HZ AUDIO WORKSTATION
+            IPAD 9TH GEN // 120HZ DUAL-SCREEN DAW
           </span>
         </div>
 
@@ -83,7 +83,7 @@ export function HeroViewLayout() {
       {/* Main Content Workspace */}
       <main className="flex-1 relative min-h-0 bg-zinc-950 rounded-lg overflow-hidden border border-zinc-800/80">
         <div className={`absolute inset-0 ${activeView === 'tracker' ? 'block' : 'hidden'}`}>
-          <GridController />
+          <DualScreenWorkspace />
         </div>
         <div className={`absolute inset-0 ${activeView === 'mixer' ? 'block' : 'hidden'}`}>
           <MixerMatrix />
@@ -100,7 +100,7 @@ export function HeroViewLayout() {
           <span>DSP BUS: ACTIVE</span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-amber-500/80">CLIENT-SIDE AUDIO ENGINE READY</span>
+          <span className="text-amber-500/80">IPAD 9TH GEN TOUCH ENGINE READY</span>
         </div>
       </footer>
     </div>
