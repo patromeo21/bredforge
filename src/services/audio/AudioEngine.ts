@@ -1,118 +1,121 @@
 // ============================================================================
-// BREDFORGE v1.0 — HIGH-PERFORMANCE WEB AUDIO ENGINE (AudioEngine.ts)
+// BREDFORGE v1.0 — DECOUPLED WEB AUDIO API ENGINE (AudioEngine.ts)
 // ============================================================================
 
 export class AudioEngine {
-  private static audioCtx: AudioContext | null = null;
-  private static sampleBuffers: Map<string, AudioBuffer> = new Map();
-  private static isInitialized: boolean = false;
+  private ctx: AudioContext | null = null;
+  private masterGain: GainNode | null = null;
+  private isRunning: boolean = false;
+  private bpm: number = 125;
+  private timerId: number | null = null;
+  private currentStep: number = 0;
+  private stepListeners: Set<(step: number) => void> = new Set();
 
-  /**
-   * Initializes or resumes the AudioContext upon first user interaction
-   * (Crucial requirement for mobile Safari on iPad 9th Gen).
-   */
-  public static async init(): Promise<void> {
-    if (AudioEngine.isInitialized && AudioEngine.audioCtx) {
-      if (AudioEngine.audioCtx.state === 'suspended') {
-        await AudioEngine.audioCtx.resume();
-      }
-      return;
-    }
+  constructor() {
+    // AudioContext will be initialized on first user interaction to comply with browser autoplay policies
+  }
+
+  public init(): boolean {
+    if (this.ctx) return true;
 
     try {
       const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      AudioEngine.audioCtx = new AudioContextClass();
+      this.ctx = new AudioContextClass();
+      
+      this.masterGain = this.ctx.createGain();
+      this.masterGain.gain.setValueAtTime(0.8, this.ctx.currentTime);
+      this.masterGain.connect(this.ctx.destination);
 
-      if (AudioEngine.audioCtx.state === 'suspended') {
-        await AudioEngine.audioCtx.resume();
-      }
-
-      AudioEngine.isInitialized = true;
-      console.log(`[AUDIO ENGINE] Initialized successfully. Sample rate: ${AudioEngine.audioCtx.sampleRate}Hz`);
-    } catch (error) {
-      console.error("[AUDIO ENGINE] Failed to initialize AudioContext:", error);
+      console.log('[AudioEngine] Initialized successfully. Sample rate:', this.ctx.sampleRate);
+      return true;
+    } catch (err) {
+      console.error('[AudioEngine] Failed to initialize AudioContext:', err);
+      return false;
     }
   }
 
-  /**
-   * Decodes and caches an ArrayBuffer into an AudioBuffer for instant playback.
-   */
-  public static async loadSample(key: string, arrayBuffer: ArrayBuffer): Promise<void> {
-    await AudioEngine.init();
-    if (!AudioEngine.audioCtx) return;
-
-    try {
-      // Decode audio data off the main thread where possible
-      const decodedBuffer = await AudioEngine.audioCtx.decodeAudioData(arrayBuffer);
-      AudioEngine.sampleBuffers.set(key.toUpperCase(), decodedBuffer);
-      console.log(`[AUDIO ENGINE] Loaded and decoded sample: ${key}`);
-    } catch (error) {
-      console.error(`[AUDIO ENGINE] Failed to decode audio for ${key}:`, error);
+  public async resume(): Promise<void> {
+    if (this.ctx && this.ctx.state === 'suspended') {
+      await this.ctx.resume();
     }
   }
 
-  /**
-   * Instantaneous zero-latency pad trigger (SP-404 / M8 Style audition).
-   */
-  public static playPad(hexId: string): void {
-    if (!AudioEngine.audioCtx || AudioEngine.audioCtx.state !== 'running') {
-      // Fallback unlock attempt
-      AudioEngine.init();
-      return;
-    }
-
-    const buffer = AudioEngine.sampleBuffers.get(hexId.toUpperCase());
-    if (!buffer) {
-      // If no sample buffer is loaded yet, generate a crisp synthesized click/metronome blip 
-      // as a fallback so live pads are immediately responsive out of the box.
-      AudioEngine.playFallbackBlip();
-      return;
-    }
-
-    try {
-      const source = AudioEngine.audioCtx.createBufferSource();
-      source.buffer = buffer;
-
-      // Route through a master gain node for headroom management
-      const gainNode = AudioEngine.audioCtx.createGain();
-      gainNode.gain.value = 0.85;
-
-      source.connect(gainNode);
-      gainNode.connect(AudioEngine.audioCtx.destination);
-
-      source.start(0);
-    } catch (error) {
-      console.error(`[AUDIO ENGINE] Error playback for pad ${hexId}:`, error);
+  public setBpm(newBpm: number) {
+    this.bpm = Math.max(40, Math.min(300, newBpm));
+    if (this.isRunning) {
+      this.stop();
+      this.start();
     }
   }
 
-  /**
-   * Internal synthetic fallback blip when raw sample buffers are not yet loaded.
-   */
-  private static playFallbackBlip(): void {
-    if (!AudioEngine.audioCtx) return;
-    try {
-      const osc = AudioEngine.audioCtx.createOscillator();
-      const gain = AudioEngine.audioCtx.createGain();
-
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(220, AudioEngine.audioCtx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(55, AudioEngine.audioCtx.currentTime + 0.08);
-
-      gain.gain.setValueAtTime(0.5, AudioEngine.audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, AudioEngine.audioCtx.currentTime + 0.08);
-
-      osc.connect(gain);
-      gain.connect(AudioEngine.audioCtx.destination);
-
-      osc.start();
-      osc.stop(AudioEngine.audioCtx.currentTime + 0.08);
-    } catch (e) {
-      // Suppress fallback audio errors
-    }
+  public getBpm(): number {
+    return this.bpm;
   }
 
-  public static getContextState(): string {
-    return AudioEngine.audioCtx ? AudioEngine.audioCtx.state : 'uninitialized';
+  public start() {
+    if (this.isRunning) return;
+    this.init();
+    this.resume();
+
+    this.isRunning = true;
+    const intervalMs = (60 / this.bpm / 4) * 1000; // 16th note interval
+
+    this.timerId = window.setInterval(() => {
+      this.stepListeners.forEach(listener => listener(this.currentStep));
+      this.currentStep = (this.currentStep + 1) % 64; // 64 step pattern cycle
+    }, intervalMs);
+
+    console.log(`[AudioEngine] Transport started at ${this.bpm} BPM`);
+  }
+
+  public stop() {
+    if (!this.isRunning) return;
+    if (this.timerId !== null) {
+      clearInterval(this.timerId);
+      this.timerId = null;
+    }
+    this.isRunning = false;
+    this.currentStep = 0;
+    console.log('[AudioEngine] Transport stopped');
+  }
+
+  public togglePlay(): boolean {
+    if (this.isRunning) {
+      this.stop();
+    } else {
+      this.start();
+    }
+    return this.isRunning;
+  }
+
+  public subscribeStep(listener: (step: number) => void) {
+    this.stepListeners.add(listener);
+    return () => {
+      this.stepListeners.delete(listener);
+    };
+  }
+
+  public triggerTestBeep() {
+    if (!this.ctx || !this.masterGain) {
+      this.init();
+    }
+    if (!this.ctx || !this.masterGain) return;
+
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(440, this.ctx.currentTime); // A4
+
+    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.15);
   }
 }
+
+export const audioEngine = new AudioEngine();
