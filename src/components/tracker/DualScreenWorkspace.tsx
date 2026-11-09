@@ -3,7 +3,7 @@
 // ============================================================================
 
 import React, { useState } from 'react';
-import { AudioVisualizerCanvas } from '../canvas/AudioVisualizerCanvas';
+import { AudioVisualizerCanvas } from './AudioVisualizerCanvas';
 import { audioEngine } from '../../services/AudioEngine';
 
 interface DualScreenWorkspaceProps {
