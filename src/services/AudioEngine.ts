@@ -1,5 +1,5 @@
 // ============================================================================
-// BREDFORGE v1.0 — REAL-TIME WEB AUDIO DSP ENGINE [REF: AUDIO-01]
+// BREDFORGE v1.0 — REAL-TIME WEB AUDIO DSP & MASTER BUS ENGINE [REF: AUDIO-01]
 // ============================================================================
 
 export class AudioEngine {
@@ -43,7 +43,7 @@ export class AudioEngine {
 
       // Master Gain
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.setValueAtTime(0.8, this.ctx.currentTime);
+      this.masterGain.gain.setValueAtTime(0.85, this.ctx.currentTime);
 
       // Connect Chain: MasterGain -> Limiter -> Destination
       this.masterGain.connect(this.limiter);
@@ -60,6 +60,31 @@ export class AudioEngine {
       console.error('[AudioEngine] Failed to initialize AudioContext:', err);
       return false;
     }
+  }
+
+  /**
+   * Set Master Volume (0.0 to 1.0)
+   */
+  public setMasterVolume(volume: number): void {
+    if (!this.ctx || !this.masterGain) return;
+    const clamped = Math.max(0, Math.min(1, volume));
+    this.masterGain.gain.setTargetAtTime(clamped, this.ctx.currentTime, 0.01);
+  }
+
+  /**
+   * Set Master Limiter Threshold in dB (-40 to 0)
+   */
+  public setMasterLimiterThreshold(threshold: number): void {
+    if (!this.ctx || !this.limiter) return;
+    this.limiter.threshold.setTargetAtTime(threshold, this.ctx.currentTime, 0.01);
+  }
+
+  /**
+   * Set Master Limiter Compression Ratio (1 to 20)
+   */
+  public setMasterLimiterRatio(ratio: number): void {
+    if (!this.ctx || !this.limiter) return;
+    this.limiter.ratio.setTargetAtTime(ratio, this.ctx.currentTime, 0.01);
   }
 
   /**
@@ -173,7 +198,7 @@ export class AudioEngine {
   }
 
   /**
-   * Flexible playSlice overload supporting AudioBuffers from SampleWorkbench
+   * Flexible playSlice overload supporting AudioBuffers and pad index numbers
    */
   public playSlice(
     sliceIndexOrBuffer: number | AudioBuffer,
@@ -189,7 +214,6 @@ export class AudioEngine {
     if (typeof sliceIndexOrBuffer === 'number') {
       this.triggerPad(sliceIndexOrBuffer % 16, 110);
     } else {
-      // If an AudioBuffer is passed from SampleWorkbench, play it directly
       const source = this.ctx.createBufferSource();
       source.buffer = sliceIndexOrBuffer;
       source.playbackRate.setValueAtTime(Math.pow(2, pitchOrStart / 12), this.ctx.currentTime);
