@@ -76,6 +76,28 @@ export class AudioEngine {
     return this.analyser;
   }
 
+  // --- Mixer & Limiter Control Setters for MixerView.tsx ---
+
+  public setMasterVolume(value: number): void {
+    if (this.masterGain && this.audioCtx) {
+      this.masterGain.gain.setValueAtTime(Math.max(0, Math.min(1, value)), this.audioCtx.currentTime);
+    }
+  }
+
+  public setMasterLimiterThreshold(value: number): void {
+    if (this.masterLimiter && this.masterLimiter.threshold && this.audioCtx) {
+      this.masterLimiter.threshold.setValueAtTime(value, this.audioCtx.currentTime);
+    }
+  }
+
+  public setMasterLimiterRatio(value: number): void {
+    if (this.masterLimiter && this.masterLimiter.ratio && this.audioCtx) {
+      this.masterLimiter.ratio.setValueAtTime(value, this.audioCtx.currentTime);
+    }
+  }
+
+  // ---------------------------------------------------------
+
   public triggerPad(padIndex: number, velocity: number = 100): void {
     if (!this.audioCtx || !this.masterGain) {
       return;
