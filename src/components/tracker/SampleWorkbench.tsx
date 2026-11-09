@@ -3,7 +3,7 @@
 // ============================================================================
 
 import React, { useState, useRef, useEffect } from 'react';
-import { audioEngine } from '../../services/AudioEngine';
+import { audioEngine } from '../../services/audio/AudioEngine';
 
 export interface SliceMarker {
   id: string;
