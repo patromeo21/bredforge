@@ -9,9 +9,7 @@ export class AudioEngine {
   private analyser: AnalyserNode | null = null;
   private isInitialized: boolean = false;
 
-  constructor() {
-    // Lazy initialization upon user gesture
-  }
+  constructor() {}
 
   public async initAudio(): Promise<boolean> {
     if (this.isInitialized && this.audioCtx) {
@@ -22,33 +20,35 @@ export class AudioEngine {
     }
 
     try {
-      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.audioCtx = new AudioContextClass();
+      const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AudioCtxClass();
+      this.audioCtx = ctx;
 
-      // Master Gain
-      this.masterGain = this.audioCtx.createGain();
-      this.masterGain.gain.value = 0.85;
+      // Create and configure local nodes first
+      const gain = ctx.createGain();
+      gain.gain.value = 0.85;
+      this.masterGain = gain;
 
-      // Master Limiter / Compressor for safety
-      this.masterLimiter = this.audioCtx.createCompressor();
-      this.masterLimiter.threshold.setValueAtTime(-2.0, this.audioCtx.currentTime);
-      this.masterLimiter.knee.setValueAtTime(0.0, this.audioCtx.currentTime);
-      this.masterLimiter.ratio.setValueAtTime(20.0, this.audioCtx.currentTime);
-      this.masterLimiter.attack.setValueAtTime(0.005, this.audioCtx.currentTime);
-      this.masterLimiter.release.setValueAtTime(0.05, this.audioCtx.currentTime);
+      const compressor = ctx.createCompressor();
+      compressor.threshold.setValueAtTime(-2.0, ctx.currentTime);
+      compressor.knee.setValueAtTime(0.0, ctx.currentTime);
+      compressor.ratio.setValueAtTime(20.0, ctx.currentTime);
+      compressor.attack.setValueAtTime(0.005, ctx.currentTime);
+      compressor.release.setValueAtTime(0.05, ctx.currentTime);
+      this.masterLimiter = compressor;
 
-      // Analyser Node for 120fps Oscilloscope
-      this.analyser = this.audioCtx.createAnalyser();
-      this.analyser.fftSize = 2048;
-      this.analyser.smoothingTimeConstant = 0.8;
+      const an = ctx.createAnalyser();
+      an.fftSize = 2048;
+      an.smoothingTimeConstant = 0.8;
+      this.analyser = an;
 
-      // Wire Chain: MasterGain -> MasterLimiter -> Analyser -> Destination
-      this.masterGain.connect(this.masterLimiter);
-      this.masterLimiter.connect(this.analyser);
-      this.analyser.connect(this.audioCtx.destination);
+      // Wire Chain: gain -> compressor -> analyser -> destination
+      gain.connect(compressor);
+      compressor.connect(an);
+      an.connect(ctx.destination);
 
-      if (this.audioCtx.state === 'suspended') {
-        await this.audioCtx.resume();
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
       }
 
       this.isInitialized = true;
