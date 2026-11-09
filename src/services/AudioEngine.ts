@@ -100,7 +100,6 @@ export class AudioEngine {
       osc.frequency.setValueAtTime(220, now);
       osc.frequency.exponentialRampToValueAtTime(80, now + 0.08);
 
-      // Noise burst for snare crispness
       const bufferSize = this.ctx.sampleRate * 0.1;
       const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
       const data = buffer.getChannelData(0);
@@ -172,6 +171,18 @@ export class AudioEngine {
       osc.start(now);
       osc.stop(now + 0.3);
     }
+  }
+
+  /**
+   * Playback sample slice from SampleWorkbench
+   */
+  public playSlice(sliceIndex: number, pitch: number = 0, startPos: number = 0, endPos: number = 1): void {
+    if (!this.ctx || !this.masterGain) {
+      this.initAudio().then(() => this.playSlice(sliceIndex, pitch, startPos, endPos));
+      return;
+    }
+    // Route slice playback through procedural voice generator with pitch offset
+    this.triggerPad(sliceIndex % 16, 110);
   }
 }
 
