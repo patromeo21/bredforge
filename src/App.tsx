@@ -8,9 +8,10 @@ import { MixerView } from './components/tracker/MixerView';
 import { GlobalFxView } from './components/tracker/GlobalFxView';
 import { SampleWorkbench } from './components/tracker/SampleWorkbench';
 import { PatternLaunchView } from './components/tracker/PatternLaunchView';
+import { SongArrangerView } from './components/tracker/SongArrangerView';
 import { audioEngine } from './services/AudioEngine';
 
-type ViewMode = 'tracker' | 'patterns' | 'mixer' | 'fx' | 'samples';
+type ViewMode = 'tracker' | 'patterns' | 'arranger' | 'mixer' | 'fx' | 'samples';
 
 export function App() {
   const [currentView, setCurrentView] = useState<ViewMode>('tracker');
@@ -68,10 +69,11 @@ export function App() {
         </div>
 
         {/* View Navigation Tabs */}
-        <nav className="flex items-center gap-1 bg-zinc-950 p-1 rounded-lg border border-zinc-800">
+        <nav className="flex items-center gap-1 bg-zinc-950 p-1 rounded-lg border border-zinc-800 overflow-x-auto max-w-full">
           {[
             { id: 'tracker', label: 'TRACKER' },
             { id: 'patterns', label: 'PATTERNS' },
+            { id: 'arranger', label: 'ARRANGER' },
             { id: 'mixer', label: 'MIXER' },
             { id: 'fx', label: 'GLOBAL FX' },
             { id: 'samples', label: 'SAMPLES' },
@@ -81,7 +83,7 @@ export function App() {
               <button
                 key={tab.id}
                 onClick={() => setCurrentView(tab.id as ViewMode)}
-                className={`px-3 py-1 text-[10px] font-bold rounded transition-all cursor-pointer ${
+                className={`px-3 py-1 text-[10px] font-bold rounded transition-all cursor-pointer whitespace-nowrap ${
                   isActive
                     ? 'bg-amber-500 text-zinc-950 shadow-[0_0_10px_rgba(245,158,11,0.4)]'
                     : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
@@ -125,6 +127,7 @@ export function App() {
       <main className="flex-1 min-h-0 relative flex flex-col">
         {currentView === 'tracker' && <DualScreenWorkspace projectName="BRED_PROJECT_01" tempo={bpm} />}
         {currentView === 'patterns' && <PatternLaunchView />}
+        {currentView === 'arranger' && <SongArrangerView />}
         {currentView === 'mixer' && <MixerView masterVolume={masterVol} masterLimiter={masterLimiter} />}
         {currentView === 'fx' && <GlobalFxView />}
         {currentView === 'samples' && (
