@@ -1,48 +1,65 @@
 // ============================================================================
-// BREDFORGE v1.0 — LIVE STEP RECORDING HOOK (useLiveStepRecord.ts)
+// BREDFORGE v1.0 — LIVE PAD-TO-PHRASE STEP RECORDING HOOK [REF: LIVE-REC-01]
 // ============================================================================
 
 import { useState, useCallback } from 'react';
-import { TrackerStep, SequencerEngine } from '../services/audio/SequencerEngine';
+import { SliceMarker } from '../components/tracker/SampleWorkbench';
 
-export function useLiveStepRecord(
-  sequencer: SequencerEngine | null,
-  steps: TrackerStep[],
-  setSteps: React.Dispatch<React.SetStateAction<TrackerStep[]>>
-) {
-  const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [activeInstrument, setActiveInstrument] = useState<number>(1);
+export interface PhraseStep {
+  stepIndex: number;
+  note: string;
+  instrument: string;
+  command: string;
+  description: string;
+}
 
-  const recordPadHit = useCallback((note: string, velocity: number = 64) => {
-    if (!isRecording || !sequencer) return;
+interface UseLiveStepRecordProps {
+  isArmed: boolean;
+  isPlaying: boolean;
+  currentStep: number;
+  onUpdateStep: (stepIndex: number, stepData: PhraseStep) => void;
+}
 
-    const status = sequencer.getStatus();
-    if (!status.isPlaying) return;
+export function useLiveStepRecord({
+  isArmed,
+  isPlaying,
+  currentStep,
+  onUpdateStep,
+}: UseLiveStepRecordProps) {
+  const [recordedEventsCount, setRecordedEventsCount] = useState<number>(0);
 
-    const currentRow = status.currentStep;
+  // Triggered when a pad or slice is hit during live playback
+  const recordPadHit = useCallback(
+    (padId: number, bank: string, slice?: SliceMarker) => {
+      if (!isArmed || !isPlaying) return;
 
-    setSteps(prevSteps => {
-      const updated = [...prevSteps];
-      if (updated[currentRow]) {
-        updated[currentRow] = {
-          ...updated[currentRow],
-          stepIndex: currentRow,
-          note: note,
-          instrument: activeInstrument,
-          volume: velocity,
-        };
-      }
-      return updated;
-    });
+      const note = `C-${Math.floor((padId - 1) / 4) + 1}`;
+      const instrument = '01';
+      const sliceIndex = slice ? slice.id.replace(/[^0-9]/g, '').slice(-2) || '01' : '01';
+      const command = `S${sliceIndex.padStart(2, '0')}`;
+      const description = `Pad ${bank}${padId < 10 ? `0${padId}` : padId} (Slice ${sliceIndex})`;
 
-    console.log(`[LiveRecord] Recorded note ${note} to row ${currentRow.toString(16).toUpperCase()}`);
-  }, [isRecording, sequencer, activeInstrument, setSteps]);
+      const stepData: PhraseStep = {
+        stepIndex: currentStep,
+        note,
+        instrument,
+        command,
+        description,
+      };
+
+      // Write directly into the active tracker step row
+      onUpdateStep(currentStep, stepData);
+      setRecordedEventsCount((prev) => prev + 1);
+
+      console.log(`[LiveStepRecord] Captured Step ${currentStep} -> Note: ${note}, Cmd: ${command}`);
+    },
+    [isArmed, isPlaying, currentStep, onUpdateStep]
+  );
 
   return {
-    isRecording,
-    setIsRecording,
-    activeInstrument,
-    setActiveInstrument,
+    recordedEventsCount,
     recordPadHit,
   };
 }
+
+export default useLiveStepRecord;
