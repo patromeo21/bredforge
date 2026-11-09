@@ -1,15 +1,15 @@
 // ============================================================================
-// BREDFORGE v1.0 — WEB AUDIO SAMPLE PLAYBACK & SLICE ENGINE [REF: AUDIO-01]
+// BREDFORGE v1.0 — REAL-TIME WEB AUDIO DSP ENGINE [REF: AUDIO-01]
 // ============================================================================
 
 export class AudioEngine {
   private static instance: AudioEngine;
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
+  private limiter: DynamicsCompressorNode | null = null;
+  private isInitialized: boolean = false;
 
-  private constructor() {
-    // AudioContext will be initialized on first user interaction to satisfy browser autoplay policies
-  }
+  private constructor() {}
 
   public static getInstance(): AudioEngine {
     if (!AudioEngine.instance) {
@@ -19,75 +19,159 @@ export class AudioEngine {
   }
 
   /**
-   * Initialize or resume the Web Audio context on user gesture
+   * Initialize AudioContext and Master Chain (Required for iOS Safari user gesture unlock)
    */
-  public async init(): Promise<AudioContext> {
-    if (!this.ctx) {
-      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.ctx = new AudioContextClass();
-      
+  public async initAudio(): Promise<boolean> {
+    if (this.isInitialized && this.ctx) {
+      if (this.ctx.state === 'suspended') {
+        await this.ctx.resume();
+      }
+      return true;
+    }
+
+    try {
+      const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      this.ctx = new AudioCtxClass();
+
+      // Master Limiter to prevent clipping on heavy polyphony
+      this.limiter = this.ctx.createDynamicsCompressor();
+      this.limiter.threshold.setValueAtTime(-1.0, this.ctx.currentTime);
+      this.limiter.knee.setValueAtTime(0.0, this.ctx.currentTime);
+      this.limiter.ratio.setValueAtTime(20.0, this.ctx.currentTime);
+      this.limiter.attack.setValueAtTime(0.005, this.ctx.currentTime);
+      this.limiter.release.setValueAtTime(0.05, this.ctx.currentTime);
+
+      // Master Gain
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.value = 0.85;
-      this.masterGain.connect(this.ctx.destination);
-    }
+      this.masterGain.gain.setValueAtTime(0.8, this.ctx.currentTime);
 
-    if (this.ctx.state === 'suspended') {
-      await this.ctx.resume();
-    }
+      // Connect Chain: MasterGain -> Limiter -> Destination
+      this.masterGain.connect(this.limiter);
+      this.limiter.connect(this.ctx.destination);
 
-    return this.ctx;
+      if (this.ctx.state === 'suspended') {
+        await this.ctx.resume();
+      }
+
+      this.isInitialized = true;
+      console.log('[AudioEngine] Web Audio context initialized successfully at sample rate:', this.ctx.sampleRate);
+      return true;
+    } catch (err) {
+      console.error('[AudioEngine] Failed to initialize AudioContext:', err);
+      return false;
+    }
   }
 
   /**
-   * Decode raw ArrayBuffer into an AudioBuffer
+   * Trigger a synthesized tracker voice mapped to pad index (0 - 15)
    */
-  public async decodeAudioFile(arrayBuffer: ArrayBuffer): Promise<AudioBuffer> {
-    const context = await this.init();
-    return await context.decodeAudioData(arrayBuffer);
-  }
-
-  /**
-   * Trigger a sample slice with frame offset boundaries and semitone pitch shifting
-   * 
-   * @param buffer - The source AudioBuffer
-   * @param startFrame - Start frame position (from slice marker)
-   * @param endFrame - End frame position (or end of buffer)
-   * @param semitones - Pitch shift in semitones (-12 to +12)
-   */
-  public async playSlice(
-    buffer: AudioBuffer,
-    startFrame: number = 0,
-    endFrame?: number,
-    semitones: number = 0
-  ): Promise<AudioBufferSourceNode> {
-    const context = await this.init();
-
-    const source = context.createBufferSource();
-    source.buffer = buffer;
-
-    // Calculate playback rate for semitone pitch shifting (12 semitones = 1 octave = 2x rate)
-    const playbackRate = Math.pow(2, semitones / 12);
-    source.playbackRate.value = playbackRate;
-
-    // Connect source -> master gain -> destination
-    if (this.masterGain) {
-      source.connect(this.masterGain);
+  public triggerPad(padIndex: number, velocity: number = 100): void {
+    if (!this.ctx || !this.masterGain) {
+      this.initAudio().then(() => this.triggerPad(padIndex, velocity));
+      return;
     }
 
-    const actualEndFrame = endFrame && endFrame <= buffer.length ? endFrame : buffer.length;
-    const durationFrames = actualEndFrame - startFrame;
-    const durationSeconds = durationFrames / buffer.sampleRate / playbackRate;
+    const now = this.ctx.currentTime;
+    const velGain = (velocity / 127) * 0.7;
+    const voiceGain = this.ctx.createGain();
+    voiceGain.connect(this.masterGain);
 
-    const offsetSeconds = startFrame / buffer.sampleRate;
+    // Procedural sound design based on pad bank zones
+    if (padIndex >= 0 && padIndex <= 3) {
+      // KICK / SUB BASS (Pads 1-4)
+      const osc = this.ctx.createOscillator();
+      const freq = padIndex === 0 ? 130 : padIndex === 1 ? 110 : padIndex === 2 ? 90 : 75;
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now);
+      osc.frequency.exponentialRampToValueAtTime(35, now + 0.15);
 
-    // Start playback with precise frame-offset bounds
-    source.start(context.currentTime, offsetSeconds, durationSeconds);
+      voiceGain.gain.setValueAtTime(velGain, now);
+      voiceGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
 
-    return source;
-  }
+      osc.connect(voiceGain);
+      osc.start(now);
+      osc.stop(now + 0.3);
 
-  public getContext(): AudioContext | null {
-    return this.ctx;
+    } else if (padIndex >= 4 && padIndex <= 7) {
+      // SNARE / CLAP (Pads 5-8)
+      const osc = this.ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(220, now);
+      osc.frequency.exponentialRampToValueAtTime(80, now + 0.08);
+
+      // Noise burst for snare crispness
+      const bufferSize = this.ctx.sampleRate * 0.1;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
+
+      const noiseFilter = this.ctx.createBiquadFilter();
+      noiseFilter.type = 'highpass';
+      noiseFilter.frequency.setValueAtTime(1000, now);
+
+      voiceGain.gain.setValueAtTime(velGain * 0.8, now);
+      voiceGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+      osc.connect(voiceGain);
+      noise.connect(noiseFilter);
+      noiseFilter.connect(voiceGain);
+
+      osc.start(now);
+      osc.stop(now + 0.15);
+      noise.start(now);
+      noise.stop(now + 0.15);
+
+    } else if (padIndex >= 8 && padIndex <= 11) {
+      // HI-HATS / PERC (Pads 9-12)
+      const bufferSize = this.ctx.sampleRate * 0.05;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.setValueAtTime(7000, now);
+
+      voiceGain.gain.setValueAtTime(velGain * 0.5, now);
+      voiceGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+      noise.connect(filter);
+      filter.connect(voiceGain);
+
+      noise.start(now);
+      noise.stop(now + 0.05);
+
+    } else {
+      // SYNTH CHORDS / LEADS (Pads 13-16)
+      const osc = this.ctx.createOscillator();
+      const baseFreq = 261.63; // C4
+      const offsets = [1, 1.25, 1.5, 2];
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(baseFreq * offsets[padIndex - 12], now);
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(1200, now);
+      filter.frequency.exponentialRampToValueAtTime(400, now + 0.25);
+
+      voiceGain.gain.setValueAtTime(velGain * 0.4, now);
+      voiceGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+
+      osc.connect(filter);
+      filter.connect(voiceGain);
+
+      osc.start(now);
+      osc.stop(now + 0.3);
+    }
   }
 }
 
