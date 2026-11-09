@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { DualScreenWorkspace } from './components/tracker/DualScreenWorkspace';
 import { MixerView } from './components/tracker/MixerView';
 import { GlobalFxView } from './components/tracker/GlobalFxView';
-import { SampleWorkbench } from './components/tracker/SampleWorkbench';
+import { SampleWorkbench, SliceMarker } from './components/tracker/SampleWorkbench';
 import { PatternLaunchView } from './components/tracker/PatternLaunchView';
 import { SongArrangerView } from './components/tracker/SongArrangerView';
 import { audioEngine } from './services/AudioEngine';
@@ -24,7 +24,15 @@ export function App() {
   // Sample Workbench State
   const [trimStart, setTrimStart] = useState<number>(0.0);
   const [trimEnd, setTrimEnd] = useState<number>(1.0);
-  const [slices, setSlices] = useState<number[]>([0.12, 0.25, 0.38, 0.5, 0.62, 0.75, 0.88]);
+  const [slices, setSlices] = useState<SliceMarker[]>([
+    { id: '1', position: 0.12 },
+    { id: '2', position: 0.25 },
+    { id: '3', position: 0.38 },
+    { id: '4', position: 0.5 },
+    { id: '5', position: 0.62 },
+    { id: '6', position: 0.75 },
+    { id: '7', position: 0.88 },
+  ]);
 
   // Initialize Audio & MIDI on first user gesture
   const handleUnlockAudio = async () => {
