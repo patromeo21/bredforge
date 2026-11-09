@@ -1,21 +1,24 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark bg-zinc-950 text-zinc-100">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Bredforge M8 Tracker</title>
-
-    <!-- PWA & Apple iOS Standalone Configuration -->
-    <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#f59e0b" />
+    
+    <!-- Viewport Lock & Safe Area for iPad / Mobile Safari -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    
+    <!-- iOS Standalone PWA Settings -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Bredforge" />
-    <link rel="apple-touch-icon" href="/icon-192.png" />
+    
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <title>Bredforge // M8 Tracker Workstation</title>
   </head>
-  <body class="bg-zinc-950 text-zinc-100 overflow-hidden select-none">
-    <div id="root" class="w-screen h-screen overflow-hidden flex flex-col"></div>
+  <body class="bg-zinc-950 text-zinc-100 overflow-hidden select-none h-screen w-screen m-0 p-0">
+    <div id="root" class="h-full w-full overflow-hidden"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
