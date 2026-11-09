@@ -1,136 +1,102 @@
 // ============================================================================
-// BREDFORGE v1.0 — 100DVH BOUNDING CANVAS & UI SHELL (App.tsx)
+// BREDFORGE v1.0 — MASTER HARDWARE CHASSIS & VIEWPORT SHELL [REF: SHELL-01]
 // ============================================================================
 
-import React from 'react';
-import { useUIStore } from './store/useUIStore';
-import { PhraseGrid } from './components/tracker/PhraseGrid';
-import { GrooveView } from './components/tracker/GrooveView';
-import { MixerMatrix } from './components/tracker/MixerMatrix';
-import { PadMatrix } from './components/tracker/PadMatrix';
+import React, { useState } from 'react';
+import DualScreenWorkspace from './components/tracker/DualScreenWorkspace';
+import MixerMatrix from './components/mixer/MixerMatrix';
+import PunchInFXBus from './components/tracker/PunchInFXBus';
 
 export function App() {
-  const { activeView, setActiveView, isMenuOpen, toggleMenu } = useUIStore();
+  const [activeView, setActiveView] = useState<'tracker' | 'mixer' | 'fx'>('tracker');
+  const [systemPower, setSystemPower] = useState<boolean>(true);
+
+  if (!systemPower) {
+    return (
+      <div className="fixed inset-0 bg-black flex items-center justify-center font-mono">
+        <button
+          onClick={() => setSystemPower(true)}
+          className="px-6 py-3 bg-zinc-900 border border-zinc-800 text-amber-500 rounded-lg hover:border-amber-500/50 transition-all cursor-pointer shadow-[0_0_20px_rgba(245,158,11,0.1)]"
+        >
+          [ POWER ON // BREDFORGE v1.0 ]
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="h-screen max-h-[100dvh] w-screen max-w-[100dvw] overflow-hidden bg-black text-zinc-100 font-mono flex flex-col p-2 select-none">
-      {/* Hero Canvas / Viewport Container with 100dvh lockdown */}
-      <div className="relative flex-1 flex flex-col m8-console-bezel rounded-2xl border border-zinc-800 p-3 overflow-hidden">
-        
-        {/* Top Status Bar */}
-        <div className="flex justify-between items-center bg-zinc-900/80 border border-zinc-800 rounded-lg px-3 py-1.5 mb-2 text-xs shrink-0">
-          <div className="flex items-center gap-3">
-            <span className="font-bold tracking-widest text-emerald-400">BREDFORGE</span>
-            <span className="text-zinc-500">|</span>
-            <span className="text-zinc-300">100DVH WORKSPACE</span>
+    <div className="fixed inset-0 bg-[#09090b] text-zinc-100 font-mono select-none overflow-hidden flex flex-col p-2 sm:p-4 border-4 border-zinc-900 shadow-2xl">
+      {/* Top Hardware Status Bar */}
+      <header className="flex justify-between items-center bg-zinc-950 border border-zinc-800/80 rounded-t-lg px-4 py-2 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] animate-pulse"></span>
+            <span className="font-extrabold tracking-wider text-xs text-zinc-100">BREDFORGE</span>
           </div>
-          <button 
-            onClick={toggleMenu}
-            className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 text-[10px]"
+          <span className="text-[10px] px-1.5 py-0.5 bg-zinc-900 text-amber-400 border border-zinc-800 rounded">
+            M8/MPC HYBRID v1.0
+          </span>
+        </div>
+
+        {/* View Switcher Tabs */}
+        <nav className="flex items-center gap-1 bg-zinc-900/90 p-1 rounded-md border border-zinc-800">
+          <button
+            onClick={() => setActiveView('tracker')}
+            className={`px-3 py-1 text-[10px] font-bold rounded transition-all cursor-pointer ${
+              activeView === 'tracker'
+                ? 'bg-amber-500 text-zinc-950 shadow'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
           >
-            {isMenuOpen ? 'CLOSE MENU' : 'MENU'}
+            [1] TRACKER & PADS
+          </button>
+          <button
+            onClick={() => setActiveView('mixer')}
+            className={`px-3 py-1 text-[10px] font-bold rounded transition-all cursor-pointer ${
+              activeView === 'mixer'
+                ? 'bg-amber-500 text-zinc-950 shadow'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            [2] 8-CH MIXER
+          </button>
+          <button
+            onClick={() => setActiveView('fx')}
+            className={`px-3 py-1 text-[10px] font-bold rounded transition-all cursor-pointer ${
+              activeView === 'fx'
+                ? 'bg-amber-500 text-zinc-950 shadow'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            [3] PUNCH-IN FX
+          </button>
+        </nav>
+
+        {/* System Hardware Controls */}
+        <div className="flex items-center gap-3 text-[10px] text-zinc-400">
+          <span className="hidden sm:inline">CPU: 4.2% [120fps]</span>
+          <button
+            onClick={() => setSystemPower(false)}
+            title="Power Off"
+            className="px-2 py-1 bg-red-950/40 text-red-400 border border-red-900/60 rounded hover:bg-red-900/40 cursor-pointer"
+          >
+            PWR
           </button>
         </div>
+      </header>
 
-        {/* Main Canvas Viewport (Non-Destructive Layer Container) */}
-        <div className="relative flex-1 overflow-hidden">
-          {/* Tracker View [1,0] */}
-          <div className={`absolute inset-0 transition-opacity duration-150 ${activeView === 'tracker' ? 'opacity-100 z-10 pointer-events-auto' : 'opacity-0 z-0 pointer-events-none'}`}>
-            <PhraseGrid />
-          </div>
+      {/* Main Viewport Workspace Container */}
+      <main className="flex-1 relative min-h-0 bg-zinc-950/40 border-x border-b border-zinc-800/80 rounded-b-lg p-2 overflow-hidden shadow-inner">
+        {activeView === 'tracker' && <DualScreenWorkspace />}
+        {activeView === 'mixer' && <MixerMatrix />}
+        {activeView === 'fx' && <PunchInFXBus />}
+      </main>
 
-          {/* Mixer View [2,0] */}
-          <div className={`absolute inset-0 transition-opacity duration-150 ${activeView === 'mixer' ? 'opacity-100 z-10 pointer-events-auto' : 'opacity-0 z-0 pointer-events-none'}`}>
-            <MixerMatrix />
-          </div>
-
-          {/* Pad Matrix View [2,1] */}
-          <div className={`absolute inset-0 transition-opacity duration-150 ${activeView === 'pads' ? 'opacity-100 z-10 pointer-events-auto' : 'opacity-0 z-0 pointer-events-none'}`}>
-            <PadMatrix />
-          </div>
-
-          {/* Groove View [3,0] */}
-          <div className={`absolute inset-0 transition-opacity duration-150 ${activeView === 'groove' ? 'opacity-100 z-10 pointer-events-auto' : 'opacity-0 z-0 pointer-events-none'}`}>
-            <GrooveView />
-          </div>
-        </div>
-
-        {/* Sliding Menu Overlay */}
-        <div className={`absolute top-0 right-0 h-full w-72 bg-zinc-900/95 border-l border-zinc-800 p-4 transform transition-transform duration-200 z-30 ${isMenuOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-          <div className="flex justify-between items-center border-b border-zinc-800 pb-3 mb-4">
-            <h3 className="font-bold text-sm text-zinc-200">SYSTEM MENU</h3>
-            <button onClick={toggleMenu} className="text-zinc-400 hover:text-white text-xs">[ESC]</button>
-          </div>
-          <div className="flex flex-col gap-2 text-xs">
-            <button 
-              onClick={() => { setActiveView('tracker'); toggleMenu(); }}
-              className={`p-2 rounded text-left transition-colors ${activeView === 'tracker' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800'}`}
-            >
-              [1,0] Phrase Grid (Tracker)
-            </button>
-            <button 
-              onClick={() => { setActiveView('mixer'); toggleMenu(); }}
-              className={`p-2 rounded text-left transition-colors ${activeView === 'mixer' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800'}`}
-            >
-              [2,0] Mixer & Bus Matrix
-            </button>
-            <button 
-              onClick={() => { setActiveView('pads'); toggleMenu(); }}
-              className={`p-2 rounded text-left transition-colors ${activeView === 'pads' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800'}`}
-            >
-              [2,1] SP Pad Matrix
-            </button>
-            <button 
-              onClick={() => { setActiveView('groove'); toggleMenu(); }}
-              className={`p-2 rounded text-left transition-colors ${activeView === 'groove' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-zinc-800/50 text-zinc-300 hover:bg-zinc-800'}`}
-            >
-              [3,0] Groove View (Launcher)
-            </button>
-          </div>
-        </div>
-
-        {/* Bottom Navigation Bar */}
-        <div className="flex justify-between items-center bg-zinc-900/80 border border-zinc-800 rounded-lg px-3 py-2 mt-2 text-xs shrink-0">
-          <div className="flex gap-1.5 overflow-x-auto">
-            <button
-              onClick={() => setActiveView('tracker')}
-              className={`px-2.5 py-1 rounded font-bold text-xs transition-colors ${
-                activeView === 'tracker' ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              [1,0] TRK
-            </button>
-            <button
-              onClick={() => setActiveView('mixer')}
-              className={`px-2.5 py-1 rounded font-bold text-xs transition-colors ${
-                activeView === 'mixer' ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              [2,0] MIX
-            </button>
-            <button
-              onClick={() => setActiveView('pads')}
-              className={`px-2.5 py-1 rounded font-bold text-xs transition-colors ${
-                activeView === 'pads' ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              [2,1] PADS
-            </button>
-            <button
-              onClick={() => setActiveView('groove')}
-              className={`px-2.5 py-1 rounded font-bold text-xs transition-colors ${
-                activeView === 'groove' ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              [3,0] GROOVE
-            </button>
-          </div>
-          <div className="text-[10px] text-zinc-500 hidden md:block">
-            IPAD 9TH GEN // 100DVH LOCKED
-          </div>
-        </div>
-
-      </div>
+      {/* Bottom Hardware Footer */}
+      <footer className="flex justify-between items-center px-2 pt-2 text-[9px] text-zinc-600 shrink-0">
+        <span>IPAD 9TH GEN // WEBAUDIO / CANVAS WORKLET BRIDGE</span>
+        <span>STATUS: SYSTEM STABLE // READY</span>
+      </footer>
     </div>
   );
 }
