@@ -1,10 +1,11 @@
 // ============================================================================
-// BREDFORGE v1.0 — DUAL-SCREEN WORKSPACE (TRACKER + WORKBENCH + PADS) [REF: DUAL-01]
+// BREDFORGE v1.0 — DUAL-SCREEN WORKSPACE WITH LIVE REC BRIDGE [REF: DUAL-02]
 // ============================================================================
 
 import React, { useState } from 'react';
 import { PadMatrix, PadData } from './PadMatrix';
 import { SampleWorkbench, SliceMarker } from './SampleWorkbench';
+import { useLiveStepRecord, PhraseStep } from '../../hooks/useLiveStepRecord';
 
 interface DualScreenWorkspaceProps {
   projectName?: string;
@@ -18,15 +19,31 @@ export function DualScreenWorkspace({
   const [showWorkbench, setShowWorkbench] = useState<boolean>(true);
   const [activeBank, setActiveBank] = useState<'A' | 'B' | 'C' | 'D'>('A');
 
+  // Transport & Live Recording State
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [isLiveRecArmed, setIsLiveRecArmed] = useState<boolean>(false);
+  const [currentStep, setCurrentStep] = useState<number>(0);
+
+  // M8 Phrase Steps Grid State (16 steps)
+  const [phraseSteps, setPhraseSteps] = useState<PhraseStep[]>(
+    Array.from({ length: 16 }, (_, idx) => ({
+      stepIndex: idx,
+      note: idx === 0 ? 'C-3' : '---',
+      instrument: idx === 0 ? '01' : '--',
+      command: idx === 0 ? 'S01' : '---',
+      description: idx === 0 ? 'Kick (Slice 1)' : '—',
+    }))
+  );
+
   // Sample Workbench State
-  const [currentAudioBuffer, setCurrentAudioBuffer] = useState<AudioBuffer | null>(null);
-  const [sampleName, setSampleName] = useState<string>('kick_808_raw.wav');
+  const [currentAudioBuffer] = useState<AudioBuffer | null>(null);
+  const [sampleName] = useState<string>('kick_808_raw.wav');
   const [trimStart, setTrimStart] = useState<number>(0.0);
   const [trimEnd, setTrimEnd] = useState<number>(1.0);
   const [slices, setSlices] = useState<SliceMarker[]>([]);
 
-  // 4x4 Pad Matrix State (16 pads)
-  const [pads, setPads] = useState<PadData[]>(
+  // 4x4 Pad Matrix State
+  const [pads] = useState<PadData[]>(
     Array.from({ length: 16 }, (_, i) => ({
       id: i + 1,
       name: `Pad ${i + 1}`,
@@ -36,27 +53,37 @@ export function DualScreenWorkspace({
     }))
   );
 
+  // Live Step Record Hook Integration
+  const { recordPadHit } = useLiveStepRecord({
+    isArmed: isLiveRecArmed,
+    isPlaying,
+    currentStep,
+    onUpdateStep: (stepIdx, updatedData) => {
+      setPhraseSteps((prev) => {
+        const next = [...prev];
+        next[stepIdx] = updatedData;
+        return next;
+      });
+    },
+  });
+
   const handleTriggerPad = (pad: PadData) => {
     console.log(`[Pad Trigger] Bank ${activeBank} Pad ${pad.id} (${pad.note}) triggered.`);
+    // Trigger live step recording into the phrase grid if armed
+    recordPadHit(pad.id, activeBank);
   };
 
   const handleM8Action = (command: string) => {
     console.log(`[M8 Hardware Action] Executed command: ${command}`);
-  };
-
-  const handleTrimChange = (start: number, end: number) => {
-    setTrimStart(start);
-    setTrimEnd(end);
-  };
-
-  const handleSlicesChange = (newSlices: SliceMarker[]) => {
-    setSlices(newSlices);
+    if (command === 'SEQ_PLAY') {
+      setIsPlaying((prev) => !prev);
+    }
   };
 
   return (
     <div className="flex flex-col h-full w-full bg-zinc-950 text-zinc-100 font-mono p-2 gap-2 select-none overflow-hidden">
       
-      {/* Top System Bar */}
+      {/* Top System Bar: Transport & Live Rec Controls */}
       <div className="flex justify-between items-center bg-zinc-900/60 border border-zinc-800 px-3 py-1.5 rounded-lg shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-xs font-bold text-amber-500 tracking-wider">
@@ -67,12 +94,35 @@ export function DualScreenWorkspace({
           </span>
         </div>
 
+        {/* Transport & Record Arm Controls */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsLiveRecArmed(!isLiveRecArmed)}
+            className={`px-2.5 py-1 text-[10px] font-bold rounded border cursor-pointer transition-all ${
+              isLiveRecArmed
+                ? 'bg-red-600 text-white border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.4)] animate-pulse'
+                : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200'
+            }`}
+          >
+            {isLiveRecArmed ? '● LIVE REC ARMED' : '○ ARM LIVE REC'}
+          </button>
+
+          <button
+            onClick={() => setIsPlaying(!isPlaying)}
+            className={`px-3 py-1 text-[10px] font-bold rounded border cursor-pointer transition-all ${
+              isPlaying
+                ? 'bg-emerald-500 text-zinc-950 border-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
+                : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200'
+            }`}
+          >
+            {isPlaying ? '■ PAUSE' : '▶ PLAY'}
+          </button>
+
           <button
             onClick={() => setShowWorkbench(!showWorkbench)}
             className={`px-2.5 py-1 text-[10px] font-bold rounded border cursor-pointer transition-all ${
               showWorkbench
-                ? 'bg-amber-500 text-zinc-950 border-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.3)]'
+                ? 'bg-amber-500 text-zinc-950 border-amber-400'
                 : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200'
             }`}
           >
@@ -90,34 +140,37 @@ export function DualScreenWorkspace({
             <span className="text-[11px] font-bold text-emerald-400 tracking-wider">
               M8 TRACKER // PHRASE GRID (TRACK 1)
             </span>
-            <span className="text-[9px] text-zinc-500">STEP: 00 / 64</span>
+            <span className="text-[9px] text-zinc-500">
+              STEP: {currentStep < 10 ? `0${currentStep}` : currentStep} / 64 {isLiveRecArmed && isPlaying ? '(RECORDING)' : ''}
+            </span>
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-1 pr-1">
-            {Array.from({ length: 16 }).map((_, idx) => (
+            {phraseSteps.map((step, idx) => (
               <div
                 key={idx}
-                className={`flex justify-between items-center px-3 py-1.5 rounded text-xs border ${
-                  idx === 0
-                    ? 'bg-emerald-950/30 border-emerald-500/50 text-emerald-300 font-bold'
+                onClick={() => setCurrentStep(idx)}
+                className={`flex justify-between items-center px-3 py-1.5 rounded text-xs border cursor-pointer transition-all ${
+                  currentStep === idx
+                    ? 'bg-emerald-950/50 border-emerald-500 text-emerald-200 font-bold shadow-sm'
                     : 'bg-zinc-950/60 border-zinc-800/80 text-zinc-400 hover:border-zinc-700'
                 }`}
               >
                 <span className="w-8 text-zinc-600 font-bold">
                   {idx < 10 ? `0${idx}` : idx}
                 </span>
-                <span className="w-12 text-amber-400">C-3</span>
-                <span className="w-10 text-sky-400">01</span>
-                <span className="w-16 text-zinc-300">{idx === 0 ? 'S01' : '---'}</span>
-                <span className="text-[9px] text-zinc-500 uppercase">
-                  {idx === 0 ? 'Kick (Slice 1)' : '—'}
+                <span className="w-12 text-amber-400">{step.note}</span>
+                <span className="w-10 text-sky-400">{step.instrument}</span>
+                <span className="w-16 text-zinc-300">{step.command}</span>
+                <span className="text-[9px] text-zinc-500 uppercase truncate">
+                  {step.description}
                 </span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* RIGHT PANEL: Dynamic Stack (Non-Disruptive Workbench + Pad Matrix) */}
+        {/* RIGHT PANEL: Non-Disruptive Workbench + Pad Matrix */}
         <div className="flex flex-col h-full gap-2 min-h-0">
           
           {showWorkbench && (
@@ -128,8 +181,11 @@ export function DualScreenWorkspace({
                 trimStart={trimStart}
                 trimEnd={trimEnd}
                 slices={slices}
-                onUpdateTrim={handleTrimChange}
-                onUpdateSlices={handleSlicesChange}
+                onUpdateTrim={(start, end) => {
+                  setTrimStart(start);
+                  setTrimEnd(end);
+                }}
+                onUpdateSlices={(newSlices) => setSlices(newSlices)}
                 onClose={() => setShowWorkbench(false)}
               />
             </div>
