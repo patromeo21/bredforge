@@ -7,8 +7,8 @@ export type MidiControlCallback = (controller: number, value: number, channel: n
 
 export class MidiService {
   private static instance: MidiService;
-  private midiAccess: WebMidi.MIDIAccess | null = null;
-  private connectedInputs: Map<string, WebMidi.MIDIInput> = new Map();
+  private midiAccess: any | null = null;
+  private connectedInputs: Map<string, any> = new Map();
   
   private noteOnCallbacks: MidiNoteCallback[] = [];
   private noteOffCallbacks: MidiNoteCallback[] = [];
@@ -33,15 +33,17 @@ export class MidiService {
     }
 
     try {
-      this.midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+      this.midiAccess = await (navigator as any).requestMIDIAccess({ sysex: false });
       this.refreshInputs();
 
       // Listen for device plug/unplug events
-      this.midiAccess.onstatechange = (e) => {
-        const port = e.port;
-        console.log(`[MidiService] MIDI Port State Change: ${port.name} (${port.type}) -> ${port.state}`);
-        this.refreshInputs();
-      };
+      if (this.midiAccess) {
+        this.midiAccess.onstatechange = (e: any) => {
+          const port = e.port;
+          console.log(`[MidiService] MIDI Port State Change: ${port?.name} (${port?.type}) -> ${port?.state}`);
+          this.refreshInputs();
+        };
+      }
 
       console.log('[MidiService] Web MIDI initialized successfully.');
       return true;
@@ -63,7 +65,7 @@ export class MidiService {
     }
   }
 
-  private handleMidiMessage(event: WebMidi.MIDIMessageEvent): void {
+  private handleMidiMessage(event: any): void {
     const data = event.data;
     if (!data || data.length < 3) return;
 
