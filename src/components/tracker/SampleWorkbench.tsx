@@ -5,13 +5,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { audioEngine } from '../../services/AudioEngine';
 
+export type SliceMarker = number;
+
 export interface SampleWorkbenchProps {
   audioBuffer?: AudioBuffer | null;
   trimStart?: number; // 0.0 to 1.0 normalized
   trimEnd?: number;   // 0.0 to 1.0 normalized
-  slices?: number[];  // Array of normalized slice positions (0.0 to 1.0)
+  slices?: SliceMarker[];  // Array of normalized slice positions (0.0 to 1.0)
   onUpdateTrim?: (start: number, end: number) => void;
-  onUpdateSlices?: (slices: number[]) => void;
+  onUpdateSlices?: (slices: SliceMarker[]) => void;
 }
 
 export function SampleWorkbench({
@@ -25,7 +27,7 @@ export function SampleWorkbench({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [localStart, setLocalStart] = useState<number>(trimStart);
   const [localEnd, setLocalEnd] = useState<number>(trimEnd);
-  const [localSlices, setLocalSlices] = useState<number[]>(slices);
+  const [localSlices, setLocalSlices] = useState<SliceMarker[]>(slices);
   const [activeSlice, setActiveSlice] = useState<number | null>(null);
   const [sampleName, setSampleName] = useState<string>('BRED_BREAK_01.WAV');
 
@@ -130,7 +132,7 @@ export function SampleWorkbench({
   };
 
   const handleAutoSlice = (count: number) => {
-    const newSlices: number[] = [];
+    const newSlices: SliceMarker[] = [];
     const span = localEnd - localStart;
     for (let i = 1; i < count; i++) {
       newSlices.push(localStart + (span * i) / count);
@@ -256,7 +258,7 @@ export function SampleWorkbench({
                   </span>
                 </div>
                 <div className="text-[7px] text-zinc-500 text-center">
-                  {sliceMarker ? `${(sliceMarker * 100).toFixed(0)}%` : 'FULL'}
+                  {sliceMarker !== undefined ? `${(sliceMarker * 100).toFixed(0)}%` : 'FULL'}
                 </div>
               </button>
             );
