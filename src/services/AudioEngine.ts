@@ -6,6 +6,7 @@ export class AudioEngine {
   private static instance: AudioEngine;
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
+  private analyser: AnalyserNode | null = null;
   private limiter: DynamicsCompressorNode | null = null;
   private isInitialized: boolean = false;
 
@@ -45,8 +46,13 @@ export class AudioEngine {
       this.masterGain = this.ctx.createGain();
       this.masterGain.gain.setValueAtTime(0.85, this.ctx.currentTime);
 
-      // Connect Chain: MasterGain -> Limiter -> Destination
-      this.masterGain.connect(this.limiter);
+      // Analyser Node for Real-time Oscilloscope / Waveform Visualizer
+      this.analyser = this.ctx.createAnalyser();
+      this.analyser.fftSize = 2048;
+
+      // Connect Chain: MasterGain -> Analyser -> Limiter -> Destination
+      this.masterGain.connect(this.analyser);
+      this.analyser.connect(this.limiter);
       this.limiter.connect(this.ctx.destination);
 
       if (this.ctx.state === 'suspended') {
@@ -60,6 +66,13 @@ export class AudioEngine {
       console.error('[AudioEngine] Failed to initialize AudioContext:', err);
       return false;
     }
+  }
+
+  /**
+   * Get the master AnalyserNode for visualization
+   */
+  public getAnalyser(): AnalyserNode | null {
+    return this.analyser;
   }
 
   /**
