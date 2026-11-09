@@ -1,9 +1,9 @@
 // ============================================================================
-// BREDFORGE v1.0 — DUAL-SCREEN WORKSPACE & AUDIO/MIDI BRIDGE [REF: WORKSPACE-01]
+// BREDFORGE v1.0 — DUAL SCREEN WORKSPACE & TRACKER HEADER [REF: WORKSPACE-01]
 // ============================================================================
 
-import React, { useState, useEffect } from 'react';
-import { midiService } from '../../services/MidiService';
+import React, { useState } from 'react';
+import { AudioVisualizerCanvas } from '../canvas/audiovisualcanvas';
 import { audioEngine } from '../../services/AudioEngine';
 
 interface DualScreenWorkspaceProps {
@@ -15,175 +15,105 @@ export function DualScreenWorkspace({
   projectName = 'BRED_PROJECT_01',
   tempo = 124.0,
 }: DualScreenWorkspaceProps) {
-  const [activeStep, setActiveStep] = useState<number>(0);
-  const [activePad, setActivePad] = useState<number | null>(null);
-  const [midiConnected, setMidiConnected] = useState<boolean>(false);
-  const [connectedDevices, setConnectedDevices] = useState<string[]>([]);
-  const [activeBank, setActiveBank] = useState<'A' | 'B' | 'C' | 'D'>('A');
+  const [activeTab, setActiveTab] = useState<'tracker' | 'phrase'>('tracker');
+  const [currentStep, setCurrentStep] = useState<number>(0);
 
-  // Initialize Web Audio and Web MIDI on mount
-  useEffect(() => {
-    let unsubscribeNoteOn: (() => void) | undefined;
-
-    async function initSystem() {
-      // Unlock AudioContext on mount/interaction
-      await audioEngine.initAudio();
-
-      const success = await midiService.initMidi();
-      if (success) {
-        setMidiConnected(true);
-        setConnectedDevices(midiService.getConnectedDevices());
-
-        // Listen for incoming MIDI Note On events
-        unsubscribeNoteOn = midiService.onNoteOn((note, velocity) => {
-          const padIndex = (note - 36) % 16;
-          if (padIndex >= 0 && padIndex < 16) {
-            setActivePad(padIndex);
-            audioEngine.triggerPad(padIndex, velocity);
-            console.log(`[Workspace] MIDI Trigger -> Pad ${padIndex + 1} (Note: ${note}, Vel: ${velocity})`);
-            
-            setTimeout(() => {
-              setActivePad((curr) => (curr === padIndex ? null : curr));
-            }, 120);
-          }
-        });
-      }
-    }
-
-    initSystem();
-
-    return () => {
-      if (unsubscribeNoteOn) unsubscribeNoteOn();
-    };
-  }, []);
-
-  const handlePadClick = (idx: number) => {
-    setActivePad(idx);
-    audioEngine.initAudio();
-    audioEngine.triggerPad(idx, 110);
-    setTimeout(() => {
-      setActivePad((curr) => (curr === idx ? null : curr));
-    }, 120);
+  // Trigger test pad or note on step click
+  const handleStepClick = (stepIndex: number) => {
+    setCurrentStep(stepIndex);
+    audioEngine.triggerPad(stepIndex % 16, 110);
   };
 
-  const pads = Array.from({ length: 16 }, (_, i) => ({
-    id: i,
-    name: `PAD ${i < 9 ? '0' + (i + 1) : i + 1}`,
-    sound: i < 4 ? 'SUB KICK' : i < 8 ? 'SNARE' : i < 12 ? 'HI-HAT' : 'SYNTH LEAD',
-  }));
+  const steps = Array.from({ length: 64 }, (_, i) => i);
+  const rowsPerBeat = 4;
 
   return (
-    <div className="flex flex-col h-full w-full bg-zinc-950 text-zinc-100 font-mono p-2 gap-2 select-none overflow-hidden border border-zinc-800 rounded-lg">
+    <div className="flex flex-col h-full w-full bg-zinc-950 text-zinc-100 font-mono p-3 gap-3 select-none overflow-hidden border border-zinc-800 rounded-lg">
       
-      {/* Workspace Header & Status Bar */}
-      <div className="flex justify-between items-center bg-zinc-900/60 border border-zinc-800 px-3 py-1.5 rounded-lg shrink-0">
+      {/* Workspace Header with Integrated 120fps Oscilloscope */}
+      <div className="flex flex-col lg:flex-row justify-between items-center bg-zinc-900/60 border border-zinc-800 px-3 py-2 rounded-lg gap-3 shrink-0">
+        
+        {/* Project & Tempo Meta */}
         <div className="flex items-center gap-3">
-          <span className="text-xs font-bold text-amber-500 tracking-wider">
-            WORKSPACE // SYNTH & SAMPLE DSP ENGINE
-          </span>
-          <span className="text-[10px] text-zinc-400 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800">
-            {tempo.toFixed(1)} BPM
-          </span>
+          <div className="flex flex-col">
+            <span className="text-xs font-bold text-amber-500 tracking-wider">
+              {projectName}
+            </span>
+            <span className="text-[9px] text-zinc-400">
+              TEMPO: {tempo.toFixed(1)} BPM // 4/4 TIME
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 bg-zinc-950 p-0.5 rounded border border-zinc-800">
+            <button
+              onClick={() => setActiveTab('tracker')}
+              className={`px-2.5 py-1 text-[9px] font-bold rounded transition-all cursor-pointer ${
+                activeTab === 'tracker'
+                  ? 'bg-amber-500 text-zinc-950 shadow-[0_0_8px_rgba(245,158,11,0.4)]'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              TRACKER
+            </button>
+            <button
+              onClick={() => setActiveTab('phrase')}
+              className={`px-2.5 py-1 text-[9px] font-bold rounded transition-all cursor-pointer ${
+                activeTab === 'phrase'
+                  ? 'bg-amber-500 text-zinc-950 shadow-[0_0_8px_rgba(245,158,11,0.4)]'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              PHRASE
+            </button>
+          </div>
         </div>
 
-        {/* MIDI Hardware Status Indicator */}
-        <div className="flex items-center gap-2 bg-zinc-950 px-2.5 py-1 rounded border border-zinc-800">
-          <span className={`w-2 h-2 rounded-full ${midiConnected ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]' : 'bg-amber-500'}`} />
-          <span className="text-[10px] text-zinc-300">
-            {midiConnected && connectedDevices.length > 0 ? `MIDI: ${connectedDevices[0]}` : 'MIDI: LISTENING...'}
-          </span>
+        {/* Live Phosphor Oscilloscope (120FPS Audio Visualizer) */}
+        <div className="w-full lg:w-72 h-12 shrink-0">
+          <AudioVisualizerCanvas width={280} height={48} lineColor="#f59e0b" />
         </div>
+
       </div>
 
-      {/* Main Dual-Screen Split Layout */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-2 min-h-0">
-        
-        {/* Left Screen: 16-Step Phrase Tracker Matrix */}
-        <div className="lg:col-span-7 bg-zinc-900/40 border border-zinc-800 rounded-lg p-3 flex flex-col min-h-0">
-          <div className="flex justify-between items-center mb-2 pb-1.5 border-b border-zinc-800 text-[10px] font-bold text-zinc-400">
-            <span>STEP TRACKER (PHRASE 00)</span>
-            <span className="text-amber-400">NOTE // INST // VOL // FX</span>
-          </div>
+      {/* Main Tracker Grid Area */}
+      <div className="flex-1 grid grid-cols-4 sm:grid-cols-8 gap-2 bg-zinc-900/20 border border-zinc-800/80 rounded-xl p-3 overflow-y-auto">
+        {steps.map((step) => {
+          const isSelected = currentStep === step;
+          const isBeatStart = step % rowsPerBeat === 0;
 
-          <div className="flex-1 overflow-y-auto space-y-1 pr-1">
-            {Array.from({ length: 16 }).map((_, stepIdx) => (
-              <div
-                key={stepIdx}
-                onClick={() => {
-                  setActiveStep(stepIdx);
-                  audioEngine.triggerPad(stepIdx % 16, 90);
-                }}
-                className={`flex justify-between items-center px-3 py-1.5 rounded text-xs border cursor-pointer transition-all ${
-                  activeStep === stepIdx
-                    ? 'bg-amber-500/10 border-amber-500/80 text-amber-300 font-bold shadow-sm'
-                    : 'bg-zinc-950/60 border-zinc-800/80 text-zinc-400 hover:border-zinc-700'
-                }`}
-              >
-                <span className="w-8 text-zinc-600 font-bold">
-                  {stepIdx < 10 ? `0${stepIdx}` : stepIdx}
-                </span>
-                <span className="font-mono text-amber-400">C#4</span>
-                <span className="font-mono text-sky-400">01</span>
-                <span className="font-mono text-emerald-400">64</span>
-                <span className="font-mono text-purple-400">V03</span>
+          return (
+            <button
+              key={step}
+              onClick={() => handleStepClick(step)}
+              className={`flex flex-col justify-between p-2.5 h-16 rounded-lg border cursor-pointer transition-all ${
+                isSelected
+                  ? 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.3)] font-bold'
+                  : isBeatStart
+                  ? 'bg-zinc-900/60 border-zinc-700 text-zinc-200 hover:border-zinc-600'
+                  : 'bg-zinc-950 border-zinc-800 text-zinc-500 hover:border-zinc-700'
+              }`}
+            >
+              <div className="flex justify-between w-full text-[8px]">
+                <span>{step < 9 ? `0${step + 1}` : step + 1}</span>
+                <span className={isSelected ? 'text-amber-400' : 'text-zinc-600'}>●</span>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Right Screen: 4x4 Pad Bank Manager (SP-404 / MPC Mode) */}
-        <div className="lg:col-span-5 bg-zinc-900/40 border border-zinc-800 rounded-lg p-3 flex flex-col min-h-0 justify-between">
-          <div className="flex justify-between items-center pb-1.5 border-b border-zinc-800">
-            <span className="text-[10px] font-bold text-amber-400">4x4 PAD MATRIX (BANK {activeBank})</span>
-            <div className="flex gap-1">
-              {(['A', 'B', 'C', 'D'] as const).map((bank) => (
-                <button
-                  key={bank}
-                  onClick={() => setActiveBank(bank)}
-                  className={`px-2 py-0.5 text-[9px] font-bold rounded border cursor-pointer transition-all ${
-                    activeBank === bank
-                      ? 'bg-amber-500 text-zinc-950 border-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.3)]'
-                      : 'bg-zinc-950 text-zinc-400 border-zinc-800'
-                  }`}
-                >
-                  {bank}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 4x4 Grid */}
-          <div className="grid grid-cols-4 gap-2 my-auto py-2">
-            {pads.map((pad, idx) => (
-              <button
-                key={pad.id}
-                onClick={() => handlePadClick(idx)}
-                className={`flex flex-col justify-between p-2.5 h-20 rounded-lg border cursor-pointer transition-all ${
-                  activePad === idx
-                    ? 'bg-amber-500 text-zinc-950 border-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.5)] scale-95 font-bold'
-                    : 'bg-zinc-950 text-zinc-300 border-zinc-800 hover:border-zinc-700 hover:text-amber-400'
-                }`}
-              >
-                <div className="flex justify-between w-full text-[9px]">
-                  <span className={activePad === idx ? 'text-zinc-950 font-bold' : 'text-zinc-500'}>
-                    {pad.name}
-                  </span>
-                  <span className={activePad === idx ? 'text-zinc-950 font-bold' : 'text-emerald-400'}>
-                    ●
-                  </span>
-                </div>
-                <span className="text-[10px] truncate w-full text-left font-bold">
-                  {pad.sound}
+              <div className="flex justify-center items-center my-auto">
+                <span className="text-xs font-mono font-bold tracking-wider">
+                  {step % 4 === 0 ? 'C-4' : '---'}
                 </span>
-              </button>
-            ))}
-          </div>
+              </div>
+              <div className="text-[7px] text-zinc-500 text-center">
+                VOL 64
+              </div>
+            </button>
+          );
+        })}
+      </div>
 
-          <div className="text-[9px] text-zinc-500 text-center pt-1 border-t border-zinc-800">
-            Pads and step tracker steps now trigger live Web Audio DSP voices.
-          </div>
-        </div>
-
+      {/* Footer Info */}
+      <div className="flex justify-between items-center text-[9px] text-zinc-500 px-1 shrink-0">
+        <span>Click any step to audition synth voices and trigger real-time waveform display.</span>
+        <span className="text-amber-400 font-bold">M8 TRACKER // A13 COORD</span>
       </div>
 
     </div>
