@@ -21,6 +21,11 @@ export function App() {
   const [masterLimiter, setMasterLimiter] = useState<boolean>(true);
   const [audioUnlocked, setAudioUnlocked] = useState<boolean>(false);
 
+  // Sample Workbench State
+  const [trimStart, setTrimStart] = useState<number>(0.0);
+  const [trimEnd, setTrimEnd] = useState<number>(1.0);
+  const [slices, setSlices] = useState<number[]>([0.12, 0.25, 0.38, 0.5, 0.62, 0.75, 0.88]);
+
   // Initialize Audio & MIDI on first user gesture
   const handleUnlockAudio = async () => {
     if (!audioUnlocked) {
@@ -133,11 +138,14 @@ export function App() {
         {currentView === 'samples' && (
           <SampleWorkbench
             audioBuffer={null}
-            trimStart={0}
-            trimEnd={1}
-            slices={[]}
-            onUpdateTrim={() => {}}
-            onUpdateSlices={() => {}}
+            trimStart={trimStart}
+            trimEnd={trimEnd}
+            slices={slices}
+            onUpdateTrim={(start, end) => {
+              setTrimStart(start);
+              setTrimEnd(end);
+            }}
+            onUpdateSlices={(newSlices) => setSlices(newSlices)}
           />
         )}
       </main>
