@@ -3,7 +3,7 @@
 // ============================================================================
 
 import React, { useState } from 'react';
-import { AudioVisualizerCanvas } from '../canvas/audiovisualcanvas';
+import { AudioVisualizerCanvas } from '../canvas/AudioVisualizerCanvas';
 import { audioEngine } from '../../services/AudioEngine';
 
 interface DualScreenWorkspaceProps {
@@ -18,7 +18,6 @@ export function DualScreenWorkspace({
   const [activeTab, setActiveTab] = useState<'tracker' | 'phrase'>('tracker');
   const [currentStep, setCurrentStep] = useState<number>(0);
 
-  // Trigger test pad or note on step click
   const handleStepClick = (stepIndex: number) => {
     setCurrentStep(stepIndex);
     audioEngine.triggerPad(stepIndex % 16, 110);
