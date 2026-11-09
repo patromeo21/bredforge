@@ -1,5 +1,5 @@
 // ============================================================================
-// BREDFORGE v1.0 — DUAL-SCREEN WORKSPACE WITH LIVE REC BRIDGE [REF: DUAL-02]
+// BREDFORGE v1.0 — DUAL-SCREEN WORKSPACE WITH PUNCH-IN FX BRIDGE [REF: DUAL-03]
 // ============================================================================
 
 import React, { useState } from 'react';
@@ -23,6 +23,9 @@ export function DualScreenWorkspace({
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isLiveRecArmed, setIsLiveRecArmed] = useState<boolean>(false);
   const [currentStep, setCurrentStep] = useState<number>(0);
+
+  // Punch-In FX Live Activation State
+  const [activePunchInFx, setActivePunchInFx] = useState<string | null>(null);
 
   // M8 Phrase Steps Grid State (16 steps)
   const [phraseSteps, setPhraseSteps] = useState<PhraseStep[]>(
@@ -69,21 +72,55 @@ export function DualScreenWorkspace({
 
   const handleTriggerPad = (pad: PadData) => {
     console.log(`[Pad Trigger] Bank ${activeBank} Pad ${pad.id} (${pad.note}) triggered.`);
-    // Trigger live step recording into the phrase grid if armed
     recordPadHit(pad.id, activeBank);
   };
 
+  // --------------------------------------------------------------------------
+  // M8 HARDWARE BUTTONS TO PUNCH-IN FX BRIDGE ROUTING
+  // --------------------------------------------------------------------------
   const handleM8Action = (command: string) => {
-    console.log(`[M8 Hardware Action] Executed command: ${command}`);
-    if (command === 'SEQ_PLAY') {
-      setIsPlaying((prev) => !prev);
+    console.log(`[M8 Hardware Action / Punch-In Bridge] Executed: ${command}`);
+
+    switch (command) {
+      case 'SEQ_PLAY':
+        setIsPlaying((prev) => !prev);
+        break;
+      case 'EDIT_VAL':
+        // [EDIT] Key -> Tape Stop / Brake FX
+        triggerPunchInEffect('TAPE STOP / BRAKE [EDIT]');
+        break;
+      case 'OPT_MENU':
+        // [OPTION] Key -> Lo-Fi Bitcrusher FX
+        triggerPunchInEffect('BITCRUSH / LO-FI [OPTION]');
+        break;
+      case 'MOD_SHIFT':
+        // [SHIFT] Key -> Gater / Stutter FX
+        triggerPunchInEffect('GATER / STUTTER [SHIFT]');
+        break;
+      case 'NAV_UP':
+      case 'NAV_DOWN':
+      case 'NAV_LEFT':
+      case 'NAV_RIGHT':
+        // D-Pad -> Resonant Filter Sweep / Pitch Bend
+        triggerPunchInEffect(`FILTER SWEEP (${command.replace('NAV_', '')})`);
+        break;
+      default:
+        break;
     }
+  };
+
+  const triggerPunchInEffect = (effectName: string) => {
+    setActivePunchInFx(effectName);
+    // Auto-clear visual indicator after punch release simulation
+    setTimeout(() => {
+      setActivePunchInFx((current) => (current === effectName ? null : current));
+    }, 600);
   };
 
   return (
     <div className="flex flex-col h-full w-full bg-zinc-950 text-zinc-100 font-mono p-2 gap-2 select-none overflow-hidden">
       
-      {/* Top System Bar: Transport & Live Rec Controls */}
+      {/* Top System Bar: Transport & Active Punch-In FX Status */}
       <div className="flex justify-between items-center bg-zinc-900/60 border border-zinc-800 px-3 py-1.5 rounded-lg shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-xs font-bold text-amber-500 tracking-wider">
@@ -92,6 +129,13 @@ export function DualScreenWorkspace({
           <span className="text-[10px] text-zinc-400 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800">
             {tempo.toFixed(1)} BPM
           </span>
+
+          {/* Active Punch-In FX Live Indicator */}
+          {activePunchInFx && (
+            <span className="text-[10px] font-bold text-amber-950 bg-amber-400 px-2 py-0.5 rounded animate-pulse shadow-[0_0_10px_#f59e0b]">
+              ⚡ FX ACTIVE: {activePunchInFx}
+            </span>
+          )}
         </div>
 
         {/* Transport & Record Arm Controls */}
@@ -170,7 +214,7 @@ export function DualScreenWorkspace({
           </div>
         </div>
 
-        {/* RIGHT PANEL: Non-Disruptive Workbench + Pad Matrix */}
+        {/* RIGHT PANEL: Non-Disruptive Workbench + Pad Matrix / M8 Hardware */}
         <div className="flex flex-col h-full gap-2 min-h-0">
           
           {showWorkbench && (
