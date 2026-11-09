@@ -24,12 +24,10 @@ export class AudioEngine {
       const ctx = new AudioCtxClass() as AudioContext;
       this.audioCtx = ctx;
 
-      // Create and configure local nodes
       const gain = ctx.createGain();
       gain.gain.value = 0.85;
       this.masterGain = gain;
 
-      // Use explicit casting to bypass legacy type definitions for compressor
       const compressor = (ctx as any).createCompressor ? (ctx as any).createCompressor() : ctx.createGain();
       if (compressor.threshold) {
         compressor.threshold.setValueAtTime(-2.0, ctx.currentTime);
@@ -45,7 +43,6 @@ export class AudioEngine {
       an.smoothingTimeConstant = 0.8;
       this.analyser = an;
 
-      // Wire Chain
       gain.connect(compressor);
       compressor.connect(an);
       an.connect(ctx.destination);
