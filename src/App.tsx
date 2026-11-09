@@ -135,7 +135,6 @@ export function App() {
             slices={[]}
             onUpdateTrim={() => {}}
             onUpdateSlices={() => {}}
-            onPlaySlice={() => {}}
           />
         )}
       </main>
