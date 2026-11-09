@@ -9,7 +9,6 @@ import { GlobalFxView } from './components/tracker/GlobalFxView';
 import { SampleWorkbench } from './components/tracker/SampleWorkbench';
 import { PatternLaunchView } from './components/tracker/PatternLaunchView';
 import { audioEngine } from './services/AudioEngine';
-import { midiService } from './services/MidiService';
 
 type ViewMode = 'tracker' | 'patterns' | 'mixer' | 'fx' | 'samples';
 
@@ -32,7 +31,6 @@ export function App() {
   };
 
   useEffect(() => {
-    // Global touch / click listener to unlock AudioContext on iOS Safari / iPad 9th Gen
     const unlockHandler = () => {
       handleUnlockAudio();
     };
@@ -129,7 +127,17 @@ export function App() {
         {currentView === 'patterns' && <PatternLaunchView />}
         {currentView === 'mixer' && <MixerView masterVolume={masterVol} masterLimiter={masterLimiter} />}
         {currentView === 'fx' && <GlobalFxView />}
-        {currentView === 'samples' && <SampleWorkbench />}
+        {currentView === 'samples' && (
+          <SampleWorkbench
+            audioBuffer={null}
+            trimStart={0}
+            trimEnd={1}
+            slices={[]}
+            onUpdateTrim={() => {}}
+            onUpdateSlices={() => {}}
+            onPlaySlice={() => {}}
+          />
+        )}
       </main>
 
       {/* Footer Status Bar */}
