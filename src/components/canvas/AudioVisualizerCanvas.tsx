@@ -1,11 +1,21 @@
 // ============================================================================
-// BREDFORGE v1.0 — HARDWARE SCOPE VISUALIZER [REF: M42]
+// BREDFORGE v1.0 — 120FPS OSCILLOSCOPE & AUDIO VISUALIZER [REF: VIZ-01]
 // ============================================================================
 
 import React, { useEffect, useRef } from 'react';
-import { audioVisualizerService } from '../../services/audio/AudioVisualizerService';
+import { audioEngine } from '../../services/AudioEngine';
 
-export function AudioVisualizerCanvas() {
+export interface AudioVisualizerCanvasProps {
+  width?: number;
+  height?: number;
+  lineColor?: string; // e.g. '#f59e0b' (amber) or '#34d399' (emerald)
+}
+
+export function AudioVisualizerCanvas({
+  width = 300,
+  height = 80,
+  lineColor = '#f59e0b',
+}: AudioVisualizerCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -14,36 +24,34 @@ export function AudioVisualizerCanvas() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    let animationId: number;
+    let animationFrameId: number;
+    const analyser = audioEngine.getAnalyser();
+
+    const bufferLength = analyser ? analyser.frequencyBinCount : 1024;
+    const dataArray = new Uint8Array(bufferLength);
 
     const render = () => {
-      animationId = requestAnimationFrame(render);
+      animationFrameId = requestAnimationFrame(render);
 
-      const width = canvas.width;
-      const height = canvas.height;
+      ctx.fillStyle = '#09090b'; // zinc-950 background
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      ctx.fillStyle = '#09090b';
-      ctx.fillRect(0, 0, width, height);
-
-      ctx.strokeStyle = 'rgba(39, 39, 42, 0.2)';
-      ctx.lineWidth = 1;
-      for (let y = 0; y < height; y += 4) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
-        ctx.stroke();
+      if (analyser) {
+        analyser.getByteTimeDomainData(dataArray);
+      } else {
+        dataArray.fill(128);
       }
 
-      const data = audioVisualizerService.getByteTimeDomainData();
-      if (!data || data.length === 0) return;
-
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = lineColor;
       ctx.beginPath();
-      const sliceWidth = width / data.length;
+
+      const sliceWidth = (canvas.width * 1.0) / bufferLength;
       let x = 0;
 
-      for (let i = 0; i < data.length; i++) {
-        const v = data[i] / 128.0;
-        const y = (v * height) / 2;
+      for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 128.0;
+        const y = (v * canvas.height) / 2;
 
         if (i === 0) {
           ctx.moveTo(x, y);
@@ -54,28 +62,33 @@ export function AudioVisualizerCanvas() {
         x += sliceWidth;
       }
 
-      ctx.strokeStyle = '#fbbf24';
-      ctx.lineWidth = 2;
+      ctx.lineTo(canvas.width, canvas.height / 2);
       ctx.stroke();
+
+      // Retro scanlines
+      ctx.fillStyle = 'rgba(245, 158, 11, 0.03)';
+      for (let gy = 0; gy < canvas.height; gy += 4) {
+        ctx.fillRect(0, gy, canvas.width, 1);
+      }
     };
 
     render();
 
     return () => {
-      cancelAnimationFrame(animationId);
+      cancelAnimationFrame(animationFrameId);
     };
-  }, []);
+  }, [lineColor]);
 
   return (
-    <div className="relative w-full h-20 bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden p-2 shadow-inner">
-      <canvas 
-        ref={canvasRef} 
-        width={500} 
-        height={80} 
-        className="w-full h-full rounded border border-zinc-900"
+    <div className="relative border border-zinc-800 rounded-lg overflow-hidden bg-zinc-950 shadow-inner w-full">
+      <canvas
+        ref={canvasRef}
+        width={width}
+        height={height}
+        className="w-full h-full block"
       />
-      <div className="absolute top-2 left-3 text-[9px] text-amber-500/70 font-mono tracking-widest pointer-events-none">
-        DSP // SCOPE OUT [REF: M42]
+      <div className="absolute top-1 left-2 text-[8px] font-mono text-zinc-500 tracking-widest pointer-events-none">
+        OSC // 120FPS PHOSPHOR
       </div>
     </div>
   );
