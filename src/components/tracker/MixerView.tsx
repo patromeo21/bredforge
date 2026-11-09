@@ -14,7 +14,12 @@ interface Channel {
   solo: boolean;
 }
 
-export function MixerView() {
+export interface MixerViewProps {
+  masterVolume?: number;
+  masterLimiter?: boolean;
+}
+
+export function MixerView({ masterVolume: initialMasterVol = 85, masterLimiter = true }: MixerViewProps) {
   const [channels, setChannels] = useState<Channel[]>(
     Array.from({ length: 8 }, (_, i) => ({
       id: i + 1,
@@ -26,7 +31,7 @@ export function MixerView() {
     }))
   );
 
-  const [masterVolume, setMasterVolume] = useState<number>(85); // 0 - 100
+  const [masterVolume, setMasterVolume] = useState<number>(initialMasterVol); // 0 - 100
   const [limiterThresh, setLimiterThresh] = useState<number>(-1.0); // -20dB to 0dB
   const [limiterRatio, setLimiterRatio] = useState<number>(20.0); // 1 to 20
 
@@ -84,8 +89,10 @@ export function MixerView() {
         </div>
 
         <div className="flex items-center gap-2 bg-zinc-950 px-2.5 py-1 rounded border border-zinc-800">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
-          <span className="text-[10px] text-zinc-300">DSP LIMITER ACTIVE</span>
+          <span className={`w-2 h-2 rounded-full ${masterLimiter ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]' : 'bg-zinc-600'}`} />
+          <span className="text-[10px] text-zinc-300">
+            {masterLimiter ? 'DSP LIMITER ACTIVE' : 'LIMITER BYPASSED'}
+          </span>
         </div>
       </div>
 
