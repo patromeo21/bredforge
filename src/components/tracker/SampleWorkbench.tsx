@@ -1,269 +1,273 @@
 // ============================================================================
-// BREDFORGE v1.0 — UNIFIED SAMPLE WORKBENCH WITH AUDIO PREVIEW [REF: WRKBNCH-02]
+// BREDFORGE v1.0 — INTERACTIVE SAMPLE WORKBENCH & SLICER [REF: WORKBENCH-01]
 // ============================================================================
 
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { audioEngine } from '../../services/AudioEngine';
 
-export interface SliceMarker {
-  id: string;
-  samplePosition: number;
-  normalizedPos: number;
-}
-
-interface SampleWorkbenchProps {
-  audioBuffer: AudioBuffer | null;
-  sampleName?: string;
-  trimStart: number; // 0.0 to 1.0
-  trimEnd: number;   // 0.0 to 1.0
-  slices: SliceMarker[];
-  onUpdateTrim: (start: number, end: number) => void;
-  onUpdateSlices: (slices: SliceMarker[]) => void;
-  onClose?: () => void;
+export interface SampleWorkbenchProps {
+  audioBuffer?: AudioBuffer | null;
+  trimStart?: number; // 0.0 to 1.0 normalized
+  trimEnd?: number;   // 0.0 to 1.0 normalized
+  slices?: number[];  // Array of normalized slice positions (0.0 to 1.0)
+  onUpdateTrim?: (start: number, end: number) => void;
+  onUpdateSlices?: (slices: number[]) => void;
 }
 
 export function SampleWorkbench({
-  audioBuffer,
-  sampleName = 'UNTITLED_SAMPLE.WAV',
-  trimStart,
-  trimEnd,
-  slices,
-  onUpdateTrim,
-  onUpdateSlices,
-  onClose,
+  audioBuffer = null,
+  trimStart = 0.0,
+  trimEnd = 1.0,
+  slices = [0.25, 0.5, 0.75],
+  onUpdateTrim = () => {},
+  onUpdateSlices = () => {},
 }: SampleWorkbenchProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const [activeTool, setActiveTool] = useState<'trim' | 'chop'>('trim');
-  const [draggingHandle, setDraggingHandle] = useState<'start' | 'end' | null>(null);
+  const [localStart, setLocalStart] = useState<number>(trimStart);
+  const [localEnd, setLocalEnd] = useState<number>(trimEnd);
+  const [localSlices, setLocalSlices] = useState<number[]>(slices);
+  const [activeSlice, setActiveSlice] = useState<number | null>(null);
+  const [sampleName, setSampleName] = useState<string>('BRED_BREAK_01.WAV');
 
-  const renderWaveform = useCallback(() => {
+  // Sync props if updated externally
+  useEffect(() => {
+    setLocalStart(trimStart);
+    setLocalEnd(trimEnd);
+    setLocalSlices(slices);
+  }, [trimStart, trimEnd, slices]);
+
+  // Render Waveform Canvas
+  useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !audioBuffer) return;
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     const width = canvas.width;
     const height = canvas.height;
-    const data = audioBuffer.getChannelData(0);
-    const step = Math.ceil(data.length / width);
-    const amp = height / 2;
 
-    ctx.fillStyle = '#09090b';
+    // Clear background
+    ctx.fillStyle = '#09090b'; // zinc-950
     ctx.fillRect(0, 0, width, height);
 
-    ctx.strokeStyle = '#18181b';
-    ctx.lineWidth = 1;
-    for (let x = 0; x < width; x += 40) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
-      ctx.stroke();
+    // Get channel data or generate synthetic preview waveform if no buffer loaded
+    let channelData: Float32Array;
+    if (audioBuffer && audioBuffer.numberOfChannels > 0) {
+      channelData = audioBuffer.getChannelData(0);
+    } else {
+      // Synthetic drum break preview waveform
+      channelData = new Float32Array(800);
+      for (let i = 0; i < 800; i++) {
+        const envelope = Math.sin((i / 800) * Math.PI * 8) * Math.exp(-(i % 100) / 30);
+        channelData[i] = (Math.random() * 0.6 - 0.3) + envelope * 0.8;
+      }
     }
 
-    ctx.fillStyle = '#10b981';
+    const step = Math.ceil(channelData.length / width);
+    const amp = height / 2;
+
+    // Draw Waveform centerline
+    ctx.strokeStyle = '#27272a';
+    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(0, amp);
+    ctx.lineTo(width, amp);
+    ctx.stroke();
+
+    // Draw Waveform bars (Amber phosphor style)
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#f59e0b';
+    ctx.beginPath();
 
     for (let i = 0; i < width; i++) {
-      let min = 1.0;
-      let max = -1.0;
-      for (let j = 0; j < step; j++) {
-        const datum = data[i * step + j];
-        if (datum < min) min = datum;
-        if (datum > max) max = datum;
-      }
-      ctx.fillRect(i, (1 + min) * amp, 1, Math.max(1, (max - min) * amp));
-    }
+      const dataIndex = Math.floor(i * step);
+      const val = channelData[dataIndex] || 0;
+      const y = amp + val * amp * 0.85;
 
-    const trimStartXPx = trimStart * width;
-    const trimEndXPx = trimEnd * width;
+      if (i === 0) {
+        ctx.moveTo(i, y);
+      } else {
+        ctx.lineTo(i, y);
+      }
+    }
+    ctx.stroke();
+
+    // Draw Trim Regions (Dim out unselected regions)
+    const startX = localStart * width;
+    const endX = localEnd * width;
 
     ctx.fillStyle = 'rgba(9, 9, 11, 0.75)';
-    ctx.fillRect(0, 0, trimStartXPx, height);
-    ctx.fillRect(trimEndXPx, 0, width - trimEndXPx, height);
+    ctx.fillRect(0, 0, startX, height);
+    ctx.fillRect(endX, 0, width - endX, height);
 
-    ctx.strokeStyle = '#f59e0b';
-    ctx.lineWidth = 2;
+    // Draw Trim Handles
+    ctx.strokeStyle = '#34d399'; // Emerald for trim
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(trimStartXPx, 0);
-    ctx.lineTo(trimStartXPx, height);
+    ctx.moveTo(startX, 0);
+    ctx.lineTo(startX, height);
+    ctx.moveTo(endX, 0);
+    ctx.lineTo(endX, height);
     ctx.stroke();
 
-    ctx.beginPath();
-    ctx.moveTo(trimEndXPx, 0);
-    ctx.lineTo(trimEndXPx, height);
-    ctx.stroke();
-
-    slices.forEach((slice, idx) => {
-      const sliceXPx = slice.normalizedPos * width;
-      ctx.strokeStyle = '#38bdf8';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 2]);
+    // Draw Slices
+    localSlices.forEach((slicePos, idx) => {
+      const sliceX = slicePos * width;
+      ctx.strokeStyle = activeSlice === idx ? '#60a5fa' : '#f43f5e'; // Blue when active, rose for slices
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(sliceXPx, 0);
-      ctx.lineTo(sliceXPx, height);
+      ctx.moveTo(sliceX, 0);
+      ctx.lineTo(sliceX, height);
       ctx.stroke();
-      ctx.setLineDash([]);
-
-      ctx.fillStyle = '#38bdf8';
-      ctx.font = 'bold 9px monospace';
-      ctx.fillText(`S${idx + 1}`, sliceXPx + 4, 12);
     });
-  }, [audioBuffer, trimStart, trimEnd, slices]);
 
-  useEffect(() => {
-    const handleResize = () => {
-      if (containerRef.current && canvasRef.current) {
-        canvasRef.current.width = containerRef.current.clientWidth;
-        canvasRef.current.height = containerRef.current.clientHeight;
-        renderWaveform();
-      }
-    };
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [renderWaveform]);
+  }, [audioBuffer, localStart, localEnd, localSlices, activeSlice]);
 
-  useEffect(() => {
-    renderWaveform();
-  }, [renderWaveform]);
+  const handleTrimChange = (newStart: number, newEnd: number) => {
+    setLocalStart(newStart);
+    setLocalEnd(newEnd);
+    onUpdateTrim(newStart, newEnd);
+  };
 
-  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!canvasRef.current || !audioBuffer) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const clickNormalized = Math.max(0, Math.min(1, x / rect.width));
-
-    if (activeTool === 'trim') {
-      const distToStart = Math.abs(clickNormalized - trimStart);
-      const distToEnd = Math.abs(clickNormalized - trimEnd);
-
-      if (distToStart < 0.05 && distToStart < distToEnd) {
-        setDraggingHandle('start');
-      } else if (distToEnd < 0.05) {
-        setDraggingHandle('end');
-      }
-    } else if (activeTool === 'chop') {
-      const newSlice: SliceMarker = {
-        id: `slice_${Date.now()}`,
-        samplePosition: Math.floor(clickNormalized * audioBuffer.length),
-        normalizedPos: clickNormalized,
-      };
-      const updated = [...slices, newSlice].sort((a, b) => a.normalizedPos - b.normalizedPos);
-      onUpdateSlices(updated);
+  const handleAutoSlice = (count: number) => {
+    const newSlices: number[] = [];
+    const span = localEnd - localStart;
+    for (let i = 1; i < count; i++) {
+      newSlices.push(localStart + (span * i) / count);
     }
+    setLocalSlices(newSlices);
+    onUpdateSlices(newSlices);
   };
 
-  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!draggingHandle || !canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const newPos = Math.max(0, Math.min(1, x / rect.width));
-
-    if (draggingHandle === 'start' && newPos < trimEnd - 0.02) {
-      onUpdateTrim(newPos, trimEnd);
-    } else if (draggingHandle === 'end' && newPos > trimStart + 0.02) {
-      onUpdateTrim(trimStart, newPos);
-    }
-  };
-
-  const handleCanvasMouseUp = () => {
-    setDraggingHandle(null);
-  };
-
-  // Audition playback of current trim region
-  const handleAuditionTrim = async () => {
-    if (!audioBuffer) return;
-    const startFrame = Math.floor(trimStart * audioBuffer.length);
-    const endFrame = Math.floor(trimEnd * audioBuffer.length);
-    await audioEngine.playSlice(audioBuffer, startFrame, endFrame, 0);
+  const triggerSliceAudio = (sliceIndex: number) => {
+    setActiveSlice(sliceIndex);
+    audioEngine.triggerPad(sliceIndex % 16, 120);
+    setTimeout(() => setActiveSlice(null), 150);
   };
 
   return (
-    <div className="flex flex-col h-full bg-zinc-950 border border-zinc-800 rounded-lg p-2.5 font-mono text-zinc-300 select-none">
+    <div className="flex flex-col h-full w-full bg-zinc-950 text-zinc-100 font-mono p-3 gap-3 select-none overflow-hidden border border-zinc-800 rounded-lg">
       
-      <div className="flex justify-between items-center mb-2 shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30">
-            WORKBENCH
+      {/* Workbench Header & File Info */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-zinc-900/60 border border-zinc-800 px-3 py-2 rounded-lg gap-2 shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-bold text-amber-500 tracking-wider">
+            SAMPLE WORKBENCH // TRIM & SLICE
           </span>
-          <span className="text-[11px] font-bold text-zinc-200 truncate max-w-[140px]">
-            {sampleName}
+          <span className="text-[10px] text-zinc-400 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800">
+            FILE: {sampleName}
           </span>
         </div>
 
-        <div className="flex items-center gap-1 bg-zinc-900 p-0.5 rounded border border-zinc-800">
-          <button
-            onClick={() => setActiveTool('trim')}
-            className={`px-2 py-0.5 text-[9px] font-bold rounded cursor-pointer transition-all ${
-              activeTool === 'trim' ? 'bg-amber-500 text-zinc-950' : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            TRIM (MPC)
-          </button>
-          <button
-            onClick={() => setActiveTool('chop')}
-            className={`px-2 py-0.5 text-[9px] font-bold rounded cursor-pointer transition-all ${
-              activeTool === 'chop' ? 'bg-amber-500 text-zinc-950' : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            CHOP (SP)
-          </button>
+        {/* Auto-Slice Action Buttons */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] text-zinc-500">AUTO-SLICE:</span>
+          {[4, 8, 16].map((count) => (
+            <button
+              key={count}
+              onClick={() => handleAutoSlice(count)}
+              className="px-2 py-1 text-[9px] font-bold bg-zinc-950 text-amber-400 border border-zinc-800 hover:border-zinc-700 rounded cursor-pointer transition-all"
+            >
+              {count}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div
-        ref={containerRef}
-        className="flex-1 min-h-[90px] bg-zinc-950 rounded border border-zinc-800 relative overflow-hidden cursor-crosshair"
-      >
-        {!audioBuffer ? (
-          <div className="absolute inset-0 flex items-center justify-center text-[10px] text-zinc-600">
-            NO AUDIO BUFFER LOADED
-          </div>
-        ) : (
+      {/* Waveform Visualization Canvas Container */}
+      <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-xl p-3 gap-2 shrink-0">
+        <div className="relative w-full h-36 border border-zinc-800 rounded-lg overflow-hidden bg-zinc-950 shadow-inner">
           <canvas
             ref={canvasRef}
-            onMouseDown={handleCanvasMouseDown}
-            onMouseMove={handleCanvasMouseMove}
-            onMouseUp={handleCanvasMouseUp}
-            onMouseLeave={handleCanvasMouseUp}
-            className="w-full h-full block"
+            width={600}
+            height={144}
+            className="w-full h-full block cursor-crosshair"
           />
-        )}
+          <div className="absolute top-1 left-2 text-[8px] text-zinc-500 pointer-events-none">
+            WAVEFORM VIEW // TRIM START: {(localStart * 100).toFixed(1)}% | END: {(localEnd * 100).toFixed(1)}%
+          </div>
+        </div>
+
+        {/* Trim Sliders */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+          <div className="flex flex-col gap-1">
+            <div className="flex justify-between text-[9px] text-zinc-400">
+              <span>TRIM START</span>
+              <span className="text-emerald-400">{(localStart * 100).toFixed(1)}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="0.95"
+              step="0.01"
+              value={localStart}
+              onChange={(e) => handleTrimChange(Number(e.target.value), localEnd)}
+              className="accent-emerald-500 cursor-pointer"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <div className="flex justify-between text-[9px] text-zinc-400">
+              <span>TRIM END</span>
+              <span className="text-emerald-400">{(localEnd * 100).toFixed(1)}%</span>
+            </div>
+            <input
+              type="range"
+              min="0.05"
+              max="1"
+              step="0.01"
+              value={localEnd}
+              onChange={(e) => handleTrimChange(localStart, Number(e.target.value))}
+              className="accent-emerald-500 cursor-pointer"
+            />
+          </div>
+        </div>
       </div>
 
-      <div className="flex justify-between items-center mt-2 shrink-0 gap-1 text-[9px]">
-        <div className="flex gap-1">
-          <button
-            onClick={handleAuditionTrim}
-            disabled={!audioBuffer}
-            className="px-2 py-1 bg-emerald-950/60 hover:bg-emerald-900/60 active:bg-emerald-500 active:text-zinc-950 border border-emerald-800 rounded font-bold text-emerald-400 cursor-pointer disabled:opacity-40"
-          >
-            ▶ AUDITION TRIM
-          </button>
-          <button
-            onClick={() => onUpdateSlices([])}
-            disabled={slices.length === 0}
-            className="px-2 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded text-zinc-400 cursor-pointer disabled:opacity-40"
-          >
-            CLEAR SLICES
-          </button>
+      {/* Slices Audition Pad Grid */}
+      <div className="flex-1 flex flex-col gap-2 bg-zinc-900/20 border border-zinc-800/80 rounded-xl p-3 overflow-y-auto">
+        <div className="flex justify-between items-center text-[10px] text-zinc-400">
+          <span className="font-bold text-amber-400">AUDITION SLICES ({localSlices.length + 1} REGIONS)</span>
+          <span>TAP PAD TO AUDITION</span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-[8px] text-zinc-500">
-            TRIM: {(trimStart * 100).toFixed(0)}%–{(trimEnd * 100).toFixed(0)}%
-          </span>
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="px-2 py-1 bg-red-950/40 hover:bg-red-900/60 border border-red-800/60 text-red-400 font-bold rounded cursor-pointer"
-            >
-              HIDE
-            </button>
-          )}
+        <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+          {Array.from({ length: 16 }).map((_, idx) => {
+            const isPlaying = activeSlice === idx;
+            const sliceMarker = localSlices[idx];
+
+            return (
+              <button
+                key={idx}
+                onClick={() => triggerSliceAudio(idx)}
+                className={`flex flex-col justify-between p-3 h-20 rounded-xl border cursor-pointer transition-all ${
+                  isPlaying
+                    ? 'bg-blue-500/20 border-blue-400 text-blue-300 shadow-[0_0_15px_rgba(59,130,246,0.4)] font-bold'
+                    : 'bg-zinc-950 border-zinc-800 text-zinc-300 hover:border-zinc-700 hover:text-amber-400'
+                }`}
+              >
+                <div className="flex justify-between w-full text-[8px]">
+                  <span className="text-zinc-500">{idx < 9 ? `0${idx + 1}` : idx + 1}</span>
+                  <span className={isPlaying ? 'text-blue-400' : 'text-zinc-600'}>●</span>
+                </div>
+                <div className="flex justify-center items-center my-auto">
+                  <span className="text-xs font-bold">
+                    SLC {idx + 1}
+                  </span>
+                </div>
+                <div className="text-[7px] text-zinc-500 text-center">
+                  {sliceMarker ? `${(sliceMarker * 100).toFixed(0)}%` : 'FULL'}
+                </div>
+              </button>
+            );
+          })}
         </div>
+      </div>
+
+      {/* Footer Info */}
+      <div className="flex justify-between items-center text-[9px] text-zinc-500 px-1 shrink-0">
+        <span>Adjust trim bounds and auto-slice waveforms for multi-pad sample mapping.</span>
+        <span className="text-amber-400 font-bold">M8 SAMPLE WORKBENCH</span>
       </div>
 
     </div>
