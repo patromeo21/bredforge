@@ -17,6 +17,7 @@ export interface SampleWorkbenchProps {
   slices?: SliceMarker[];  
   onUpdateTrim?: (start: number, end: number) => void;
   onUpdateSlices?: (slices: SliceMarker[]) => void;
+  onLoadAudioBuffer?: (buffer: AudioBuffer, fileName: string) => void;
 }
 
 export function SampleWorkbench({
@@ -30,19 +31,44 @@ export function SampleWorkbench({
   ],
   onUpdateTrim = () => {},
   onUpdateSlices = () => {},
+  onLoadAudioBuffer = () => {},
 }: SampleWorkbenchProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const [localStart, setLocalStart] = useState<number>(trimStart);
   const [localEnd, setLocalEnd] = useState<number>(trimEnd);
   const [localSlices, setLocalSlices] = useState<SliceMarker[]>(slices);
   const [activeSlice, setActiveSlice] = useState<number | null>(null);
   const [sampleName, setSampleName] = useState<string>('BRED_BREAK_01.WAV');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   useEffect(() => {
     setLocalStart(trimStart);
     setLocalEnd(trimEnd);
     setLocalSlices(slices);
   }, [trimStart, trimEnd, slices]);
+
+  // Handle local file selection from iPad Files / device storage
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsLoading(true);
+    setSampleName(file.name.toUpperCase());
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const decodedBuffer = await audioEngine.decodeAudioData(arrayBuffer);
+      if (decodedBuffer) {
+        onLoadAudioBuffer(decodedBuffer, file.name);
+      }
+    } catch (err) {
+      console.error('Failed to decode audio file:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Render Waveform Canvas
   useEffect(() => {
@@ -61,6 +87,7 @@ export function SampleWorkbench({
     if (audioBuffer && audioBuffer.numberOfChannels > 0) {
       channelData = audioBuffer.getChannelData(0);
     } else {
+      // Synthetic drum break preview waveform fallback
       channelData = new Float32Array(800);
       for (let i = 0; i < 800; i++) {
         const envelope = Math.sin((i / 800) * Math.PI * 8) * Math.exp(-(i % 100) / 30);
@@ -151,16 +178,33 @@ export function SampleWorkbench({
   return (
     <div className="flex flex-col h-full w-full bg-zinc-950 text-zinc-100 font-mono p-3 gap-3 select-none overflow-hidden border border-zinc-800 rounded-lg">
       
+      {/* Hidden file input for loading device audio */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelected}
+        accept="audio/*"
+        className="hidden"
+      />
+
+      {/* Workbench Header & File Info */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-zinc-900/60 border border-zinc-800 px-3 py-2 rounded-lg gap-2 shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-xs font-bold text-amber-500 tracking-wider">
             SAMPLE WORKBENCH // TRIM & SLICE
           </span>
-          <span className="text-[10px] text-zinc-400 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800">
-            FILE: {sampleName}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="px-2.5 py-1 text-[10px] font-bold bg-amber-500 text-zinc-950 hover:bg-amber-400 rounded transition-all cursor-pointer"
+          >
+            {isLoading ? 'DECODING...' : '📁 IMPORT FILE'}
+          </button>
+          <span className="text-[10px] text-zinc-400 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800 truncate max-w-[180px]">
+            {sampleName}
           </span>
         </div>
 
+        {/* Auto-Slice Action Buttons */}
         <div className="flex items-center gap-1.5">
           <span className="text-[9px] text-zinc-500">AUTO-SLICE:</span>
           {[4, 8, 16].map((count) => (
@@ -175,6 +219,7 @@ export function SampleWorkbench({
         </div>
       </div>
 
+      {/* Waveform Visualization Canvas Container */}
       <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-xl p-3 gap-2 shrink-0">
         <div className="relative w-full h-36 border border-zinc-800 rounded-lg overflow-hidden bg-zinc-950 shadow-inner">
           <canvas
@@ -188,6 +233,7 @@ export function SampleWorkbench({
           </div>
         </div>
 
+        {/* Trim Sliders */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
           <div className="flex flex-col gap-1">
             <div className="flex justify-between text-[9px] text-zinc-400">
@@ -223,6 +269,7 @@ export function SampleWorkbench({
         </div>
       </div>
 
+      {/* Slices Audition Pad Grid */}
       <div className="flex-1 flex flex-col gap-2 bg-zinc-900/20 border border-zinc-800/80 rounded-xl p-3 overflow-y-auto">
         <div className="flex justify-between items-center text-[10px] text-zinc-400">
           <span className="font-bold text-amber-400">AUDITION SLICES ({localSlices.length + 1} REGIONS)</span>
@@ -262,6 +309,7 @@ export function SampleWorkbench({
         </div>
       </div>
 
+      {/* Footer Info */}
       <div className="flex justify-between items-center text-[9px] text-zinc-500 px-1 shrink-0">
         <span>Adjust trim bounds and auto-slice waveforms for multi-pad sample mapping.</span>
         <span className="text-amber-400 font-bold">M8 SAMPLE WORKBENCH</span>
