@@ -76,7 +76,6 @@ export class AudioEngine {
     const voiceGain = this.ctx.createGain();
     voiceGain.connect(this.masterGain);
 
-    // Procedural sound design based on pad bank zones
     if (padIndex >= 0 && padIndex <= 3) {
       // KICK / SUB BASS (Pads 1-4)
       const osc = this.ctx.createOscillator();
@@ -174,15 +173,29 @@ export class AudioEngine {
   }
 
   /**
-   * Playback sample slice from SampleWorkbench
+   * Flexible playSlice overload supporting AudioBuffers from SampleWorkbench
    */
-  public playSlice(sliceIndex: number, pitch: number = 0, startPos: number = 0, endPos: number = 1): void {
+  public playSlice(
+    sliceIndexOrBuffer: number | AudioBuffer,
+    pitchOrStart: number = 0,
+    startPosOrEnd: number = 0,
+    endPos: number = 1
+  ): void {
     if (!this.ctx || !this.masterGain) {
-      this.initAudio().then(() => this.playSlice(sliceIndex, pitch, startPos, endPos));
+      this.initAudio().then(() => this.playSlice(sliceIndexOrBuffer, pitchOrStart, startPosOrEnd, endPos));
       return;
     }
-    // Route slice playback through procedural voice generator with pitch offset
-    this.triggerPad(sliceIndex % 16, 110);
+
+    if (typeof sliceIndexOrBuffer === 'number') {
+      this.triggerPad(sliceIndexOrBuffer % 16, 110);
+    } else {
+      // If an AudioBuffer is passed from SampleWorkbench, play it directly
+      const source = this.ctx.createBufferSource();
+      source.buffer = sliceIndexOrBuffer;
+      source.playbackRate.setValueAtTime(Math.pow(2, pitchOrStart / 12), this.ctx.currentTime);
+      source.connect(this.masterGain);
+      source.start();
+    }
   }
 }
 
