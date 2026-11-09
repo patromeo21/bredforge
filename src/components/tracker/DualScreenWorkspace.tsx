@@ -1,11 +1,12 @@
 // ============================================================================
-// BREDFORGE v1.0 — DUAL-SCREEN WORKSPACE WITH PUNCH-IN FX BRIDGE [REF: DUAL-03]
+// BREDFORGE v1.0 — DUAL-SCREEN WORKSPACE WITH AUDIO ENGINE BRIDGE [REF: DUAL-04]
 // ============================================================================
 
 import React, { useState } from 'react';
 import { PadMatrix, PadData } from './PadMatrix';
 import { SampleWorkbench, SliceMarker } from './SampleWorkbench';
 import { useLiveStepRecord, PhraseStep } from '../../hooks/useLiveStepRecord';
+import { audioEngine } from '../../services/AudioEngine';
 
 interface DualScreenWorkspaceProps {
   projectName?: string;
@@ -19,15 +20,11 @@ export function DualScreenWorkspace({
   const [showWorkbench, setShowWorkbench] = useState<boolean>(true);
   const [activeBank, setActiveBank] = useState<'A' | 'B' | 'C' | 'D'>('A');
 
-  // Transport & Live Recording State
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [isLiveRecArmed, setIsLiveRecArmed] = useState<boolean>(false);
   const [currentStep, setCurrentStep] = useState<number>(0);
-
-  // Punch-In FX Live Activation State
   const [activePunchInFx, setActivePunchInFx] = useState<string | null>(null);
 
-  // M8 Phrase Steps Grid State (16 steps)
   const [phraseSteps, setPhraseSteps] = useState<PhraseStep[]>(
     Array.from({ length: 16 }, (_, idx) => ({
       stepIndex: idx,
@@ -38,25 +35,23 @@ export function DualScreenWorkspace({
     }))
   );
 
-  // Sample Workbench State
-  const [currentAudioBuffer] = useState<AudioBuffer | null>(null);
+  // Shared Audio Buffer & Sample State
+  const [currentAudioBuffer, setCurrentAudioBuffer] = useState<AudioBuffer | null>(null);
   const [sampleName] = useState<string>('kick_808_raw.wav');
   const [trimStart, setTrimStart] = useState<number>(0.0);
   const [trimEnd, setTrimEnd] = useState<number>(1.0);
   const [slices, setSlices] = useState<SliceMarker[]>([]);
 
-  // 4x4 Pad Matrix State
   const [pads] = useState<PadData[]>(
     Array.from({ length: 16 }, (_, i) => ({
       id: i + 1,
       name: `Pad ${i + 1}`,
       note: `C-${Math.floor(i / 4) + 1}`,
       sampleName: i === 0 ? 'kick_808_raw.wav' : i === 1 ? 'snare_clap.wav' : undefined,
-      audioBuffer: i < 2 ? ({} as AudioBuffer) : null,
+      audioBuffer: currentAudioBuffer,
     }))
   );
 
-  // Live Step Record Hook Integration
   const { recordPadHit } = useLiveStepRecord({
     isArmed: isLiveRecArmed,
     isPlaying,
@@ -70,48 +65,36 @@ export function DualScreenWorkspace({
     },
   });
 
-  const handleTriggerPad = (pad: PadData) => {
+  // Trigger Pad with Real Web Audio Playback
+  const handleTriggerPad = async (pad: PadData) => {
     console.log(`[Pad Trigger] Bank ${activeBank} Pad ${pad.id} (${pad.note}) triggered.`);
+    
+    if (pad.audioBuffer) {
+      const startFrame = Math.floor(trimStart * pad.audioBuffer.length);
+      const endFrame = Math.floor(trimEnd * pad.audioBuffer.length);
+      await audioEngine.playSlice(pad.audioBuffer, startFrame, endFrame, 0);
+    }
+
     recordPadHit(pad.id, activeBank);
   };
 
-  // --------------------------------------------------------------------------
-  // M8 HARDWARE BUTTONS TO PUNCH-IN FX BRIDGE ROUTING
-  // --------------------------------------------------------------------------
   const handleM8Action = (command: string) => {
-    console.log(`[M8 Hardware Action / Punch-In Bridge] Executed: ${command}`);
-
-    switch (command) {
-      case 'SEQ_PLAY':
-        setIsPlaying((prev) => !prev);
-        break;
-      case 'EDIT_VAL':
-        // [EDIT] Key -> Tape Stop / Brake FX
-        triggerPunchInEffect('TAPE STOP / BRAKE [EDIT]');
-        break;
-      case 'OPT_MENU':
-        // [OPTION] Key -> Lo-Fi Bitcrusher FX
-        triggerPunchInEffect('BITCRUSH / LO-FI [OPTION]');
-        break;
-      case 'MOD_SHIFT':
-        // [SHIFT] Key -> Gater / Stutter FX
-        triggerPunchInEffect('GATER / STUTTER [SHIFT]');
-        break;
-      case 'NAV_UP':
-      case 'NAV_DOWN':
-      case 'NAV_LEFT':
-      case 'NAV_RIGHT':
-        // D-Pad -> Resonant Filter Sweep / Pitch Bend
-        triggerPunchInEffect(`FILTER SWEEP (${command.replace('NAV_', '')})`);
-        break;
-      default:
-        break;
+    console.log(`[M8 Hardware Action] Executed: ${command}`);
+    if (command === 'SEQ_PLAY') {
+      setIsPlaying((prev) => !prev);
+    } else if (command === 'EDIT_VAL') {
+      triggerPunchInEffect('TAPE STOP / BRAKE [EDIT]');
+    } else if (command === 'OPT_MENU') {
+      triggerPunchInEffect('BITCRUSH / LO-FI [OPTION]');
+    } else if (command === 'MOD_SHIFT') {
+      triggerPunchInEffect('GATER / STUTTER [SHIFT]');
+    } else {
+      triggerPunchInEffect(`FILTER SWEEP (${command.replace('NAV_', '')})`);
     }
   };
 
   const triggerPunchInEffect = (effectName: string) => {
     setActivePunchInFx(effectName);
-    // Auto-clear visual indicator after punch release simulation
     setTimeout(() => {
       setActivePunchInFx((current) => (current === effectName ? null : current));
     }, 600);
@@ -120,7 +103,6 @@ export function DualScreenWorkspace({
   return (
     <div className="flex flex-col h-full w-full bg-zinc-950 text-zinc-100 font-mono p-2 gap-2 select-none overflow-hidden">
       
-      {/* Top System Bar: Transport & Active Punch-In FX Status */}
       <div className="flex justify-between items-center bg-zinc-900/60 border border-zinc-800 px-3 py-1.5 rounded-lg shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-xs font-bold text-amber-500 tracking-wider">
@@ -130,7 +112,6 @@ export function DualScreenWorkspace({
             {tempo.toFixed(1)} BPM
           </span>
 
-          {/* Active Punch-In FX Live Indicator */}
           {activePunchInFx && (
             <span className="text-[10px] font-bold text-amber-950 bg-amber-400 px-2 py-0.5 rounded animate-pulse shadow-[0_0_10px_#f59e0b]">
               ⚡ FX ACTIVE: {activePunchInFx}
@@ -138,7 +119,6 @@ export function DualScreenWorkspace({
           )}
         </div>
 
-        {/* Transport & Record Arm Controls */}
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsLiveRecArmed(!isLiveRecArmed)}
@@ -175,10 +155,8 @@ export function DualScreenWorkspace({
         </div>
       </div>
 
-      {/* Main Dual-Screen Viewport */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-2 min-h-0">
         
-        {/* LEFT PANEL: M8 Tracker 16-Step Phrase Grid */}
         <div className="bg-zinc-900/40 border border-zinc-800 rounded-lg p-3 flex flex-col min-h-0 overflow-hidden">
           <div className="flex justify-between items-center mb-2 shrink-0 border-b border-zinc-800 pb-2">
             <span className="text-[11px] font-bold text-emerald-400 tracking-wider">
@@ -214,7 +192,6 @@ export function DualScreenWorkspace({
           </div>
         </div>
 
-        {/* RIGHT PANEL: Non-Disruptive Workbench + Pad Matrix / M8 Hardware */}
         <div className="flex flex-col h-full gap-2 min-h-0">
           
           {showWorkbench && (
