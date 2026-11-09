@@ -5,13 +5,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { audioEngine } from '../../services/AudioEngine';
 
-export type SliceMarker = number;
+export interface SliceMarker {
+  id: string;
+  position: number; // Normalized 0.0 to 1.0
+}
 
 export interface SampleWorkbenchProps {
   audioBuffer?: AudioBuffer | null;
   trimStart?: number; // 0.0 to 1.0 normalized
   trimEnd?: number;   // 0.0 to 1.0 normalized
-  slices?: SliceMarker[];  // Array of normalized slice positions (0.0 to 1.0)
+  slices?: SliceMarker[];  
   onUpdateTrim?: (start: number, end: number) => void;
   onUpdateSlices?: (slices: SliceMarker[]) => void;
 }
@@ -20,7 +23,11 @@ export function SampleWorkbench({
   audioBuffer = null,
   trimStart = 0.0,
   trimEnd = 1.0,
-  slices = [0.25, 0.5, 0.75],
+  slices = [
+    { id: '1', position: 0.25 },
+    { id: '2', position: 0.5 },
+    { id: '3', position: 0.75 },
+  ],
   onUpdateTrim = () => {},
   onUpdateSlices = () => {},
 }: SampleWorkbenchProps) {
@@ -31,7 +38,6 @@ export function SampleWorkbench({
   const [activeSlice, setActiveSlice] = useState<number | null>(null);
   const [sampleName, setSampleName] = useState<string>('BRED_BREAK_01.WAV');
 
-  // Sync props if updated externally
   useEffect(() => {
     setLocalStart(trimStart);
     setLocalEnd(trimEnd);
@@ -48,16 +54,13 @@ export function SampleWorkbench({
     const width = canvas.width;
     const height = canvas.height;
 
-    // Clear background
     ctx.fillStyle = '#09090b'; // zinc-950
     ctx.fillRect(0, 0, width, height);
 
-    // Get channel data or generate synthetic preview waveform if no buffer loaded
     let channelData: Float32Array;
     if (audioBuffer && audioBuffer.numberOfChannels > 0) {
       channelData = audioBuffer.getChannelData(0);
     } else {
-      // Synthetic drum break preview waveform
       channelData = new Float32Array(800);
       for (let i = 0; i < 800; i++) {
         const envelope = Math.sin((i / 800) * Math.PI * 8) * Math.exp(-(i % 100) / 30);
@@ -68,7 +71,6 @@ export function SampleWorkbench({
     const step = Math.ceil(channelData.length / width);
     const amp = height / 2;
 
-    // Draw Waveform centerline
     ctx.strokeStyle = '#27272a';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -76,7 +78,6 @@ export function SampleWorkbench({
     ctx.lineTo(width, amp);
     ctx.stroke();
 
-    // Draw Waveform bars (Amber phosphor style)
     ctx.lineWidth = 2;
     ctx.strokeStyle = '#f59e0b';
     ctx.beginPath();
@@ -94,7 +95,6 @@ export function SampleWorkbench({
     }
     ctx.stroke();
 
-    // Draw Trim Regions (Dim out unselected regions)
     const startX = localStart * width;
     const endX = localEnd * width;
 
@@ -102,8 +102,7 @@ export function SampleWorkbench({
     ctx.fillRect(0, 0, startX, height);
     ctx.fillRect(endX, 0, width - endX, height);
 
-    // Draw Trim Handles
-    ctx.strokeStyle = '#34d399'; // Emerald for trim
+    ctx.strokeStyle = '#34d399';
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(startX, 0);
@@ -112,10 +111,9 @@ export function SampleWorkbench({
     ctx.lineTo(endX, height);
     ctx.stroke();
 
-    // Draw Slices
-    localSlices.forEach((slicePos, idx) => {
-      const sliceX = slicePos * width;
-      ctx.strokeStyle = activeSlice === idx ? '#60a5fa' : '#f43f5e'; // Blue when active, rose for slices
+    localSlices.forEach((slice, idx) => {
+      const sliceX = slice.position * width;
+      ctx.strokeStyle = activeSlice === idx ? '#60a5fa' : '#f43f5e';
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(sliceX, 0);
@@ -135,7 +133,10 @@ export function SampleWorkbench({
     const newSlices: SliceMarker[] = [];
     const span = localEnd - localStart;
     for (let i = 1; i < count; i++) {
-      newSlices.push(localStart + (span * i) / count);
+      newSlices.push({
+        id: `slice_${i}`,
+        position: localStart + (span * i) / count,
+      });
     }
     setLocalSlices(newSlices);
     onUpdateSlices(newSlices);
@@ -150,7 +151,6 @@ export function SampleWorkbench({
   return (
     <div className="flex flex-col h-full w-full bg-zinc-950 text-zinc-100 font-mono p-3 gap-3 select-none overflow-hidden border border-zinc-800 rounded-lg">
       
-      {/* Workbench Header & File Info */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-zinc-900/60 border border-zinc-800 px-3 py-2 rounded-lg gap-2 shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-xs font-bold text-amber-500 tracking-wider">
@@ -161,7 +161,6 @@ export function SampleWorkbench({
           </span>
         </div>
 
-        {/* Auto-Slice Action Buttons */}
         <div className="flex items-center gap-1.5">
           <span className="text-[9px] text-zinc-500">AUTO-SLICE:</span>
           {[4, 8, 16].map((count) => (
@@ -176,7 +175,6 @@ export function SampleWorkbench({
         </div>
       </div>
 
-      {/* Waveform Visualization Canvas Container */}
       <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-xl p-3 gap-2 shrink-0">
         <div className="relative w-full h-36 border border-zinc-800 rounded-lg overflow-hidden bg-zinc-950 shadow-inner">
           <canvas
@@ -190,7 +188,6 @@ export function SampleWorkbench({
           </div>
         </div>
 
-        {/* Trim Sliders */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
           <div className="flex flex-col gap-1">
             <div className="flex justify-between text-[9px] text-zinc-400">
@@ -226,7 +223,6 @@ export function SampleWorkbench({
         </div>
       </div>
 
-      {/* Slices Audition Pad Grid */}
       <div className="flex-1 flex flex-col gap-2 bg-zinc-900/20 border border-zinc-800/80 rounded-xl p-3 overflow-y-auto">
         <div className="flex justify-between items-center text-[10px] text-zinc-400">
           <span className="font-bold text-amber-400">AUDITION SLICES ({localSlices.length + 1} REGIONS)</span>
@@ -236,7 +232,7 @@ export function SampleWorkbench({
         <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
           {Array.from({ length: 16 }).map((_, idx) => {
             const isPlaying = activeSlice === idx;
-            const sliceMarker = localSlices[idx];
+            const slice = localSlices[idx];
 
             return (
               <button
@@ -258,7 +254,7 @@ export function SampleWorkbench({
                   </span>
                 </div>
                 <div className="text-[7px] text-zinc-500 text-center">
-                  {sliceMarker !== undefined ? `${(sliceMarker * 100).toFixed(0)}%` : 'FULL'}
+                  {slice ? `${(slice.position * 100).toFixed(0)}%` : 'FULL'}
                 </div>
               </button>
             );
@@ -266,7 +262,6 @@ export function SampleWorkbench({
         </div>
       </div>
 
-      {/* Footer Info */}
       <div className="flex justify-between items-center text-[9px] text-zinc-500 px-1 shrink-0">
         <span>Adjust trim bounds and auto-slice waveforms for multi-pad sample mapping.</span>
         <span className="text-amber-400 font-bold">M8 SAMPLE WORKBENCH</span>
