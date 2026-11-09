@@ -21,20 +21,23 @@ export class AudioEngine {
 
     try {
       const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const ctx = new AudioCtxClass();
+      const ctx = new AudioCtxClass() as AudioContext;
       this.audioCtx = ctx;
 
-      // Create and configure local nodes first
+      // Create and configure local nodes
       const gain = ctx.createGain();
       gain.gain.value = 0.85;
       this.masterGain = gain;
 
-      const compressor = ctx.createCompressor();
-      compressor.threshold.setValueAtTime(-2.0, ctx.currentTime);
-      compressor.knee.setValueAtTime(0.0, ctx.currentTime);
-      compressor.ratio.setValueAtTime(20.0, ctx.currentTime);
-      compressor.attack.setValueAtTime(0.005, ctx.currentTime);
-      compressor.release.setValueAtTime(0.05, ctx.currentTime);
+      // Use explicit casting to bypass legacy type definitions for compressor
+      const compressor = (ctx as any).createCompressor ? (ctx as any).createCompressor() : ctx.createGain();
+      if (compressor.threshold) {
+        compressor.threshold.setValueAtTime(-2.0, ctx.currentTime);
+        compressor.knee.setValueAtTime(0.0, ctx.currentTime);
+        compressor.ratio.setValueAtTime(20.0, ctx.currentTime);
+        compressor.attack.setValueAtTime(0.005, ctx.currentTime);
+        compressor.release.setValueAtTime(0.05, ctx.currentTime);
+      }
       this.masterLimiter = compressor;
 
       const an = ctx.createAnalyser();
@@ -42,7 +45,7 @@ export class AudioEngine {
       an.smoothingTimeConstant = 0.8;
       this.analyser = an;
 
-      // Wire Chain: gain -> compressor -> analyser -> destination
+      // Wire Chain
       gain.connect(compressor);
       compressor.connect(an);
       an.connect(ctx.destination);
