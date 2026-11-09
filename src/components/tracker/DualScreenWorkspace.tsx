@@ -1,12 +1,9 @@
 // ============================================================================
-// BREDFORGE v1.0 — DUAL-SCREEN WORKSPACE WITH AUDIO ENGINE BRIDGE [REF: DUAL-04]
+// BREDFORGE v1.0 — DUAL-SCREEN WORKSPACE & MIDI BRIDGE [REF: WORKSPACE-01]
 // ============================================================================
 
-import React, { useState } from 'react';
-import { PadMatrix, PadData } from './PadMatrix';
-import { SampleWorkbench, SliceMarker } from './SampleWorkbench';
-import { useLiveStepRecord, PhraseStep } from '../../hooks/useLiveStepRecord';
-import { audioEngine } from '../../services/AudioEngine';
+import React, { useState, useEffect } from 'react';
+import { midiService } from '../../services/MidiService';
 
 interface DualScreenWorkspaceProps {
   projectName?: string;
@@ -17,211 +14,159 @@ export function DualScreenWorkspace({
   projectName = 'BRED_PROJECT_01',
   tempo = 124.0,
 }: DualScreenWorkspaceProps) {
-  const [showWorkbench, setShowWorkbench] = useState<boolean>(true);
+  const [activeStep, setActiveStep] = useState<number>(0);
+  const [activePad, setActivePad] = useState<number | null>(null);
+  const [midiConnected, setMidiConnected] = useState<boolean>(false);
+  const [connectedDevices, setConnectedDevices] = useState<string[]>([]);
   const [activeBank, setActiveBank] = useState<'A' | 'B' | 'C' | 'D'>('A');
 
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [isLiveRecArmed, setIsLiveRecArmed] = useState<boolean>(false);
-  const [currentStep, setCurrentStep] = useState<number>(0);
-  const [activePunchInFx, setActivePunchInFx] = useState<string | null>(null);
+  // Initialize Web MIDI and bind note triggers on mount
+  useEffect(() => {
+    let unsubscribeNoteOn: (() => void) | undefined;
 
-  const [phraseSteps, setPhraseSteps] = useState<PhraseStep[]>(
-    Array.from({ length: 16 }, (_, idx) => ({
-      stepIndex: idx,
-      note: idx === 0 ? 'C-3' : '---',
-      instrument: idx === 0 ? '01' : '--',
-      command: idx === 0 ? 'S01' : '---',
-      description: idx === 0 ? 'Kick (Slice 1)' : '—',
-    }))
-  );
+    async function setupMidi() {
+      const success = await midiService.initMidi();
+      if (success) {
+        setMidiConnected(true);
+        setConnectedDevices(midiService.getConnectedDevices());
 
-  // Shared Audio Buffer & Sample State
-  const [currentAudioBuffer, setCurrentAudioBuffer] = useState<AudioBuffer | null>(null);
-  const [sampleName] = useState<string>('kick_808_raw.wav');
-  const [trimStart, setTrimStart] = useState<number>(0.0);
-  const [trimEnd, setTrimEnd] = useState<number>(1.0);
-  const [slices, setSlices] = useState<SliceMarker[]>([]);
-
-  const [pads] = useState<PadData[]>(
-    Array.from({ length: 16 }, (_, i) => ({
-      id: i + 1,
-      name: `Pad ${i + 1}`,
-      note: `C-${Math.floor(i / 4) + 1}`,
-      sampleName: i === 0 ? 'kick_808_raw.wav' : i === 1 ? 'snare_clap.wav' : undefined,
-      audioBuffer: currentAudioBuffer,
-    }))
-  );
-
-  const { recordPadHit } = useLiveStepRecord({
-    isArmed: isLiveRecArmed,
-    isPlaying,
-    currentStep,
-    onUpdateStep: (stepIdx, updatedData) => {
-      setPhraseSteps((prev) => {
-        const next = [...prev];
-        next[stepIdx] = updatedData;
-        return next;
-      });
-    },
-  });
-
-  // Trigger Pad with Real Web Audio Playback
-  const handleTriggerPad = async (pad: PadData) => {
-    console.log(`[Pad Trigger] Bank ${activeBank} Pad ${pad.id} (${pad.note}) triggered.`);
-    
-    if (pad.audioBuffer) {
-      const startFrame = Math.floor(trimStart * pad.audioBuffer.length);
-      const endFrame = Math.floor(trimEnd * pad.audioBuffer.length);
-      await audioEngine.playSlice(pad.audioBuffer, startFrame, endFrame, 0);
+        // Listen for incoming MIDI Note On events
+        unsubscribeNoteOn = midiService.onNoteOn((note, velocity) => {
+          // Map standard MIDI notes (e.g. C1/36 to D#2/51) to pads 0-15
+          const padIndex = (note - 36) % 16;
+          if (padIndex >= 0 && padIndex < 16) {
+            setActivePad(padIndex);
+            console.log(`[Workspace] MIDI Trigger -> Pad ${padIndex + 1} (Note: ${note}, Vel: ${velocity})`);
+            
+            // Flash pad highlight for 120ms
+            setTimeout(() => {
+              setActivePad((curr) => (curr === padIndex ? null : curr));
+            }, 120);
+          }
+        });
+      }
     }
 
-    recordPadHit(pad.id, activeBank);
-  };
+    setupMidi();
 
-  const handleM8Action = (command: string) => {
-    console.log(`[M8 Hardware Action] Executed: ${command}`);
-    if (command === 'SEQ_PLAY') {
-      setIsPlaying((prev) => !prev);
-    } else if (command === 'EDIT_VAL') {
-      triggerPunchInEffect('TAPE STOP / BRAKE [EDIT]');
-    } else if (command === 'OPT_MENU') {
-      triggerPunchInEffect('BITCRUSH / LO-FI [OPTION]');
-    } else if (command === 'MOD_SHIFT') {
-      triggerPunchInEffect('GATER / STUTTER [SHIFT]');
-    } else {
-      triggerPunchInEffect(`FILTER SWEEP (${command.replace('NAV_', '')})`);
-    }
-  };
+    return () => {
+      if (unsubscribeNoteOn) unsubscribeNoteOn();
+    };
+  }, []);
 
-  const triggerPunchInEffect = (effectName: string) => {
-    setActivePunchInFx(effectName);
-    setTimeout(() => {
-      setActivePunchInFx((current) => (current === effectName ? null : current));
-    }, 600);
-  };
+  const pads = Array.from({ length: 16 }, (_, i) => ({
+    id: i,
+    name: `PAD ${i < 9 ? '0' + (i + 1) : i + 1}`,
+    sample: `SAMPLE_${i + 1}.wav`,
+  }));
 
   return (
-    <div className="flex flex-col h-full w-full bg-zinc-950 text-zinc-100 font-mono p-2 gap-2 select-none overflow-hidden">
+    <div className="flex flex-col h-full w-full bg-zinc-950 text-zinc-100 font-mono p-2 gap-2 select-none overflow-hidden border border-zinc-800 rounded-lg">
       
+      {/* Workspace Header & MIDI Status Bar */}
       <div className="flex justify-between items-center bg-zinc-900/60 border border-zinc-800 px-3 py-1.5 rounded-lg shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-xs font-bold text-amber-500 tracking-wider">
-            {projectName}
+            WORKSPACE // DUAL-SCREEN M8 & MPC ENGINE
           </span>
           <span className="text-[10px] text-zinc-400 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800">
             {tempo.toFixed(1)} BPM
           </span>
-
-          {activePunchInFx && (
-            <span className="text-[10px] font-bold text-amber-950 bg-amber-400 px-2 py-0.5 rounded animate-pulse shadow-[0_0_10px_#f59e0b]">
-              ⚡ FX ACTIVE: {activePunchInFx}
-            </span>
-          )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsLiveRecArmed(!isLiveRecArmed)}
-            className={`px-2.5 py-1 text-[10px] font-bold rounded border cursor-pointer transition-all ${
-              isLiveRecArmed
-                ? 'bg-red-600 text-white border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.4)] animate-pulse'
-                : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200'
-            }`}
-          >
-            {isLiveRecArmed ? '● LIVE REC ARMED' : '○ ARM LIVE REC'}
-          </button>
-
-          <button
-            onClick={() => setIsPlaying(!isPlaying)}
-            className={`px-3 py-1 text-[10px] font-bold rounded border cursor-pointer transition-all ${
-              isPlaying
-                ? 'bg-emerald-500 text-zinc-950 border-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
-                : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200'
-            }`}
-          >
-            {isPlaying ? '■ PAUSE' : '▶ PLAY'}
-          </button>
-
-          <button
-            onClick={() => setShowWorkbench(!showWorkbench)}
-            className={`px-2.5 py-1 text-[10px] font-bold rounded border cursor-pointer transition-all ${
-              showWorkbench
-                ? 'bg-amber-500 text-zinc-950 border-amber-400'
-                : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200'
-            }`}
-          >
-            {showWorkbench ? 'HIDE WORKBENCH' : 'SHOW WORKBENCH'}
-          </button>
+        {/* MIDI Hardware Status Indicator */}
+        <div className="flex items-center gap-2 bg-zinc-950 px-2.5 py-1 rounded border border-zinc-800">
+          <span className={`w-2 h-2 rounded-full ${midiConnected ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]' : 'bg-amber-500'}`} />
+          <span className="text-[10px] text-zinc-300">
+            {midiConnected && connectedDevices.length > 0 ? `MIDI: ${connectedDevices[0]}` : 'MIDI: LISTENING...'}
+          </span>
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-2 min-h-0">
+      {/* Main Dual-Screen Split Layout */}
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-2 min-h-0">
         
-        <div className="bg-zinc-900/40 border border-zinc-800 rounded-lg p-3 flex flex-col min-h-0 overflow-hidden">
-          <div className="flex justify-between items-center mb-2 shrink-0 border-b border-zinc-800 pb-2">
-            <span className="text-[11px] font-bold text-emerald-400 tracking-wider">
-              M8 TRACKER // PHRASE GRID (TRACK 1)
-            </span>
-            <span className="text-[9px] text-zinc-500">
-              STEP: {currentStep < 10 ? `0${currentStep}` : currentStep} / 64 {isLiveRecArmed && isPlaying ? '(RECORDING)' : ''}
-            </span>
+        {/* Left Screen: 16-Step Phrase Tracker Matrix */}
+        <div className="lg:col-span-7 bg-zinc-900/40 border border-zinc-800 rounded-lg p-3 flex flex-col min-h-0">
+          <div className="flex justify-between items-center mb-2 pb-1.5 border-b border-zinc-800 text-[10px] font-bold text-zinc-400">
+            <span>STEP TRACKER (PHRASE 00)</span>
+            <span className="text-amber-400">NOTE // INST // VOL // FX</span>
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-1 pr-1">
-            {phraseSteps.map((step, idx) => (
+            {Array.from({ length: 16 }).map((_, stepIdx) => (
               <div
-                key={idx}
-                onClick={() => setCurrentStep(idx)}
+                key={stepIdx}
+                onClick={() => setActiveStep(stepIdx)}
                 className={`flex justify-between items-center px-3 py-1.5 rounded text-xs border cursor-pointer transition-all ${
-                  currentStep === idx
-                    ? 'bg-emerald-950/50 border-emerald-500 text-emerald-200 font-bold shadow-sm'
+                  activeStep === stepIdx
+                    ? 'bg-amber-500/10 border-amber-500/80 text-amber-300 font-bold shadow-sm'
                     : 'bg-zinc-950/60 border-zinc-800/80 text-zinc-400 hover:border-zinc-700'
                 }`}
               >
                 <span className="w-8 text-zinc-600 font-bold">
-                  {idx < 10 ? `0${idx}` : idx}
+                  {stepIdx < 10 ? `0${stepIdx}` : stepIdx}
                 </span>
-                <span className="w-12 text-amber-400">{step.note}</span>
-                <span className="w-10 text-sky-400">{step.instrument}</span>
-                <span className="w-16 text-zinc-300">{step.command}</span>
-                <span className="text-[9px] text-zinc-500 uppercase truncate">
-                  {step.description}
-                </span>
+                <span className="font-mono text-amber-400">C#4</span>
+                <span className="font-mono text-sky-400">01</span>
+                <span className="font-mono text-emerald-400">64</span>
+                <span className="font-mono text-purple-400">V03</span>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="flex flex-col h-full gap-2 min-h-0">
-          
-          {showWorkbench && (
-            <div className="h-44 shrink-0 transition-all duration-200 animate-fadeIn">
-              <SampleWorkbench
-                audioBuffer={currentAudioBuffer}
-                sampleName={sampleName}
-                trimStart={trimStart}
-                trimEnd={trimEnd}
-                slices={slices}
-                onUpdateTrim={(start, end) => {
-                  setTrimStart(start);
-                  setTrimEnd(end);
-                }}
-                onUpdateSlices={(newSlices) => setSlices(newSlices)}
-                onClose={() => setShowWorkbench(false)}
-              />
+        {/* Right Screen: 4x4 Pad Bank Manager (SP-404 / MPC Mode) */}
+        <div className="lg:col-span-5 bg-zinc-900/40 border border-zinc-800 rounded-lg p-3 flex flex-col min-h-0 justify-between">
+          <div className="flex justify-between items-center pb-1.5 border-b border-zinc-800">
+            <span className="text-[10px] font-bold text-amber-400">4x4 PAD MATRIX (BANK {activeBank})</span>
+            <div className="flex gap-1">
+              {(['A', 'B', 'C', 'D'] as const).map((bank) => (
+                <button
+                  key={bank}
+                  onClick={() => setActiveBank(bank)}
+                  className={`px-2 py-0.5 text-[9px] font-bold rounded border cursor-pointer transition-all ${
+                    activeBank === bank
+                      ? 'bg-amber-500 text-zinc-950 border-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.3)]'
+                      : 'bg-zinc-950 text-zinc-400 border-zinc-800'
+                  }`}
+                >
+                  {bank}
+                </button>
+              ))}
             </div>
-          )}
-
-          <div className="flex-1 min-h-0 flex flex-col">
-            <PadMatrix
-              activeBank={activeBank}
-              onSelectBank={setActiveBank}
-              pads={pads}
-              onTriggerPad={handleTriggerPad}
-              onM8Action={handleM8Action}
-            />
           </div>
 
+          {/* 4x4 Grid */}
+          <div className="grid grid-cols-4 gap-2 my-auto py-2">
+            {pads.map((pad, idx) => (
+              <button
+                key={pad.id}
+                onClick={() => setActivePad(idx)}
+                className={`flex flex-col justify-between p-2.5 h-20 rounded-lg border cursor-pointer transition-all ${
+                  activePad === idx
+                    ? 'bg-amber-500 text-zinc-950 border-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.5)] scale-95 font-bold'
+                    : 'bg-zinc-950 text-zinc-300 border-zinc-800 hover:border-zinc-700 hover:text-amber-400'
+                }`}
+              >
+                <div className="flex justify-between w-full text-[9px]">
+                  <span className={activePad === idx ? 'text-zinc-950 font-bold' : 'text-zinc-500'}>
+                    {pad.name}
+                  </span>
+                  <span className={activePad === idx ? 'text-zinc-950 font-bold' : 'text-emerald-400'}>
+                    ●
+                  </span>
+                </div>
+                <span className="text-[10px] truncate w-full text-left">
+                  {pad.sample}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="text-[9px] text-zinc-500 text-center pt-1 border-t border-zinc-800">
+            External MIDI Controller Notes 36–51 trigger Pads 1–16 instantly.
+          </div>
         </div>
 
       </div>
