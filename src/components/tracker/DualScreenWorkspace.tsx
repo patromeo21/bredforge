@@ -1,9 +1,10 @@
 // ============================================================================
-// BREDFORGE v1.0 — DUAL-SCREEN WORKSPACE & MIDI BRIDGE [REF: WORKSPACE-01]
+// BREDFORGE v1.0 — DUAL-SCREEN WORKSPACE & AUDIO/MIDI BRIDGE [REF: WORKSPACE-01]
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
 import { midiService } from '../../services/MidiService';
+import { audioEngine } from '../../services/AudioEngine';
 
 interface DualScreenWorkspaceProps {
   projectName?: string;
@@ -20,11 +21,14 @@ export function DualScreenWorkspace({
   const [connectedDevices, setConnectedDevices] = useState<string[]>([]);
   const [activeBank, setActiveBank] = useState<'A' | 'B' | 'C' | 'D'>('A');
 
-  // Initialize Web MIDI and bind note triggers on mount
+  // Initialize Web Audio and Web MIDI on mount
   useEffect(() => {
     let unsubscribeNoteOn: (() => void) | undefined;
 
-    async function setupMidi() {
+    async function initSystem() {
+      // Unlock AudioContext on mount/interaction
+      await audioEngine.initAudio();
+
       const success = await midiService.initMidi();
       if (success) {
         setMidiConnected(true);
@@ -32,13 +36,12 @@ export function DualScreenWorkspace({
 
         // Listen for incoming MIDI Note On events
         unsubscribeNoteOn = midiService.onNoteOn((note, velocity) => {
-          // Map standard MIDI notes (e.g. C1/36 to D#2/51) to pads 0-15
           const padIndex = (note - 36) % 16;
           if (padIndex >= 0 && padIndex < 16) {
             setActivePad(padIndex);
+            audioEngine.triggerPad(padIndex, velocity);
             console.log(`[Workspace] MIDI Trigger -> Pad ${padIndex + 1} (Note: ${note}, Vel: ${velocity})`);
             
-            // Flash pad highlight for 120ms
             setTimeout(() => {
               setActivePad((curr) => (curr === padIndex ? null : curr));
             }, 120);
@@ -47,27 +50,36 @@ export function DualScreenWorkspace({
       }
     }
 
-    setupMidi();
+    initSystem();
 
     return () => {
       if (unsubscribeNoteOn) unsubscribeNoteOn();
     };
   }, []);
 
+  const handlePadClick = (idx: number) => {
+    setActivePad(idx);
+    audioEngine.initAudio();
+    audioEngine.triggerPad(idx, 110);
+    setTimeout(() => {
+      setActivePad((curr) => (curr === idx ? null : curr));
+    }, 120);
+  };
+
   const pads = Array.from({ length: 16 }, (_, i) => ({
     id: i,
     name: `PAD ${i < 9 ? '0' + (i + 1) : i + 1}`,
-    sample: `SAMPLE_${i + 1}.wav`,
+    sound: i < 4 ? 'SUB KICK' : i < 8 ? 'SNARE' : i < 12 ? 'HI-HAT' : 'SYNTH LEAD',
   }));
 
   return (
     <div className="flex flex-col h-full w-full bg-zinc-950 text-zinc-100 font-mono p-2 gap-2 select-none overflow-hidden border border-zinc-800 rounded-lg">
       
-      {/* Workspace Header & MIDI Status Bar */}
+      {/* Workspace Header & Status Bar */}
       <div className="flex justify-between items-center bg-zinc-900/60 border border-zinc-800 px-3 py-1.5 rounded-lg shrink-0">
         <div className="flex items-center gap-3">
           <span className="text-xs font-bold text-amber-500 tracking-wider">
-            WORKSPACE // DUAL-SCREEN M8 & MPC ENGINE
+            WORKSPACE // SYNTH & SAMPLE DSP ENGINE
           </span>
           <span className="text-[10px] text-zinc-400 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800">
             {tempo.toFixed(1)} BPM
@@ -97,7 +109,10 @@ export function DualScreenWorkspace({
             {Array.from({ length: 16 }).map((_, stepIdx) => (
               <div
                 key={stepIdx}
-                onClick={() => setActiveStep(stepIdx)}
+                onClick={() => {
+                  setActiveStep(stepIdx);
+                  audioEngine.triggerPad(stepIdx % 16, 90);
+                }}
                 className={`flex justify-between items-center px-3 py-1.5 rounded text-xs border cursor-pointer transition-all ${
                   activeStep === stepIdx
                     ? 'bg-amber-500/10 border-amber-500/80 text-amber-300 font-bold shadow-sm'
@@ -142,7 +157,7 @@ export function DualScreenWorkspace({
             {pads.map((pad, idx) => (
               <button
                 key={pad.id}
-                onClick={() => setActivePad(idx)}
+                onClick={() => handlePadClick(idx)}
                 className={`flex flex-col justify-between p-2.5 h-20 rounded-lg border cursor-pointer transition-all ${
                   activePad === idx
                     ? 'bg-amber-500 text-zinc-950 border-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.5)] scale-95 font-bold'
@@ -157,15 +172,15 @@ export function DualScreenWorkspace({
                     ●
                   </span>
                 </div>
-                <span className="text-[10px] truncate w-full text-left">
-                  {pad.sample}
+                <span className="text-[10px] truncate w-full text-left font-bold">
+                  {pad.sound}
                 </span>
               </button>
             ))}
           </div>
 
           <div className="text-[9px] text-zinc-500 text-center pt-1 border-t border-zinc-800">
-            External MIDI Controller Notes 36–51 trigger Pads 1–16 instantly.
+            Pads and step tracker steps now trigger live Web Audio DSP voices.
           </div>
         </div>
 
