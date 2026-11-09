@@ -12,15 +12,14 @@ export function TransportBar() {
 
   useEffect(() => {
     // Subscribe to play/stop state changes
-    const unsubState = transportService.subscribeState((playing) => {
+    const unsubState = transportService.subscribeState((playing: boolean) => {
       setIsPlaying(playing);
     });
 
-    // Subscribe to high-speed clock ticks for row/step progression
-    const unsubTicks = (_, row) => {
+    // Subscribe to high-speed clock ticks with explicit parameter types
+    const unsubscribeTicks = transportService.subscribeTicks((step: number, row: number, pattern: number) => {
       setActiveRow(row);
-    };
-    const unsubscribeTicks = transportService.subscribeTicks(unsubTicks);
+    });
 
     return () => {
       unsubState();
