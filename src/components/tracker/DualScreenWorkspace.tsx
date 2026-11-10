@@ -7,6 +7,7 @@ import { TransportBar } from './TransportBar';
 import { MixerView } from './MixerView';
 import { SampleWorkbench } from './SampleWorkbench';
 import { TrackerGrid } from './TrackerGrid';
+import { AudioVisualizerCanvas } from './AudioVisualizerCanvas';
 
 export interface DualScreenWorkspaceProps {
   projectName?: string;
@@ -66,10 +67,17 @@ export function DualScreenWorkspace({ projectName, tempo }: DualScreenWorkspaceP
       </div>
 
       {/* Main Active Workspace View Container */}
-      <div className="flex-1 flex flex-col bg-zinc-900/30 border border-zinc-800/80 rounded-2xl overflow-hidden p-3 shadow-2xl backdrop-blur-sm">
-        {activeTab === 'tracker' && <TrackerGrid />}
-        {activeTab === 'mixer' && <MixerView />}
-        {activeTab === 'workbench' && <SampleWorkbench />}
+      <div className="flex-1 flex flex-col lg:flex-row gap-2 overflow-hidden">
+        <div className="flex-1 flex flex-col bg-zinc-900/30 border border-zinc-800/80 rounded-2xl overflow-hidden p-3 shadow-2xl backdrop-blur-sm">
+          {activeTab === 'tracker' && <TrackerGrid />}
+          {activeTab === 'mixer' && <MixerView />}
+          {activeTab === 'workbench' && <SampleWorkbench />}
+        </div>
+
+        {/* Side Panel: Master Audio Visualizer */}
+        <div className="w-full lg:w-80 flex flex-col gap-2">
+          <AudioVisualizerCanvas />
+        </div>
       </div>
 
     </div>
