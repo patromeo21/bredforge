@@ -8,6 +8,7 @@ import { MixerView } from './MixerView';
 import { SampleWorkbench } from './SampleWorkbench';
 import { TrackerGrid } from './TrackerGrid';
 import { AudioVisualizerCanvas } from './AudioVisualizerCanvas';
+import { PadBankManager } from './PadBankManager';
 
 export interface DualScreenWorkspaceProps {
   projectName?: string;
@@ -16,7 +17,7 @@ export interface DualScreenWorkspaceProps {
 }
 
 export function DualScreenWorkspace({ projectName, tempo }: DualScreenWorkspaceProps) {
-  const [activeTab, setActiveTab] = useState<'tracker' | 'mixer' | 'workbench'>('tracker');
+  const [activeTab, setActiveTab] = useState<'tracker' | 'mixer' | 'workbench' | 'pads'>('tracker');
 
   return (
     <div className="flex flex-col h-screen w-screen bg-zinc-950 text-zinc-100 p-2 gap-2 font-mono overflow-hidden select-none">
@@ -33,10 +34,10 @@ export function DualScreenWorkspace({ projectName, tempo }: DualScreenWorkspaceP
       )}
 
       {/* Workspace Navigation Tabs */}
-      <div className="flex items-center gap-1 bg-zinc-900/80 p-1 rounded-xl border border-zinc-800 text-xs shadow-inner">
+      <div className="flex items-center gap-1 bg-zinc-900/80 p-1 rounded-xl border border-zinc-800 text-xs shadow-inner overflow-x-auto">
         <button
           onClick={() => setActiveTab('tracker')}
-          className={`px-3 py-1.5 rounded-lg transition-all font-bold cursor-pointer ${
+          className={`px-3 py-1.5 rounded-lg transition-all font-bold cursor-pointer whitespace-nowrap ${
             activeTab === 'tracker'
               ? 'bg-amber-500 text-zinc-950 shadow-[0_0_10px_rgba(245,158,11,0.4)]'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
@@ -45,8 +46,18 @@ export function DualScreenWorkspace({ projectName, tempo }: DualScreenWorkspaceP
           TRACKER GRID
         </button>
         <button
+          onClick={() => setActiveTab('pads')}
+          className={`px-3 py-1.5 rounded-lg transition-all font-bold cursor-pointer whitespace-nowrap ${
+            activeTab === 'pads'
+              ? 'bg-amber-500 text-zinc-950 shadow-[0_0_10px_rgba(245,158,11,0.4)]'
+              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+          }`}
+        >
+          PAD BANKS (A-D)
+        </button>
+        <button
           onClick={() => setActiveTab('mixer')}
-          className={`px-3 py-1.5 rounded-lg transition-all font-bold cursor-pointer ${
+          className={`px-3 py-1.5 rounded-lg transition-all font-bold cursor-pointer whitespace-nowrap ${
             activeTab === 'mixer'
               ? 'bg-amber-500 text-zinc-950 shadow-[0_0_10px_rgba(245,158,11,0.4)]'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
@@ -56,7 +67,7 @@ export function DualScreenWorkspace({ projectName, tempo }: DualScreenWorkspaceP
         </button>
         <button
           onClick={() => setActiveTab('workbench')}
-          className={`px-3 py-1.5 rounded-lg transition-all font-bold cursor-pointer ${
+          className={`px-3 py-1.5 rounded-lg transition-all font-bold cursor-pointer whitespace-nowrap ${
             activeTab === 'workbench'
               ? 'bg-amber-500 text-zinc-950 shadow-[0_0_10px_rgba(245,158,11,0.4)]'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
@@ -70,6 +81,7 @@ export function DualScreenWorkspace({ projectName, tempo }: DualScreenWorkspaceP
       <div className="flex-1 flex flex-col lg:flex-row gap-2 overflow-hidden">
         <div className="flex-1 flex flex-col bg-zinc-900/30 border border-zinc-800/80 rounded-2xl overflow-hidden p-3 shadow-2xl backdrop-blur-sm">
           {activeTab === 'tracker' && <TrackerGrid />}
+          {activeTab === 'pads' && <PadBankManager />}
           {activeTab === 'mixer' && <MixerView />}
           {activeTab === 'workbench' && <SampleWorkbench />}
         </div>
