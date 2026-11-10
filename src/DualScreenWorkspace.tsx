@@ -5,16 +5,18 @@ type ViewId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 interface WorkspaceProps {
   projectName?: string;
+  tempo?: number;
   initialTempo?: number;
 }
 
 export const DualScreenWorkspace: React.FC<WorkspaceProps> = ({
   projectName = 'BREDFORGE_M8_PROJ',
+  tempo: propTempo,
   initialTempo = 128,
 }) => {
   const [currentView, setCurrentView] = useState<ViewId>(1);
   const [theme, setTheme] = useState<ThemeMode>('default');
-  const [tempo, setTempo] = useState<number>(initialTempo);
+  const [tempo, setTempo] = useState<number>(propTempo ?? initialTempo);
   const [shiftActive, setShiftActive] = useState<boolean>(false);
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
   const [selectedRow, setSelectedRow] = useState<number>(0);
@@ -95,7 +97,6 @@ export const DualScreenWorkspace: React.FC<WorkspaceProps> = ({
     return () => cancelAnimationFrame(animId);
   }, [isPlaying, activeTheme]);
 
-  // Helper increment / decrement stateful value
   const mutateVal = (val: number, min: number, max: number, step = 1, delta: number) => {
     return Math.max(min, Math.min(max, val + delta * step));
   };
@@ -252,15 +253,15 @@ export const DualScreenWorkspace: React.FC<WorkspaceProps> = ({
                 
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                   {[
-                    ['TEMPO', `${tempo} BPM`, () => setTempo(t => mutateVal(t, 60, 200, 1, 1))],
-                    ['TRANSPOSE', '+00 SEMI', () => {}],
-                    ['GROOVE', 'SP-1200 64%', () => {}],
-                    ['SCALE', 'CHROMATIC', () => {}],
-                    ['LIVE QUANTIZ', '1/16 STEP', () => {}],
-                  ].map(([label, val, action], i) => (
-                    <div key={i} onClick={action as any} className="bg-black/30 p-2.5 rounded border border-current cursor-pointer hover:bg-white/5">
-                      <div className="text-[10px] opacity-70">{label}</div>
-                      <div className="font-bold mt-1 text-sm">{val}</div>
+                    { label: 'TEMPO', val: `${tempo} BPM`, action: () => setTempo(t => mutateVal(t, 60, 200, 1, 1)) },
+                    { label: 'TRANSPOSE', val: '+00 SEMI', action: () => {} },
+                    { label: 'GROOVE', val: 'SP-1200 64%', action: () => {} },
+                    { label: 'SCALE', val: 'CHROMATIC', action: () => {} },
+                    { label: 'LIVE QUANTIZ', val: '1/16 STEP', action: () => {} },
+                  ].map((item, i) => (
+                    <div key={i} onClick={item.action} className="bg-black/30 p-2.5 rounded border border-current cursor-pointer hover:bg-white/5">
+                      <div className="text-[10px] opacity-70">{item.label}</div>
+                      <div className="font-bold mt-1 text-sm">{item.val}</div>
                     </div>
                   ))}
                 </div>
