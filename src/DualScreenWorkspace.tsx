@@ -76,6 +76,32 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
     }));
   };
 
+  // JSON State Export Feature
+  const exportProjectState = () => {
+    const projectData = {
+      app: 'bredforge',
+      version: '1.0.0',
+      projectName,
+      tempo,
+      tableSpeed,
+      tableRows,
+      songSlots,
+      timestamp: new Date().toISOString(),
+    };
+    
+    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${projectName.toLowerCase().replace(/\s+/g, '_')}_state.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    setLastTriggeredInfo('PROJECT EXPORTED');
+  };
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const triggerPadAudio = (padName: string) => {
@@ -442,7 +468,7 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
 
             {f6SubView === 'MAIN' && (
               <div className="space-y-2 text-neutral-300">
-                <div onClick={() => setF6SubView('PROJECT_SETTINGS')} className="p-2.5 bg-neutral-900 hover:bg-neutral-800 rounded-md border border-neutral-800 hover:border-emerald-500 cursor-pointer transition-colors">&gt; [1] PROJECT SETTINGS (Tempo, Swing, Master Scale)</div>
+                <div onClick={() => setF6SubView('PROJECT_SETTINGS')} className="p-2.5 bg-neutral-900 hover:bg-neutral-800 rounded-md border border-neutral-800 hover:border-emerald-500 cursor-pointer transition-colors">&gt; [1] PROJECT SETTINGS (Tempo, Swing, Master Scale, Export)</div>
                 <div className="p-2.5 bg-neutral-900 hover:bg-neutral-800 rounded-md border border-neutral-800 hover:border-emerald-500 cursor-pointer transition-colors">&gt; [2] INSTRUMENT PRESETS & BENCH KITS</div>
                 <div onClick={() => setF6SubView('TABLE_EDITOR')} className="p-2.5 bg-neutral-900 hover:bg-neutral-800 rounded-md border border-neutral-800 hover:border-emerald-500 cursor-pointer transition-colors">&gt; [3] TABLE EDITOR (Sub-Step Sequencing & Micro-Timing Ticks)</div>
                 <div onClick={() => setF6SubView('FX_CONFIG')} className="p-2.5 bg-neutral-900 hover:bg-neutral-800 rounded-md border border-neutral-800 hover:border-emerald-500 cursor-pointer transition-colors">&gt; [4] FX PARAMETER CONFIG & PUNCH-IN MAPS</div>
@@ -459,6 +485,15 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
                 <div className="flex justify-between items-center bg-neutral-900 p-2.5 rounded-md border border-neutral-800">
                   <span>SWING AMOUNT</span>
                   <span className="text-emerald-400">50% (OFF)</span>
+                </div>
+                {/* Export Project JSON Button */}
+                <div className="pt-2">
+                  <button 
+                    onClick={exportProjectState}
+                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-black font-bold rounded shadow transition-all flex items-center justify-center space-x-2"
+                  >
+                    <span>💾 EXPORT PROJECT STATE (.JSON)</span>
+                  </button>
                 </div>
               </div>
             )}
