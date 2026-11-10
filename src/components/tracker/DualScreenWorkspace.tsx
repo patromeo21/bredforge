@@ -7,7 +7,7 @@ import { TransportBar } from './TransportBar';
 import { MixerView } from './MixerView';
 import { SampleWorkbench } from './SampleWorkbench';
 
-interface DualScreenWorkspaceProps {
+export interface DualScreenWorkspaceProps {
   projectName?: string;
   tempo?: number;
   [key: string]: any;
