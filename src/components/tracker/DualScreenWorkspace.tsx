@@ -3,7 +3,15 @@ import React, { useState, useEffect, useRef } from 'react';
 type TabMode = 'F1_F2' | 'F3_MIXER' | 'F4_BENCH' | 'F5_SONG' | 'F6_MENU';
 type RightPanelMode = 'PADS' | 'NAV';
 
-export const DualScreenWorkspace: React.FC = () => {
+interface DualScreenWorkspaceProps {
+  projectName?: string;
+  tempo?: number;
+}
+
+export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
+  projectName = 'BREDFORGE_PROJ_01',
+  tempo: initialTempo = 120,
+}) => {
   // Active Tab State
   const [activeTab, setActiveTab] = useState<TabMode>('F1_F2');
   
@@ -16,7 +24,7 @@ export const DualScreenWorkspace: React.FC = () => {
   // Playback / Sequencer State
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentRow, setCurrentRow] = useState<number>(0);
-  const [tempo, setTempo] = useState<number>(120);
+  const [tempo, setTempo] = useState<number>(initialTempo);
 
   // Canvas ref for top semi-transparent waveform banner
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -64,7 +72,6 @@ export const DualScreenWorkspace: React.FC = () => {
       
       {/* 1. TOP HEADER & SEMI-TRANSPARENT WAVEFORM BANNER */}
       <div className="relative bg-neutral-900 border-b border-emerald-900/50 p-2 flex items-center justify-between shrink-0">
-        {/* Semi-transparent waveform overlay canvas */}
         <canvas 
           ref={canvasRef} 
           width={600} 
@@ -73,7 +80,7 @@ export const DualScreenWorkspace: React.FC = () => {
         />
         
         <div className="flex items-center space-x-3 z-10">
-          <span className="font-bold tracking-wider text-emerald-300">[●] BREDFORGE M8</span>
+          <span className="font-bold tracking-wider text-emerald-300">[●] {projectName}</span>
           <span className="text-neutral-500">|</span>
           <span className="text-neutral-300">BPM: {tempo}</span>
           <span className="text-neutral-500">|</span>
@@ -90,7 +97,7 @@ export const DualScreenWorkspace: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. MAIN WORKSPACE VIEWPORT (SWAPS BASED ON ACTIVE TAB) */}
+      {/* 2. MAIN WORKSPACE VIEWPORT */}
       <div className="flex-1 flex overflow-hidden p-2 gap-2">
         
         {/* --- [F1 / F2] MULTI-VIEW TAB --- */}
@@ -128,7 +135,6 @@ export const DualScreenWorkspace: React.FC = () => {
                   <span className="text-emerald-500">SAMPLE: 01_BREAK</span>
                 </div>
                 <div className="flex-1 bg-black/60 border border-neutral-800 rounded my-1 relative flex items-center px-2">
-                  {/* Visual Waveform Mock */}
                   <div className="w-full h-8 flex items-center justify-between text-emerald-600 opacity-80">
                     <span>|</span><span>/\/\_/\/\</span><span>|</span><span>/\_/\/\_</span><span>|</span>
                   </div>
@@ -140,10 +146,8 @@ export const DualScreenWorkspace: React.FC = () => {
                 </div>
               </div>
 
-              {/* Bottom: Section Toggle & Switchable View (4x4 Pads vs M8 Nav/FX) */}
+              {/* Bottom: Section Toggle & Switchable View */}
               <div className="flex-1 bg-neutral-900/80 border border-emerald-900/40 rounded p-2 flex flex-col">
-                
-                {/* Section Toggle Switch */}
                 <div className="flex bg-neutral-950 p-1 rounded border border-neutral-800 mb-2">
                   <button 
                     onClick={() => setRightMode('PADS')}
@@ -159,7 +163,6 @@ export const DualScreenWorkspace: React.FC = () => {
                   </button>
                 </div>
 
-                {/* View A: 4x4 SP-Style Pads */}
                 {rightMode === 'PADS' && (
                   <div className="flex-1 grid grid-cols-4 gap-1.5 p-1">
                     {['KICK_01', 'SNARE_01', 'HIHAT_01', 'SYNTH_01', 'CHOP_01', 'CHOP_02', 'CHOP_03', 'CHOP_04', 'PERC_01', 'PERC_02', 'VOCAL_1', 'BASS_01', 'FX_01', 'FX_02', 'CRASH_1', 'SUB_01'].map((pad, idx) => (
@@ -171,7 +174,6 @@ export const DualScreenWorkspace: React.FC = () => {
                   </div>
                 )}
 
-                {/* View B: M8 Hardware Navigation + 9th Backlit FX Mode Button */}
                 {rightMode === 'NAV' && (
                   <div className="flex-1 flex flex-col justify-center items-center p-2 space-y-3">
                     <div className="grid grid-cols-3 gap-2 w-full">
@@ -192,7 +194,6 @@ export const DualScreenWorkspace: React.FC = () => {
                       <button className="bg-neutral-800 border border-neutral-700 py-1.5 rounded active:bg-emerald-500 active:text-black font-bold">PLAY</button>
                     </div>
 
-                    {/* 9th Backlit FX Mode Button */}
                     <button 
                       onClick={() => setFxModeActive(!fxModeActive)}
                       className={`w-full py-2 rounded border font-bold text-xs transition-all ${fxModeActive ? 'bg-amber-500 text-black border-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.6)]' : 'bg-neutral-900 border-neutral-700 text-neutral-400'}`}
@@ -212,7 +213,6 @@ export const DualScreenWorkspace: React.FC = () => {
           <div className="flex-1 bg-neutral-950 border border-emerald-900/40 rounded p-4 flex flex-col">
             <div className="font-bold text-emerald-300 mb-2 border-b border-neutral-800 pb-2">MASTER MIX & 7 TRACK CHANNELS (PARALLEL DYNAMICS)</div>
             <div className="space-y-2 overflow-y-auto flex-1 pr-2">
-              {/* Master Bus */}
               <div className="bg-neutral-900 border border-emerald-700/60 p-2 rounded flex items-center justify-between">
                 <span className="font-bold text-emerald-400 w-28">MASTER BUS</span>
                 <span className="text-neutral-400">Vol: 85%</span>
@@ -223,7 +223,6 @@ export const DualScreenWorkspace: React.FC = () => {
                 </div>
               </div>
 
-              {/* 7 Individual Tracks */}
               {['T1 (Kick)', 'T2 (Snare)', 'T3 (HiHat)', 'T4 (Synth)', 'T5 (Bass)', 'T6 (Pad)', 'T7 (FX)'].map((trk, i) => (
                 <div key={i} className="bg-neutral-900/60 border border-neutral-800 p-2 rounded flex items-center justify-between">
                   <span className="text-neutral-300 w-28 font-bold">{trk}</span>
