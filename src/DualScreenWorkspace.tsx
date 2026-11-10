@@ -9,6 +9,14 @@ interface DualScreenWorkspaceProps {
   tempo?: number;
 }
 
+interface TableRow {
+  step: number;
+  pitch: string;
+  vol: string;
+  cmd: string;
+  del: number; // Micro-timing tick offset (-8 to +8)
+}
+
 export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
   projectName = 'BREDFORGE_PROJ_01',
   tempo: initialTempo = 120,
@@ -23,7 +31,32 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
   const [activeFxTrigger, setActiveFxTrigger] = useState<string | null>(null);
   const [f6SubView, setF6SubView] = useState<F6SubView>('MAIN');
 
+  // Interactive Table Editor State
+  const [tableSpeed, setTableSpeed] = useState<number>(1);
+  const [selectedTableRow, setSelectedTableRow] = useState<number>(0);
+  const [tableRows, setTableRows] = useState<TableRow[]>([
+    { step: 0, pitch: '+00', vol: 'FF', cmd: 'TSP', del: 3 },
+    { step: 1, pitch: '-02', vol: 'C0', cmd: '---', del: 0 },
+    { step: 2, pitch: '-05', vol: '80', cmd: 'CUT', del: -2 },
+    { step: 3, pitch: '-12', vol: '00', cmd: '---', del: 0 },
+    { step: 4, pitch: '+00', vol: 'FF', cmd: '---', del: 1 },
+    { step: 5, pitch: '+00', vol: 'FF', cmd: '---', del: 0 },
+    { step: 6, pitch: '+00', vol: 'FF', cmd: '---', del: 0 },
+    { step: 7, pitch: '+00', vol: 'FF', cmd: '---', del: 0 },
+  ]);
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Helper to adjust micro-timing ticks (`del`) on the selected table row
+  const adjustTableTick = (delta: number) => {
+    setTableRows(prev => prev.map((row, idx) => {
+      if (idx === selectedTableRow) {
+        const newDel = Math.max(-8, Math.min(8, row.del + delta));
+        return { ...row, del: newDel };
+      }
+      return row;
+    }));
+  };
 
   // Simulated waveform scope renderer
   useEffect(() => {
@@ -177,9 +210,7 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
 
                 {rightMode === 'NAV' && (
                   <div className="flex-1 flex flex-col justify-center items-center p-2 space-y-3">
-                    
                     {!fxModeActive ? (
-                      /* Standard M8 Navigation */
                       <>
                         <div className="grid grid-cols-3 gap-2 w-full">
                           <div />
@@ -199,7 +230,6 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
                         </div>
                       </>
                     ) : (
-                      /* Punch-In FX Performance Matrix (When 9th FX Mode is Active) */
                       <div className="w-full grid grid-cols-3 gap-1.5">
                         {['DJFX LOOP', 'TAPE STOP', 'STUTTER', 'BITCRUSH', 'HP FILTER', 'LP FILTER', 'REVERSE', 'VINYL SIM', 'PITCH DROP'].map((fx, i) => (
                           <button 
@@ -214,7 +244,6 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
                       </div>
                     )}
 
-                    {/* 9th Backlit FX Mode Button */}
                     <button 
                       onClick={() => setFxModeActive(!fxModeActive)}
                       className={`w-full py-2 rounded border font-bold text-xs transition-all ${fxModeActive ? 'bg-amber-500 text-black border-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.6)] animate-pulse' : 'bg-neutral-900 border-neutral-700 text-neutral-400'}`}
@@ -346,19 +375,45 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
             )}
 
             {f6SubView === 'TABLE_EDITOR' && (
-              <div className="flex-1 flex flex-col space-y-2 text-xs">
-                <div className="text-neutral-400">TABLE ID: 01 // SUB-STEP MICRO-TIMING & PUNCH-IN AUTOMATION</div>
-                <div className="grid grid-cols-4 font-bold text-neutral-500 border-b border-neutral-800 pb-1">
-                  <span>STEP</span><span>PITCH</span><span>VOL</span><span>CMD (FX/DEL)</span>
-                </div>
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="grid grid-cols-4 py-1 border-b border-neutral-900 text-neutral-300">
-                    <span>{String(i).padStart(2, '0')}</span>
-                    <span>{i === 0 ? '+00' : '---'}</span>
-                    <span>{i === 0 ? 'FF' : '--'}</span>
-                    <span>{i === 0 ? 'TSP (T-STOP)' : '---'}</span>
+              <div className="flex-1 flex flex-col space-y-3 text-xs">
+                <div className="flex justify-between items-center bg-neutral-900 p-2 rounded border border-neutral-800">
+                  <span className="text-neutral-400">TABLE ID: 01 // SPEED: {tableSpeed} TICK/STEP</span>
+                  <div className="space-x-2">
+                    <button onClick={() => setTableSpeed(s => Math.max(1, s - 1))} className="px-2 py-1 bg-neutral-800 border border-neutral-700 rounded">-</button>
+                    <button onClick={() => setTableSpeed(s => Math.min(8, s + 1))} className="px-2 py-1 bg-neutral-800 border border-neutral-700 rounded">+</button>
                   </div>
-                ))}
+                </div>
+
+                <div className="grid grid-cols-5 font-bold text-neutral-500 border-b border-neutral-800 pb-1 px-1">
+                  <span>STEP</span><span>PITCH</span><span>VOL</span><span>CMD (FX)</span><span>NUDGE (DEL)</span>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-1">
+                  {tableRows.map((row, idx) => (
+                    <div 
+                      key={idx} 
+                      onClick={() => setSelectedTableRow(idx)}
+                      className={`grid grid-cols-5 py-1 px-1 rounded cursor-pointer border ${selectedTableRow === idx ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300' : 'bg-neutral-900/50 border-neutral-800 text-neutral-300 hover:bg-neutral-800'}`}
+                    >
+                      <span>{String(row.step).padStart(2, '0')}{selectedTableRow === idx ? '▶' : ''}</span>
+                      <span>{row.pitch}</span>
+                      <span>{row.vol}</span>
+                      <span>{row.cmd}</span>
+                      <span className={row.del !== 0 ? 'text-amber-400 font-bold' : 'text-neutral-500'}>
+                        {row.del > 0 ? `+${row.del}` : row.del} TICKS
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Interactive Micro-Timing Nudge Control Bar */}
+                <div className="bg-neutral-900 p-2 rounded border border-neutral-800 flex justify-between items-center">
+                  <span className="text-neutral-400">NUDGE STEP {selectedTableRow} Ticks:</span>
+                  <div className="space-x-2">
+                    <button onClick={() => adjustTableTick(-1)} className="px-3 py-1 bg-neutral-800 border border-neutral-700 rounded hover:bg-neutral-700 font-bold">-1 TICK</button>
+                    <button onClick={() => adjustTableTick(1)} className="px-3 py-1 bg-neutral-800 border border-neutral-700 rounded hover:bg-neutral-700 font-bold">+1 TICK</button>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -403,18 +458,4 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
           onClick={() => { setActiveTab('F5_SONG'); setF6SubView('MAIN'); }}
           className={`px-3 py-1 rounded font-bold ${activeTab === 'F5_SONG' ? 'bg-emerald-600 text-black' : 'bg-neutral-800 text-emerald-400'}`}
         >
-          [F5] SONG{activeTab === 'F5_SONG' ? '*' : ''}
-        </button>
-        <button 
-          onClick={() => setActiveTab('F6_MENU')}
-          className={`px-3 py-1 rounded font-bold ${activeTab === 'F6_MENU' ? 'bg-emerald-600 text-black' : 'bg-neutral-800 text-emerald-400'}`}
-        >
-          [F6] MENU{activeTab === 'F6_MENU' ? '*' : ''}
-        </button>
-      </div>
-
-    </div>
-  );
-};
-
-export default DualScreenWorkspace;
+          [F
