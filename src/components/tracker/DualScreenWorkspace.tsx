@@ -7,7 +7,13 @@ import { TransportBar } from './TransportBar';
 import { MixerView } from './MixerView';
 import { SampleWorkbench } from './SampleWorkbench';
 
-export function DualScreenWorkspace() {
+interface DualScreenWorkspaceProps {
+  projectName?: string;
+  tempo?: number;
+  [key: string]: any;
+}
+
+export function DualScreenWorkspace({ projectName, tempo }: DualScreenWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<'tracker' | 'mixer' | 'workbench'>('tracker');
 
   return (
@@ -15,6 +21,14 @@ export function DualScreenWorkspace() {
       
       {/* Top Master Transport Bar */}
       <TransportBar />
+
+      {/* Project Banner / Workspace Header if passed from App */}
+      {(projectName || tempo) && (
+        <div className="flex items-center justify-between px-3 py-1 bg-zinc-900/50 border border-zinc-800/60 rounded-lg text-[11px] text-zinc-400">
+          <span>PROJECT: <strong className="text-amber-400">{projectName || 'BREDFORGE_UNTITLED'}</strong></span>
+          {tempo && <span>DEFAULT TEMPO: <strong className="text-amber-400">{tempo} BPM</strong></span>}
+        </div>
+      )}
 
       {/* Workspace Navigation Tabs */}
       <div className="flex items-center gap-1 bg-zinc-900/80 p-1 rounded-xl border border-zinc-800 text-xs shadow-inner">
