@@ -1,208 +1,65 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-type TabMode = 'F1_F2' | 'F3_MIXER' | 'F4_BENCH' | 'F5_SONG' | 'F6_MENU';
-type RightPanelMode = 'PADS' | 'NAV';
-type F6SubView = 'MAIN' | 'PROJECT_SETTINGS' | 'SYNTH_ENGINE' | 'TABLE_EDITOR' | 'FX_CONFIG';
+type ThemeMode = 'default' | 'pink-arranger' | 'retro-synth' | 'monochrome';
+type ViewId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
-interface DualScreenWorkspaceProps {
+interface WorkspaceProps {
   projectName?: string;
-  tempo?: number;
+  initialTempo?: number;
 }
 
-interface TableRow {
-  step: number;
-  pitch: string;
-  vol: string;
-  cmd: string;
-  del: number;
-}
-
-interface SongSlot {
-  id: string;
-  pattern: string;
-  bars: number;
-  status: 'ACTIVE' | 'QUEUED' | 'EMPTY';
-}
-
-interface SynthParams {
-  waveform: OscillatorType;
-  filterCutoff: number;
-  filterRes: number;
-  attack: number;
-  decay: number;
-}
-
-export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
+export const DualScreenWorkspace: React.FC<WorkspaceProps> = ({
   projectName = 'BREDFORGE_M8_PROJ',
-  tempo: initialTempo = 120,
+  initialTempo = 128,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabMode>('F1_F2');
-  const [rightMode, setRightMode] = useState<RightPanelMode>('PADS');
-  const [fxModeActive, setFxModeActive] = useState<boolean>(false);
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [currentRow, setCurrentRow] = useState<number>(0);
+  const [currentView, setCurrentView] = useState<ViewId>(1);
+  const [theme, setTheme] = useState<ThemeMode>('default');
   const [tempo, setTempo] = useState<number>(initialTempo);
-  const [activePad, setActivePad] = useState<string | null>(null);
-  const [activeFxTrigger, setActiveFxTrigger] = useState<string | null>(null);
-  const [f6SubView, setF6SubView] = useState<F6SubView>('MAIN');
-  const [lastTriggeredInfo, setLastTriggeredInfo] = useState<string>('SYS_READY');
+  const [shiftActive, setShiftActive] = useState<boolean>(false);
+  const [isPlaying, setIsPlaying] = useState<boolean>(true);
+  const [selectedRow, setSelectedRow] = useState<number>(0);
+  const [selectedPad, setSelectedPad] = useState<number | null>(null);
 
-  const [synthParams, setSynthParams] = useState<SynthParams>({
-    waveform: 'sawtooth',
-    filterCutoff: 3500,
-    filterRes: 4,
-    attack: 0.01,
-    decay: 0.25,
-  });
+  // Theme 8 override rule
+  const activeTheme: ThemeMode = currentView === 8 ? 'pink-arranger' : theme;
 
-  const [tableSpeed, setTableSpeed] = useState<number>(1);
-  const [selectedTableRow, setSelectedTableRow] = useState<number>(0);
-  const [tableRows, setTableRows] = useState<TableRow[]>([
-    { step: 0, pitch: '+00', vol: 'FF', cmd: 'TSP', del: 3 },
-    { step: 1, pitch: '-02', vol: 'C0', cmd: '---', del: 0 },
-    { step: 2, pitch: '-05', vol: '80', cmd: 'CUT', del: -2 },
-    { step: 3, pitch: '-12', vol: '00', cmd: '---', del: 0 },
-    { step: 4, pitch: '+00', vol: 'FF', cmd: '---', del: 1 },
-    { step: 5, pitch: '+00', vol: 'FF', cmd: '---', del: 0 },
-    { step: 6, pitch: '+00', vol: 'FF', cmd: '---', del: 0 },
-    { step: 7, pitch: '+00', vol: 'FF', cmd: '---', del: 0 },
-  ]);
+  const themeTokens = {
+    default: {
+      bg: 'bg-[#0B0F19]',
+      panel: 'bg-[#121826] border-[#00BAFF]/40',
+      text: 'text-[#7BE0FF]',
+      accent: 'text-[#00BAFF]',
+      border: 'border-[#00BAFF]/60',
+      highlight: 'bg-[#00BAFF]/20 text-[#7BE0FF]',
+    },
+    'pink-arranger': {
+      bg: 'bg-[#FFA6C9]',
+      panel: 'bg-[#FF8DAF] border-[#111111]',
+      text: 'text-[#111111]',
+      accent: 'text-[#FFFFFF]',
+      border: 'border-[#111111]',
+      highlight: 'bg-[#111111] text-[#FFA6C9]',
+    },
+    'retro-synth': {
+      bg: 'bg-[#000000]',
+      panel: 'bg-[#0A0A0A] border-[#FF2A2A]/50',
+      text: 'text-[#FFFFFF]',
+      accent: 'text-[#FF2A2A]',
+      border: 'border-[#FF2A2A]',
+      highlight: 'bg-[#FF2A2A] text-[#000000]',
+    },
+    monochrome: {
+      bg: 'bg-[#FFFFFF]',
+      panel: 'bg-[#F2F2F2] border-[#000000]',
+      text: 'text-[#1A1A1A]',
+      accent: 'text-[#000000]',
+      border: 'border-[#000000]',
+      highlight: 'bg-[#000000] text-[#FFFFFF]',
+    },
+  }[activeTheme];
 
-  const [songSlots, setSongSlots] = useState<SongSlot[]>([
-    { id: '1', pattern: 'PAT_A (Intro Beat)', bars: 4, status: 'ACTIVE' },
-    { id: '2', pattern: 'PAT_A (Verse Build)', bars: 4, status: 'QUEUED' },
-    { id: '3', pattern: 'PAT_B (Drop Kick)', bars: 8, status: 'EMPTY' },
-    { id: '4', pattern: 'PAT_C (Breakdown)', bars: 4, status: 'EMPTY' },
-  ]);
-
-  // BPM-Synced Playback Ticker
-  useEffect(() => {
-    if (!isPlaying) return;
-    const stepInterval = (60000 / tempo) / 4;
-    const timer = setInterval(() => {
-      setCurrentRow(prev => (prev + 1) % 64);
-    }, stepInterval);
-
-    return () => clearInterval(timer);
-  }, [isPlaying, tempo]);
-
-  const addSongSlot = () => {
-    const newId = String(songSlots.length + 1);
-    setSongSlots([...songSlots, { id: newId, pattern: 'PAT_D (Outro)', bars: 4, status: 'EMPTY' }]);
-  };
-
-  const cycleSlotStatus = (id: string) => {
-    setSongSlots(prev => prev.map(slot => {
-      if (slot.id === id) {
-        const nextStatus: SongSlot['status'] = 
-          slot.status === 'ACTIVE' ? 'QUEUED' : 
-          slot.status === 'QUEUED' ? 'EMPTY' : 'ACTIVE';
-        return { ...slot, status: nextStatus };
-      }
-      return slot;
-    }));
-  };
-
-  const exportProjectState = () => {
-    const projectData = {
-      app: 'bredforge',
-      version: '1.0.0',
-      projectName,
-      tempo,
-      synthParams,
-      tableSpeed,
-      tableRows,
-      songSlots,
-      timestamp: new Date().toISOString(),
-    };
-    
-    const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${projectName.toLowerCase().replace(/\s+/g, '_')}_state.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    
-    setLastTriggeredInfo('PROJECT EXPORTED');
-  };
-
+  // Canvas Oscilloscope / Waveform ref
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  const triggerPadAudio = (padName: string) => {
-    setActivePad(padName);
-    setLastTriggeredInfo(`PAD: ${padName}`);
-
-    try {
-      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const audioCtx = new AudioContextClass();
-      const osc = audioCtx.createOscillator();
-      const filter = audioCtx.createBiquadFilter();
-      const gain = audioCtx.createGain();
-
-      const now = audioCtx.currentTime;
-
-      if (padName.includes('KICK') || padName.includes('SUB')) {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(140, now);
-        osc.frequency.exponentialRampToValueAtTime(32, now + 0.18);
-        gain.gain.setValueAtTime(0.5, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-      } else if (padName.includes('SNARE') || padName.includes('CLAP')) {
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(260, now);
-        osc.frequency.exponentialRampToValueAtTime(75, now + 0.12);
-        gain.gain.setValueAtTime(0.35, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-      } else if (padName.includes('SYNTH') || padName.includes('BASS')) {
-        osc.type = synthParams.waveform;
-        osc.frequency.setValueAtTime(padName.includes('BASS') ? 110 : 440, now);
-
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(synthParams.filterCutoff, now);
-        filter.Q.setValueAtTime(synthParams.filterRes, now);
-
-        gain.gain.setValueAtTime(0.001, now);
-        gain.gain.linearRampToValueAtTime(0.3, now + synthParams.attack);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + synthParams.attack + synthParams.decay);
-
-        osc.connect(filter);
-        filter.connect(gain);
-        gain.connect(audioCtx.destination);
-      } else {
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(520, now);
-        osc.frequency.exponentialRampToValueAtTime(220, now + 0.08);
-        gain.gain.setValueAtTime(0.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-      }
-
-      osc.start(now);
-      osc.stop(now + 0.3);
-    } catch {
-      // Fallback
-    }
-
-    setTimeout(() => setActivePad(null), 120);
-  };
-
-  const adjustTableTick = (delta: number) => {
-    setTableRows(prev => prev.map((row, idx) => {
-      if (idx === selectedTableRow) {
-        const newDel = Math.max(-8, Math.min(8, row.del + delta));
-        return { ...row, del: newDel };
-      }
-      return row;
-    }));
-  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -210,506 +67,441 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    let animationFrameId: number;
+    let animId: number;
     let phase = 0;
 
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = '#10b981';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = activeTheme === 'retro-synth' ? '#FF2A2A' : activeTheme === 'pink-arranger' ? '#111111' : '#00BAFF';
+      ctx.lineWidth = 2;
       ctx.beginPath();
 
-      const sliceWidth = canvas.width / 100;
+      const sliceWidth = canvas.width / 120;
       let x = 0;
 
-      for (let i = 0; i < 100; i++) {
-        const v = Math.sin(phase + i * 0.1) * (canvas.height / 2.5) * (isPlaying ? 1 : 0.2);
+      for (let i = 0; i < 120; i++) {
+        const v = Math.sin(phase + i * 0.12) * (canvas.height / 3);
         const y = canvas.height / 2 + v;
-
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
-
         x += sliceWidth;
       }
-
       ctx.stroke();
-      phase += isPlaying ? 0.15 : 0.02;
-      animationFrameId = requestAnimationFrame(render);
+      phase += isPlaying ? 0.2 : 0.02;
+      animId = requestAnimationFrame(render);
     };
 
     render();
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [isPlaying]);
+    return () => cancelAnimationFrame(animId);
+  }, [isPlaying, activeTheme]);
+
+  // Helper increment / decrement stateful value
+  const mutateVal = (val: number, min: number, max: number, step = 1, delta: number) => {
+    return Math.max(min, Math.min(max, val + delta * step));
+  };
 
   return (
-    <div className="fixed inset-0 bg-[#0a0f0d] text-emerald-400 font-mono select-none flex flex-col overflow-hidden text-xs md:text-sm p-1.5 md:p-3 border-4 border-neutral-900 shadow-2xl">
+    <div className="fixed inset-0 bg-[#05070A] flex items-center justify-center font-mono select-none p-2 md:p-6 overflow-hidden">
       
-      {/* 1. TOP HARDWARE BEZEL HEADER & WAVEFORM BANNER */}
-      <div className="relative bg-neutral-900/90 border border-emerald-900/60 rounded p-2 flex items-center justify-between shrink-0 shadow-inner">
-        <canvas 
-          ref={canvasRef} 
-          width={600} 
-          height={32} 
-          className="absolute inset-x-24 inset-y-1 opacity-30 pointer-events-none"
-        />
+      {/* ASPECT RATIO HARDWARE DISPLAY SHELL */}
+      <div className={`w-full max-w-6xl aspect-[16/10] ${themeTokens.bg} ${themeTokens.text} border-4 ${themeTokens.border} rounded-xl shadow-2xl flex flex-col overflow-hidden p-3 md:p-4 transition-colors duration-300`}>
         
-        <div className="flex items-center space-x-3 z-10">
-          <span className="font-bold tracking-widest text-emerald-300 bg-black/40 px-2 py-0.5 rounded border border-emerald-800/50">[●] {projectName}</span>
-          <span className="text-neutral-600">|</span>
-          <span className="text-neutral-300">BPM: {tempo}</span>
-          <span className="text-neutral-600">|</span>
-          <span className="text-amber-400 font-bold tracking-wide">{isPlaying ? '▶ [PLAYING]' : lastTriggeredInfo}</span>
-        </div>
-
-        <div className="flex items-center space-x-2 z-10">
-          <button 
-            onClick={() => setIsPlaying(!isPlaying)}
-            className={`px-3 py-1 rounded border transition-all ${isPlaying ? 'bg-emerald-500 text-black border-emerald-300 font-bold shadow-[0_0_10px_rgba(16,185,129,0.5)] animate-pulse' : 'bg-neutral-800 border-neutral-700 text-emerald-400 hover:bg-neutral-700'}`}
-          >
-            {isPlaying ? '[■ STOP]' : '[▶ PLAY]'}
-          </button>
-        </div>
-      </div>
-
-      {/* 2. MAIN VIEWPORT */}
-      <div className="flex-1 flex overflow-hidden py-2 gap-2">
-        
-        {/* --- [F1 / F2] MULTI-VIEW TAB --- */}
-        {activeTab === 'F1_F2' && (
-          <>
-            <div className="flex-1 bg-neutral-900/70 border border-emerald-900/40 rounded-lg flex flex-col overflow-hidden shadow-lg">
-              <div className="bg-neutral-800/90 px-3 py-1.5 text-xs font-bold text-neutral-300 border-b border-emerald-900/40 flex justify-between items-center">
-                <span className="tracking-wider">TRACKER SEQUENCER (64 ROWS)</span>
-                <span className={`px-2 py-0.5 rounded border text-[11px] ${isPlaying ? 'bg-emerald-950 text-emerald-300 border-emerald-500 animate-pulse font-bold' : 'text-emerald-400 bg-neutral-900 border-neutral-700'}`}>
-                  {isPlaying ? '▶ LIVE PLAYING' : 'PAT: 01'}
-                </span>
-              </div>
-              <div className="flex-1 overflow-y-auto p-2 space-y-0.5 text-xs">
-                <div className="grid grid-cols-5 text-neutral-500 border-b border-neutral-800 pb-1 mb-1 font-bold">
-                  <span>ROW</span><span>T1(KIK)</span><span>T2(SNR)</span><span>T3(HAT)</span><span>T4(SYN)</span>
-                </div>
-                {Array.from({ length: 64 }).map((_, r) => (
-                  <div key={r} className={`grid grid-cols-5 py-0.5 px-1 rounded transition-colors ${r === currentRow ? 'bg-emerald-950 text-emerald-200 border-l-2 border-emerald-400 font-bold' : 'text-neutral-400 hover:bg-neutral-800/40'}`}>
-                    <span className="text-neutral-500">{String(r).padStart(2, '0')}{r === currentRow ? '▶' : ' '}</span>
-                    <span>{r === 0 ? 'C-4 01 64' : '--- -- --'}</span>
-                    <span>{r === 4 ? 'E-4 02 50' : '--- -- --'}</span>
-                    <span>{r % 2 === 0 ? 'G-3 03 40' : '--- -- --'}</span>
-                    <span>--- -- --</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="w-80 flex flex-col gap-2 shrink-0">
-              <div className="h-36 bg-neutral-900/70 border border-emerald-900/40 rounded-lg p-2 flex flex-col justify-between shadow-lg">
-                <div className="text-[11px] font-bold text-neutral-300 flex justify-between items-center">
-                  <span>MINI WORKBENCH</span>
-                  <span className="text-emerald-400 bg-black/40 px-1.5 py-0.5 rounded border border-neutral-800">01_BREAK</span>
-                </div>
-                <div className="flex-1 bg-black/80 border border-neutral-800 rounded my-1 relative flex items-center px-2">
-                  <div className="w-full h-8 flex items-center justify-between text-emerald-500 opacity-90 font-bold">
-                    <span>|</span><span>/\/\_/\/\</span><span>|</span><span>/\_/\/\_</span><span>|</span>
-                  </div>
-                </div>
-                <div className="text-[10px] text-neutral-400 flex justify-between">
-                  <span>START: 00.00</span>
-                  <span>SLICES: 04</span>
-                  <span>END: 02.50</span>
-                </div>
-              </div>
-
-              <div className="flex-1 bg-neutral-900/70 border border-emerald-900/40 rounded-lg p-2 flex flex-col shadow-lg">
-                <div className="flex bg-neutral-950 p-1 rounded border border-neutral-800 mb-2">
-                  <button 
-                    onClick={() => setRightMode('PADS')}
-                    className={`flex-1 py-1.5 rounded text-[11px] font-bold transition-all ${rightMode === 'PADS' ? 'bg-emerald-600 text-black shadow' : 'text-neutral-400 hover:text-neutral-200'}`}
-                  >
-                    4X4 PADS
-                  </button>
-                  <button 
-                    onClick={() => setRightMode('NAV')}
-                    className={`flex-1 py-1.5 rounded text-[11px] font-bold transition-all ${rightMode === 'NAV' ? 'bg-emerald-600 text-black shadow' : 'text-neutral-400 hover:text-neutral-200'}`}
-                  >
-                    M8 NAV / FX
-                  </button>
-                </div>
-
-                {rightMode === 'PADS' && (
-                  <div className="flex-1 grid grid-cols-4 gap-1.5 p-1">
-                    {['KICK_01', 'SNARE_01', 'HIHAT_01', 'SYNTH_01', 'CHOP_01', 'CHOP_02', 'CHOP_03', 'CHOP_04', 'PERC_01', 'PERC_02', 'VOCAL_1', 'BASS_01', 'FX_01', 'FX_02', 'CRASH_1', 'SUB_01'].map((pad, idx) => (
-                      <button 
-                        key={idx} 
-                        onMouseDown={() => triggerPadAudio(pad)}
-                        onTouchStart={() => triggerPadAudio(pad)}
-                        className={`border rounded-md flex flex-col items-center justify-center p-1 text-[10px] transition-all shadow-sm ${activePad === pad ? 'bg-emerald-400 text-black border-emerald-200 font-bold scale-95 shadow-[0_0_12px_rgba(16,185,129,0.9)]' : 'bg-neutral-800/90 hover:bg-emerald-900/50 border-neutral-700 text-neutral-300'}`}
-                      >
-                        <span className="text-[9px] text-emerald-500 font-bold">{idx + 1}</span>
-                        <span className="truncate w-full text-center">{pad}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {rightMode === 'NAV' && (
-                  <div className="flex-1 flex flex-col justify-center items-center p-2 space-y-3">
-                    {!fxModeActive ? (
-                      <>
-                        <div className="grid grid-cols-3 gap-2 w-full">
-                          <div />
-                          <button className="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-2 rounded text-center active:bg-emerald-500 active:text-black font-bold shadow">▲ UP</button>
-                          <div />
-                          <button className="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-2 rounded text-center active:bg-emerald-500 active:text-black font-bold shadow">◄</button>
-                          <button className="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-2 rounded text-center text-xs active:bg-emerald-500 active:text-black font-bold shadow">EDIT</button>
-                          <button className="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-2 rounded text-center active:bg-emerald-500 active:text-black font-bold shadow">►</button>
-                          <div />
-                          <button className="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-2 rounded text-center active:bg-emerald-500 active:text-black font-bold shadow">▼ DOWN</button>
-                          <div />
-                        </div>
-                        <div className="grid grid-cols-3 gap-2 w-full text-xs">
-                          <button className="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-1.5 rounded active:bg-emerald-500 active:text-black font-bold shadow">OPTION</button>
-                          <button className="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-1.5 rounded active:bg-emerald-500 active:text-black font-bold shadow">SHIFT</button>
-                          <button className="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-1.5 rounded active:bg-emerald-500 active:text-black font-bold shadow">PLAY</button>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="w-full grid grid-cols-3 gap-1.5">
-                        {['DJFX LOOP', 'TAPE STOP', 'STUTTER', 'BITCRUSH', 'HP FILTER', 'LP FILTER', 'REVERSE', 'VINYL SIM', 'PITCH DROP'].map((fx, i) => (
-                          <button 
-                            key={i} 
-                            onMouseDown={() => setActiveFxTrigger(fx)}
-                            onMouseUp={() => setActiveFxTrigger(null)}
-                            className={`p-2 rounded text-[10px] font-bold border transition-all ${activeFxTrigger === fx ? 'bg-amber-400 text-black border-white shadow-[0_0_10px_rgba(245,158,11,0.8)]' : 'bg-neutral-900 border-amber-600/60 text-amber-400 hover:bg-amber-950/40'}`}
-                          >
-                            {fx}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    <button 
-                      onClick={() => setFxModeActive(!fxModeActive)}
-                      className={`w-full py-2 rounded border font-bold text-xs transition-all ${fxModeActive ? 'bg-amber-500 text-black border-amber-300 shadow-[0_0_14px_rgba(245,158,11,0.7)] animate-pulse' : 'bg-neutral-900 border-neutral-700 text-neutral-400 hover:text-neutral-200'}`}
-                    >
-                      {fxModeActive ? '⚡ [FX MODE ACTIVE: PUNCH-IN ENGAGED]' : '⚡ [9th BTN: FX MODE OFF]'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* --- [F3] MIXER TAB --- */}
-        {activeTab === 'F3_MIXER' && (
-          <div className="flex-1 bg-neutral-900/70 border border-emerald-900/40 rounded-lg p-4 flex flex-col shadow-lg">
-            <div className="font-bold text-emerald-300 mb-3 border-b border-neutral-800 pb-2 tracking-wide">MASTER MIX & 7 TRACK CHANNELS (PARALLEL DYNAMICS)</div>
-            <div className="space-y-2.5 overflow-y-auto flex-1 pr-2">
-              <div className="bg-neutral-900 border border-emerald-600/60 p-2.5 rounded-md flex items-center justify-between shadow">
-                <span className="font-bold text-emerald-300 w-28">MASTER BUS</span>
-                <span className="text-neutral-300">Vol: 85%</span>
-                <span className="text-neutral-300">Limiter Mix: 100%</span>
-                <div className="space-x-1.5">
-                  <button className="px-2.5 py-1 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded text-xs">MUTE</button>
-                  <button className="px-2.5 py-1 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded text-xs">SOLO</button>
-                </div>
-              </div>
-
-              {['T1 (Kick)', 'T2 (Snare)', 'T3 (HiHat)', 'T4 (Synth)', 'T5 (Bass)', 'T6 (Pad)', 'T7 (FX)'].map((trk, i) => (
-                <div key={i} className="bg-neutral-900/60 border border-neutral-800 p-2 rounded-md flex items-center justify-between">
-                  <span className="text-neutral-300 w-28 font-bold">{trk}</span>
-                  <span className="text-neutral-400">Vol: 80%</span>
-                  <span className="text-neutral-400">Comp Mix: {50 + i * 5}%</span>
-                  <div className="space-x-1">
-                    <button className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded text-neutral-300 text-xs">M</button>
-                    <button className="px-2 py-0.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded text-neutral-300 text-xs">S</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* --- [F4] BENCH TAB --- */}
-        {activeTab === 'F4_BENCH' && (
-          <div className="flex-1 flex gap-2">
-            <div className="flex-1 bg-neutral-900/70 border border-emerald-900/40 rounded-lg p-4 flex flex-col justify-between shadow-lg">
-              <div className="font-bold text-emerald-300 tracking-wide">DEDICATED SAMPLE WORKBENCH & PRECISION CHOPPER</div>
-              <div className="flex-1 bg-black/80 border border-neutral-800 rounded-md my-2 flex items-center justify-center text-neutral-500">
-                [ LOAD OR DRAG AUDIO FILE FOR SURGICAL WAVEFORM SLICING ]
-              </div>
-              <div className="flex justify-between text-xs text-neutral-400">
-                <span>ZOOM: 100%</span>
-                <span>ZERO-CROSSING SNAP: ON</span>
-                <span>TOUCH-DRAG START/END: ENABLED</span>
-              </div>
-            </div>
-            <div className="w-72 bg-neutral-900/70 border border-emerald-900/40 rounded-lg p-3 flex flex-col items-center justify-center space-y-4 shadow-lg">
-              <div className="text-xs font-bold text-neutral-300">M8 NAVIGATION WINDOW</div>
-              <div className="grid grid-cols-3 gap-2 w-full text-center">
-                <div />
-                <button className="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-1.5 rounded shadow">▲</button>
-                <div />
-                <button className="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-1.5 rounded shadow">◄</button>
-                <button className="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-1.5 rounded shadow">EDIT</button>
-                <button className="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-1.5 rounded shadow">►</button>
-                <div />
-                <button className="bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 py-1.5 rounded shadow">▼</button>
-                <div />
-              </div>
-              <button className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-black font-bold rounded shadow">ASSIGN CHOP TO [F1/F2] PADS</button>
-            </div>
-          </div>
-        )}
-
-        {/* --- [F5] SONG ARRANGER TAB --- */}
-        {activeTab === 'F5_SONG' && (
-          <div className="flex-1 bg-neutral-900/70 border border-emerald-900/40 rounded-lg p-4 flex flex-col shadow-lg">
-            <div className="flex justify-between items-center mb-3 border-b border-neutral-800 pb-2">
-              <span className="font-bold text-emerald-300 tracking-wide">SONG ARRANGER // SP-404SX PATTERN CHAIN WORKFLOW</span>
-              <button onClick={addSongSlot} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-black font-bold rounded text-xs shadow">+ ADD CHAIN SLOT</button>
-            </div>
-            
-            <div className="text-neutral-400 text-xs mb-3">
-              {isPlaying ? <span className="text-emerald-400 font-bold">▶ PLAYBACK ACTIVE: Cycling through queued song slots...</span> : 'Click any slot status to toggle between ACTIVE, QUEUED, and EMPTY.'}
-            </div>
-
-            <div className="space-y-2 flex-1 overflow-y-auto pr-1">
-              {songSlots.map((slot, index) => (
-                <div 
-                  key={slot.id} 
-                  className={`p-3 rounded-md border flex justify-between items-center transition-all ${
-                    slot.status === 'ACTIVE' ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.3)]' :
-                    slot.status === 'QUEUED' ? 'bg-amber-950/40 border-amber-600 text-amber-300' :
-                    'bg-neutral-900/80 border-neutral-800 text-neutral-500'
-                  }`}
+        {/* GLOBAL TOP NAVIGATION & THEME SELECTOR BAR */}
+        <div className={`flex items-center justify-between border-b ${themeTokens.border} pb-2 mb-2 text-xs shrink-0`}>
+          <div className="flex items-center space-x-2">
+            <span className="font-bold tracking-widest px-2 py-0.5 bg-black/30 rounded border border-current">[●] {projectName}</span>
+            <div className="flex space-x-1">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setCurrentView(v as ViewId)}
+                  className={`px-2 py-0.5 rounded border transition-all font-bold ${currentView === v ? themeTokens.highlight : 'opacity-60 hover:opacity-100'}`}
                 >
-                  <div className="flex items-center space-x-3">
-                    <span className="text-neutral-500 font-bold">SLOT {String(index + 1).padStart(2, '0')}</span>
-                    <span className="font-bold text-white">{slot.pattern}</span>
-                    <span className="text-xs text-neutral-400">({slot.bars} Bars)</span>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <button 
-                      onClick={() => cycleSlotStatus(slot.id)}
-                      className={`px-3 py-1 rounded text-xs font-bold border transition-all ${
-                        slot.status === 'ACTIVE' ? 'bg-emerald-600 text-black border-emerald-400' :
-                        slot.status === 'QUEUED' ? 'bg-amber-500 text-black border-amber-400' :
-                        'bg-neutral-800 text-neutral-400 border-neutral-700 hover:bg-neutral-700'
-                      }`}
-                    >
-                      [{slot.status}]
-                    </button>
-                  </div>
-                </div>
+                  V{v}
+                </button>
               ))}
             </div>
           </div>
-        )}
 
-        {/* --- [F6] MENU & PRESET MANAGER TAB --- */}
-        {activeTab === 'F6_MENU' && (
-          <div className="flex-1 bg-neutral-900/70 border border-emerald-900/40 rounded-lg p-4 flex flex-col shadow-lg">
-            <div className="flex justify-between items-center mb-3 border-b border-neutral-800 pb-2">
-              <span className="font-bold text-emerald-300 tracking-wide">MENU & PRESET MANAGER {f6SubView !== 'MAIN' ? `// ${f6SubView}` : ''}</span>
-              {f6SubView !== 'MAIN' && (
-                <button onClick={() => setF6SubView('MAIN')} className="px-2.5 py-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded text-xs">← BACK TO MENU</button>
-              )}
+          <div className="flex items-center space-x-3">
+            <span className="hidden md:inline">THEME:</span>
+            <select
+              value={theme}
+              onChange={(e) => setTheme(e.target.value as ThemeMode)}
+              className="bg-black/40 border border-current px-2 py-0.5 rounded text-xs outline-none cursor-pointer"
+            >
+              <option value="default">Default (Cyber)</option>
+              <option value="pink-arranger">Pink Arranger</option>
+              <option value="retro-synth">Retro Synth</option>
+              <option value="monochrome">Monochrome</option>
+            </select>
+          </div>
+        </div>
+
+        {/* MAIN THREE-COLUMN WORKSPACE SHELL */}
+        <div className="flex-1 flex gap-3 overflow-hidden">
+          
+          {/* LEFT COLUMN NAVIGATION CLUSTER */}
+          <div className={`w-28 md:w-36 ${themeTokens.panel} border rounded-lg p-3 flex flex-col justify-between shrink-0 shadow-inner`}>
+            <div>
+              <div className="text-[10px] opacity-70 mb-2 tracking-wider font-bold">NAV CLUSTER</div>
+              <div className="grid grid-cols-3 gap-1 mb-4 text-center">
+                <div />
+                <button className="p-2 bg-black/30 border border-current rounded hover:bg-white/10 active:scale-95">▲</button>
+                <div />
+                <button className="p-2 bg-black/30 border border-current rounded hover:bg-white/10 active:scale-95">◄</button>
+                <button className="p-2 bg-black/30 border border-current rounded hover:bg-white/10 active:scale-95 font-bold text-[10px]">OK</button>
+                <button className="p-2 bg-black/30 border border-current rounded hover:bg-white/10 active:scale-95">►</button>
+                <div />
+                <button className="p-2 bg-black/30 border border-current rounded hover:bg-white/10 active:scale-95">▼</button>
+                <div />
+              </div>
             </div>
 
-            {f6SubView === 'MAIN' && (
-              <div className="space-y-2 text-neutral-300">
-                <div onClick={() => setF6SubView('PROJECT_SETTINGS')} className="p-2.5 bg-neutral-900 hover:bg-neutral-800 rounded-md border border-neutral-800 hover:border-emerald-500 cursor-pointer transition-colors">&gt; [1] PROJECT SETTINGS (Tempo, Swing, Master Scale, Export)</div>
-                <div onClick={() => setF6SubView('SYNTH_ENGINE')} className="p-2.5 bg-neutral-900 hover:bg-neutral-800 rounded-md border border-neutral-800 hover:border-emerald-500 cursor-pointer transition-colors">&gt; [2] SYNTH ENGINE (Waveform, Filter LPF, Envelope ADSR)</div>
-                <div onClick={() => setF6SubView('TABLE_EDITOR')} className="p-2.5 bg-neutral-900 hover:bg-neutral-800 rounded-md border border-neutral-800 hover:border-emerald-500 cursor-pointer transition-colors">&gt; [3] TABLE EDITOR (Sub-Step Sequencing & Micro-Timing Ticks)</div>
-                <div onClick={() => setF6SubView('FX_CONFIG')} className="p-2.5 bg-neutral-900 hover:bg-neutral-800 rounded-md border border-neutral-800 hover:border-emerald-500 cursor-pointer transition-colors">&gt; [4] FX PARAMETER CONFIG & PUNCH-IN MAPS</div>
-                <div className="p-2.5 bg-neutral-900 hover:bg-neutral-800 rounded-md border border-neutral-800 hover:border-emerald-500 cursor-pointer transition-colors">&gt; [5] SYSTEM & AUDIO INFO (iPad 9th Gen Audio Latency / 256ms)</div>
-              </div>
-            )}
+            <div className="space-y-2">
+              <button
+                onClick={() => setShiftActive(!shiftActive)}
+                className={`w-full py-1.5 rounded border text-xs font-bold transition-all ${shiftActive ? themeTokens.highlight : 'bg-black/20 hover:bg-black/40'}`}
+              >
+                SHIFT {shiftActive ? '[ON]' : ''}
+              </button>
+              <button
+                onClick={() => setIsPlaying(!isPlaying)}
+                className={`w-full py-1.5 rounded border text-xs font-bold transition-all ${isPlaying ? 'bg-emerald-500 text-black font-bold' : 'bg-black/20'}`}
+              >
+                {isPlaying ? 'PLAYING' : 'STOPPED'}
+              </button>
+            </div>
+          </div>
 
-            {f6SubView === 'PROJECT_SETTINGS' && (
-              <div className="space-y-3 text-xs text-neutral-300">
-                <div className="flex justify-between items-center bg-neutral-900 p-2.5 rounded-md border border-neutral-800">
-                  <span>MASTER TEMPO (BPM)</span>
-                  <input type="number" value={tempo} onChange={(e) => setTempo(Number(e.target.value))} className="bg-neutral-800 text-emerald-400 px-2 py-1 rounded w-20 text-center border border-neutral-700" />
+          {/* CENTER DYNAMIC VIEW RENDER AREA */}
+          <div className={`flex-1 ${themeTokens.panel} border rounded-lg p-3 flex flex-col overflow-hidden shadow-lg relative`}>
+            
+            {/* VIEW 1: SAMPLE & RECORD SCREEN [SP FUSION HUB] */}
+            {currentView === 1 && (
+              <div className="flex-1 flex flex-col space-y-2 overflow-hidden text-xs">
+                <div className="flex justify-between items-center bg-black/30 px-3 py-1 rounded border border-current font-bold">
+                  <span>REC | SRC: EXT | VOL: 94% | ARM: READY | SONG: 01</span>
+                  <span className="text-red-500 animate-pulse font-bold">● LIVE WAV</span>
                 </div>
-                <div className="flex justify-between items-center bg-neutral-900 p-2.5 rounded-md border border-neutral-800">
-                  <span>SWING AMOUNT</span>
-                  <span className="text-emerald-400">50% (OFF)</span>
-                </div>
-                <div className="pt-2">
-                  <button 
-                    onClick={exportProjectState}
-                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-black font-bold rounded shadow transition-all flex items-center justify-center space-x-2"
-                  >
-                    <span>💾 EXPORT PROJECT STATE (.JSON)</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {f6SubView === 'SYNTH_ENGINE' && (
-              <div className="space-y-3 text-xs text-neutral-300 flex-1 overflow-y-auto">
-                <div className="bg-neutral-900 p-2.5 rounded-md border border-neutral-800 flex justify-between items-center">
-                  <span className="font-bold text-emerald-300">OSCILLATOR WAVEFORM</span>
-                  <div className="flex space-x-1">
-                    {(['sawtooth', 'square', 'sine', 'triangle'] as OscillatorType[]).map(type => (
-                      <button 
-                        key={type} 
-                        onClick={() => setSynthParams(p => ({ ...p, waveform: type }))}
-                        className={`px-2 py-1 rounded text-[11px] font-bold uppercase transition-all ${synthParams.waveform === type ? 'bg-emerald-500 text-black' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
-                      >
-                        {type}
-                      </button>
-                    ))}
-                  </div>
+                
+                <div className="h-24 bg-black/80 border border-current rounded relative flex items-center px-2">
+                  <canvas ref={canvasRef} width={600} height={80} className="w-full h-full opacity-90" />
+                  <div className="absolute inset-y-0 left-1/3 w-0.5 bg-red-500 shadow-[0_0_8px_red]" />
                 </div>
 
-                <div className="bg-neutral-900 p-2.5 rounded-md border border-neutral-800 flex justify-between items-center">
-                  <span>LOW PASS FILTER CUTOFF ({synthParams.filterCutoff} Hz)</span>
-                  <input 
-                    type="range" 
-                    min={200} 
-                    max={8000} 
-                    step={100} 
-                    value={synthParams.filterCutoff} 
-                    onChange={e => setSynthParams(p => ({ ...p, filterCutoff: Number(e.target.value) }))}
-                    className="w-40 accent-emerald-500 cursor-pointer"
-                  />
-                </div>
-
-                <div className="bg-neutral-900 p-2.5 rounded-md border border-neutral-800 flex justify-between items-center">
-                  <span>FILTER RESONANCE / Q ({synthParams.filterRes} dB)</span>
-                  <input 
-                    type="range" 
-                    min={0} 
-                    max={15} 
-                    step={1} 
-                    value={synthParams.filterRes} 
-                    onChange={e => setSynthParams(p => ({ ...p, filterRes: Number(e.target.value) }))}
-                    className="w-40 accent-emerald-500 cursor-pointer"
-                  />
-                </div>
-
-                <div className="bg-neutral-900 p-2.5 rounded-md border border-neutral-800 flex justify-between items-center">
-                  <span>ENVELOPE ATTACK ({synthParams.attack.toFixed(2)}s)</span>
-                  <input 
-                    type="range" 
-                    min={0.001} 
-                    max={0.5} 
-                    step={0.01} 
-                    value={synthParams.attack} 
-                    onChange={e => setSynthParams(p => ({ ...p, attack: Number(e.target.value) }))}
-                    className="w-40 accent-emerald-500 cursor-pointer"
-                  />
-                </div>
-
-                <div className="bg-neutral-900 p-2.5 rounded-md border border-neutral-800 flex justify-between items-center">
-                  <span>ENVELOPE DECAY ({synthParams.decay.toFixed(2)}s)</span>
-                  <input 
-                    type="range" 
-                    min={0.05} 
-                    max={1.5} 
-                    step={0.05} 
-                    value={synthParams.decay} 
-                    onChange={e => setSynthParams(p => ({ ...p, decay: Number(e.target.value) }))}
-                    className="w-40 accent-emerald-500 cursor-pointer"
-                  />
-                </div>
-              </div>
-            )}
-
-            {f6SubView === 'TABLE_EDITOR' && (
-              <div className="flex-1 flex flex-col space-y-3 text-xs">
-                <div className="flex justify-between items-center bg-neutral-900 p-2.5 rounded-md border border-neutral-800">
-                  <span className="text-neutral-300 font-bold">TABLE ID: 01 // SPEED: {tableSpeed} TICK/STEP</span>
-                  <div className="space-x-2">
-                    <button onClick={() => setTableSpeed(s => Math.max(1, s - 1))} className="px-2.5 py-1 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded font-bold">-</button>
-                    <button onClick={() => setTableSpeed(s => Math.min(8, s + 1))} className="px-2.5 py-1 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded font-bold">+</button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-5 font-bold text-neutral-500 border-b border-neutral-800 pb-1 px-1">
-                  <span>STEP</span><span>PITCH</span><span>VOL</span><span>CMD (FX)</span><span>NUDGE (DEL)</span>
-                </div>
-
-                <div className="flex-1 overflow-y-auto space-y-1">
-                  {tableRows.map((row, idx) => (
-                    <div 
-                      key={idx} 
-                      onClick={() => setSelectedTableRow(idx)}
-                      className={`grid grid-cols-5 py-1 px-1 rounded-sm cursor-pointer border transition-colors ${selectedTableRow === idx ? 'bg-emerald-950/90 border-emerald-500 text-emerald-200 font-bold' : 'bg-neutral-900/50 border-neutral-800 text-neutral-300 hover:bg-neutral-800'}`}
-                    >
-                      <span>{String(row.step).padStart(2, '0')}{selectedTableRow === idx ? '▶' : ''}</span>
-                      <span>{row.pitch}</span>
-                      <span>{row.vol}</span>
-                      <span>{row.cmd}</span>
-                      <span className={row.del !== 0 ? 'text-amber-400 font-bold' : 'text-neutral-500'}>
-                        {row.del > 0 ? `+${row.del}` : row.del} TICKS
-                      </span>
+                <div className="grid grid-cols-5 gap-1 text-[11px]">
+                  {['SLICE: 01', 'PLAY: ON', 'START: 0.00', 'LOOP: OFF', 'LEN: 2.0s', 'DET: +00', 'DEG: 02', 'FLT: LPF', 'CUT: 4kHz', 'RES: 04'].map((p, i) => (
+                    <div key={i} className="bg-black/30 p-1.5 rounded border border-current flex justify-between">
+                      <span className="opacity-70">{p.split(':')[0]}</span>
+                      <span className="font-bold">{p.split(':')[1]}</span>
                     </div>
                   ))}
                 </div>
 
-                <div className="bg-neutral-900 p-2.5 rounded-md border border-neutral-800 flex justify-between items-center">
-                  <span className="text-neutral-300">NUDGE STEP {selectedTableRow} Ticks:</span>
-                  <div className="space-x-2">
-                    <button onClick={() => adjustTableTick(-1)} className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded font-bold shadow">-1 TICK</button>
-                    <button onClick={() => adjustTableTick(1)} className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded font-bold shadow">+1 TICK</button>
+                <div className="flex-1 grid grid-cols-4 gap-1.5 pt-1">
+                  {Array.from({ length: 16 }).map((_, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setSelectedPad(idx + 1)}
+                      className={`border rounded flex flex-col items-center justify-center p-1 transition-all ${selectedPad === idx + 1 ? themeTokens.highlight : 'bg-black/20 hover:bg-black/40'}`}
+                    >
+                      <span className="text-[9px] opacity-70">PAD {idx + 1}</span>
+                      <span className="font-bold">SLICE_{String(idx + 1).padStart(2, '0')}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* VIEW 2: EFFECT SETTINGS SCREEN */}
+            {currentView === 2 && (
+              <div className="flex-1 flex flex-col space-y-3 overflow-y-auto text-xs">
+                <div className="font-bold border-b border-current pb-1">EFFECT PROCESSORS // MODFX, DELAY, REVERB</div>
+                
+                {[
+                  { group: 'MODFX', params: [['MOD TYPE', 'CHORUS'], ['RATE', '1.4Hz'], ['DEPTH', '65%'], ['MIX', '40%']] },
+                  { group: 'DELAY', params: [['TIME L:R', '3/16'], ['FEEDBACK', '42%'], ['LPF CUT', '6.5kHz'], ['MIX', '30%']] },
+                  { group: 'REVERB', params: [['ROOM SIZE', '85%'], ['DAMPING', '2.4kHz'], ['DECAY', '3.8s'], ['MIX', '25%']] },
+                ].map((sec, idx) => (
+                  <div key={idx} className="bg-black/30 p-3 rounded border border-current space-y-2">
+                    <div className="font-bold opacity-80">&gt; {sec.group} PROCESSOR</div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      {sec.params.map(([k, v], i) => (
+                        <div key={i} className="bg-black/40 p-2 rounded border border-current flex flex-col justify-between space-y-1">
+                          <span className="text-[10px] opacity-70">{k}</span>
+                          <div className="flex justify-between items-center font-bold">
+                            <span>{v}</span>
+                            <span className="text-[10px] px-1 bg-white/10 rounded">HEX: 8F</span>
+                          </div>
+                          <div className="w-full h-1 bg-black/60 rounded overflow-hidden">
+                            <div className="w-3/4 h-full bg-current" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* VIEW 3: PROJECT OVERVIEW SCREEN */}
+            {currentView === 3 && (
+              <div className="flex-1 flex flex-col space-y-3 overflow-y-auto text-xs">
+                <div className="font-bold border-b border-current pb-1">PROJECT MASTER & DIRECTORY CONFIGURATION</div>
+                
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                  {[
+                    ['TEMPO', `${tempo} BPM`, () => setTempo(t => mutateVal(t, 60, 200, 1, 1))],
+                    ['TRANSPOSE', '+00 SEMI', () => {}],
+                    ['GROOVE', 'SP-1200 64%', () => {}],
+                    ['SCALE', 'CHROMATIC', () => {}],
+                    ['LIVE QUANTIZ', '1/16 STEP', () => {}],
+                  ].map(([label, val, action], i) => (
+                    <div key={i} onClick={action as any} className="bg-black/30 p-2.5 rounded border border-current cursor-pointer hover:bg-white/5">
+                      <div className="text-[10px] opacity-70">{label}</div>
+                      <div className="font-bold mt-1 text-sm">{val}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 flex-1">
+                  {['MIDI CONFIG', 'SYSTEM SETTINGS', 'ROUTING MAPPINGS'].map((title, i) => (
+                    <div key={i} className="bg-black/30 p-3 rounded border border-current flex flex-col justify-between">
+                      <span className="font-bold">{title}</span>
+                      <div className="space-y-1 text-[11px] opacity-80 my-2">
+                        <div>CH 01: OMNI IN</div>
+                        <div>CLK: INTERNAL</div>
+                        <div>SYNC: MASTER</div>
+                      </div>
+                      <button className="py-1 bg-black/40 border border-current rounded text-[10px] font-bold">EDIT PORT</button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-between gap-2 pt-1">
+                  {['RENDER BUNDLE', 'PHRASES (64)', 'INST / TBL', 'VIEW INST. POOL'].map((btn, i) => (
+                    <button key={i} className="flex-1 py-2 bg-black/40 hover:bg-black/60 border border-current rounded font-bold text-center">
+                      {btn}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* VIEW 4: AUDIO MIXER LEVEL SCREEN */}
+            {currentView === 4 && (
+              <div className="flex-1 flex flex-col space-y-3 overflow-hidden text-xs">
+                <div className="h-6 bg-black/80 border border-current rounded flex items-center px-2">
+                  <canvas ref={canvasRef} width={600} height={20} className="w-full h-full opacity-80" />
+                </div>
+
+                <div className="flex-1 grid grid-cols-9 gap-2">
+                  {Array.from({ length: 8 }).map((_, idx) => (
+                    <div key={idx} className="bg-black/30 border border-current rounded p-2 flex flex-col items-center justify-between">
+                      <span className="font-bold text-[10px]">T{idx + 1}</span>
+                      <div className="flex-1 w-4 bg-black/60 rounded my-2 relative overflow-hidden flex flex-col justify-end">
+                        <div className="w-full h-3/4 bg-gradient-to-t from-emerald-500 via-amber-400 to-orange-500 rounded-b" />
+                      </div>
+                      <div className="space-y-0.5 text-[9px] text-center w-full">
+                        <div className="bg-black/40 rounded px-0.5">EQ</div>
+                        <div className="bg-black/40 rounded px-0.5">DB</div>
+                        <div className="bg-black/40 rounded px-0.5">MX</div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* MASTER BUS */}
+                  <div className="bg-black/50 border border-current rounded p-2 flex flex-col items-center justify-between shadow">
+                    <span className="font-bold text-[10px] text-red-400">MST</span>
+                    <div className="flex-1 w-5 bg-black/80 rounded my-2 relative overflow-hidden flex flex-col justify-end">
+                      <div className="w-full h-5/6 bg-gradient-to-t from-emerald-500 via-yellow-400 to-red-500 rounded-b animate-pulse" />
+                    </div>
+                    <span className="text-[9px] font-bold">0.0dB</span>
                   </div>
                 </div>
               </div>
             )}
 
-            {f6SubView === 'FX_CONFIG' && (
-              <div className="space-y-2 text-xs text-neutral-300">
-                <div className="bg-neutral-900 p-2.5 rounded-md border border-neutral-800 flex justify-between items-center">
-                  <span>9th BTN PUNCH-IN FX MAP: DJFX LOOP</span>
-                  <span className="text-emerald-400">RATE: 1/4 BEAT</span>
+            {/* VIEW 5: TABLE AUTOMATION LAYER */}
+            {currentView === 5 && (
+              <div className="flex-1 flex flex-col space-y-2 overflow-hidden text-xs">
+                <div className="flex justify-between items-center font-bold border-b border-current pb-1">
+                  <span>TABLE AUTOMATION LAYER (HEX 00 TO 0F)</span>
+                  <span>SPEED: 1 TICK</span>
                 </div>
-                <div className="bg-neutral-900 p-2.5 rounded-md border border-neutral-800 flex justify-between items-center">
-                  <span>TAPE STOP DECAY TIME</span>
-                  <span className="text-emerald-400">250ms</span>
+                <div className="grid grid-cols-5 text-[10px] opacity-70 border-b border-current pb-1 font-bold">
+                  <span>INDEX ROW</span><span>VOL MULT (V)</span><span>MACRO FX1</span><span>MACRO FX2</span><span>MACRO FX3</span>
+                </div>
+                <div className="flex-1 overflow-y-auto space-y-1 pr-1">
+                  {Array.from({ length: 16 }).map((_, r) => {
+                    const hexIdx = r.toString(16).toUpperCase();
+                    return (
+                      <div
+                        key={r}
+                        onClick={() => setSelectedRow(r)}
+                        className={`grid grid-cols-5 py-1 px-2 rounded cursor-pointer border ${selectedRow === r ? themeTokens.highlight : 'bg-black/20 hover:bg-black/40 border-transparent'}`}
+                      >
+                        <span className="font-bold">TBL_{hexIdx}</span>
+                        <span>FF</span>
+                        <span>CUT (+{r * 4})</span>
+                        <span>RES (0{r})</span>
+                        <span>---</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
+
+            {/* VIEW 6: PHRASE SEQUENCER GRID */}
+            {currentView === 6 && (
+              <div className="flex-1 flex flex-col space-y-2 overflow-hidden text-xs">
+                <div className="flex justify-between items-center font-bold border-b border-current pb-1">
+                  <span>PHRASE SEQUENCER GRID (LINES 00 TO 0F)</span>
+                  <span className="text-[#00F5D4] font-bold">ACTIVE SELECTION: ROW {selectedRow}</span>
+                </div>
+                <div className="grid grid-cols-6 text-[10px] opacity-70 border-b border-current pb-1 font-bold">
+                  <span>LINE</span><span>PITCH (N)</span><span>VEL (V)</span><span>INST (I)</span><span>FX1</span><span>FX2</span>
+                </div>
+                <div className="flex-1 overflow-y-auto space-y-1 pr-1">
+                  {Array.from({ length: 16 }).map((_, r) => (
+                    <div
+                      key={r}
+                      onClick={() => setSelectedRow(r)}
+                      className={`grid grid-cols-6 py-1 px-2 rounded cursor-pointer border ${selectedRow === r ? 'border-[#00F5D4] bg-[#00F5D4]/20 font-bold' : 'bg-black/20 hover:bg-black/40 border-transparent'}`}
+                    >
+                      <span>{String(r).padStart(2, '0')}</span>
+                      <span>{r % 2 === 0 ? 'C-4' : 'G-4'}</span>
+                      <span>{r % 3 === 0 ? 'FF' : 'A0'}</span>
+                      <span>01</span>
+                      <span>TSP</span>
+                      <span>---</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* VIEW 7: SYNTH INSTRUMENT MATRIX */}
+            {currentView === 7 && (
+              <div className="flex-1 flex flex-col space-y-3 overflow-y-auto text-xs">
+                <div className="font-bold border-b border-current pb-1">QUAD-OSCILLATOR SYNTH MATRIX & ENGINE</div>
+                
+                <div className="grid grid-cols-4 gap-2">
+                  {['OSC A', 'OSC B', 'OSC C', 'OSC D'].map((osc, i) => (
+                    <div key={i} className="bg-black/30 p-2.5 rounded border border-current space-y-1">
+                      <div className="font-bold">{osc}</div>
+                      <div className="text-[10px] opacity-70">WAVE: {i === 0 ? 'SAW' : i === 1 ? 'SQR' : i === 2 ? 'TRI' : 'SIN'}</div>
+                      <div className="text-[10px] opacity-70">RATIO: 1.{i}x</div>
+                      <div className="w-full h-1 bg-black/60 rounded mt-2">
+                        <div className="w-2/3 h-full bg-current" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-black/30 p-3 rounded border border-current space-y-2">
+                  <div className="font-bold opacity-80">&gt; GRANULAR ENGINE PARAMETERS</div>
+                  <div className="grid grid-cols-3 md:grid-cols-5 gap-2 text-[11px]">
+                    {['MOD 1: 50%', 'MOD 2: 20%', 'FILTER: LPF', 'CUTOFF: 4.2k', 'RES: 08', 'PAN: CTR', 'DRY: 80%', 'CHO: 15%', 'DELAY: 25%', 'REV: 40%'].map((param, i) => (
+                      <div key={i} className="bg-black/40 p-2 rounded border border-current flex flex-col justify-between">
+                        <span className="text-[10px] opacity-70">{param.split(':')[0]}</span>
+                        <span className="font-bold mt-1">{param.split(':')[1]}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* VIEW 8: SONG ARRANGEMENT GRID (FORCES PINK-ARRANGER THEME) */}
+            {currentView === 8 && (
+              <div className="flex-1 flex flex-col space-y-2 overflow-hidden text-xs">
+                <div className="flex justify-between items-center font-bold border-b border-current pb-1">
+                  <span>SONG ARRANGEMENT GRID // 8-LANE TRACK PLAYGROUND</span>
+                  <span className="px-2 py-0.5 bg-white text-black rounded font-bold">THEME: PINK-ARRANGER ACTIVE</span>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-1 pr-1">
+                  {Array.from({ length: 8 }).map((_, lane) => (
+                    <div key={lane} className="flex items-center space-x-2 bg-black/20 p-2 rounded border border-current">
+                      <span className="w-16 font-bold text-[11px]">LANE {lane + 1}</span>
+                      <div className="flex-1 grid grid-cols-8 gap-1">
+                        {Array.from({ length: 8 }).map((_, col) => {
+                          const isActive = (lane + col) % 3 === 0;
+                          return (
+                            <div
+                              key={col}
+                              className={`h-7 rounded flex items-center justify-center font-bold text-[10px] border ${isActive ? 'bg-white text-black border-black shadow' : 'bg-black/20 opacity-40 border-current'}`}
+                            >
+                              {isActive ? `PAT_${lane}${col}` : '---'}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
           </div>
-        )}
 
-      </div>
+          {/* RIGHT COLUMN STATUS HUD */}
+          <div className={`w-32 md:w-44 ${themeTokens.panel} border rounded-lg p-3 flex flex-col justify-between shrink-0 shadow-inner`}>
+            <div>
+              <div className="text-[10px] opacity-70 mb-2 font-bold tracking-wider">STATUS HUD</div>
+              <div className="space-y-2 text-[11px]">
+                <div className="bg-black/30 p-1.5 rounded border border-current">
+                  <div className="opacity-70 text-[9px]">TEMPO TICKER</div>
+                  <div className="font-bold text-sm">T►{tempo}</div>
+                </div>
 
-      {/* 3. BOTTOM HARDWARE SOFT-KEYS NAVIGATION BAR */}
-      <div className="bg-neutral-900/90 border-t border-emerald-900/60 p-2.5 flex justify-around items-center shrink-0 rounded-b shadow-inner">
-        <button 
-          onClick={() => { setActiveTab('F1_F2'); setF6SubView('MAIN'); }}
-          className={`px-3.5 py-1.5 rounded text-xs font-bold transition-all shadow ${activeTab === 'F1_F2' ? 'bg-emerald-500 text-black border border-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-neutral-800 hover:bg-neutral-700 text-emerald-400 border border-neutral-700'}`}
-        >
-          [F1/F2] MULTI-VIEW{activeTab === 'F1_F2' ? '*' : ''}
-        </button>
-        <button 
-          onClick={() => { setActiveTab('F3_MIXER'); setF6SubView('MAIN'); }}
-          className={`px-3.5 py-1.5 rounded text-xs font-bold transition-all shadow ${activeTab === 'F3_MIXER' ? 'bg-emerald-500 text-black border border-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-neutral-800 hover:bg-neutral-700 text-emerald-400 border border-neutral-700'}`}
-        >
-          [F3] MIXER{activeTab === 'F3_MIXER' ? '*' : ''}
-        </button>
-        <button 
-          onClick={() => { setActiveTab('F4_BENCH'); setF6SubView('MAIN'); }}
-          className={`px-3.5 py-1.5 rounded text-xs font-bold transition-all shadow ${activeTab === 'F4_BENCH' ? 'bg-emerald-500 text-black border border-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-neutral-800 hover:bg-neutral-700 text-emerald-400 border border-neutral-700'}`}
-        >
-          [F4] BENCH{activeTab === 'F4_BENCH' ? '*' : ''}
-        </button>
-        <button 
-          onClick={() => { setActiveTab('F5_SONG'); setF6SubView('MAIN'); }}
-          className={`px-3.5 py-1.5 rounded text-xs font-bold transition-all shadow ${activeTab === 'F5_SONG' ? 'bg-emerald-500 text-black border border-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-neutral-800 hover:bg-neutral-700 text-emerald-400 border border-neutral-700'}`}
-        >
-          [F5] SONG{activeTab === 'F5_SONG' ? '*' : ''}
-        </button>
-        <button 
-          onClick={() => { setActiveTab('F6_MENU'); }}
-          className={`px-3.5 py-1.5 rounded text-xs font-bold transition-all shadow ${activeTab === 'F6_MENU' ? 'bg-emerald-500 text-black border border-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-neutral-800 hover:bg-neutral-700 text-emerald-400 border border-neutral-700'}`}
-        >
-          [F6] MENU{activeTab === 'F6_MENU' ? '*' : ''}
-        </button>
+                <div className="bg-black/30 p-1.5 rounded border border-current">
+                  <div className="opacity-70 text-[9px]">BATTERY / SYS</div>
+                  <div className="font-bold">98% [AC]</div>
+                </div>
+
+                <div className="bg-black/30 p-2 rounded border border-current space-y-1">
+                  <div className="opacity-70 text-[9px]">8-LANE STEP ARRAY</div>
+                  <div className="grid grid-cols-4 gap-1 text-center">
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((lane) => (
+                      <div key={lane} className={`py-0.5 rounded text-[10px] font-bold ${lane === 1 || lane === 3 ? themeTokens.highlight : 'bg-black/40 opacity-50'}`}>
+                        {lane}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="bg-black/30 p-2 rounded border border-current">
+                <div className="opacity-70 text-[9px] mb-1">PIANO-ROLL MINI</div>
+                <div className="h-10 bg-black/80 rounded relative flex items-center overflow-hidden">
+                  <div className="w-full h-2 bg-current opacity-40 absolute" />
+                  <div className="w-3 h-6 bg-red-500 rounded absolute left-4" />
+                  <div className="w-3 h-4 bg-emerald-400 rounded absolute left-12" />
+                </div>
+              </div>
+
+              <div className="bg-black/30 p-2 rounded border border-current text-center">
+                <div className="opacity-70 text-[9px] mb-1">NAV COL (S C P I T M)</div>
+                <div className="flex justify-around font-bold text-xs">
+                  <span className={currentView === 8 ? 'underline' : 'opacity-60'}>S</span>
+                  <span>C</span>
+                  <span className={currentView === 6 ? 'underline' : 'opacity-60'}>P</span>
+                  <span className={currentView === 7 ? 'underline' : 'opacity-60'}>I</span>
+                  <span className={currentView === 5 ? 'underline' : 'opacity-60'}>T</span>
+                  <span className={currentView === 4 ? 'underline' : 'opacity-60'}>M</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
       </div>
 
     </div>
