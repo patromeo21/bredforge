@@ -31,6 +31,9 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
   const [activeFxTrigger, setActiveFxTrigger] = useState<string | null>(null);
   const [f6SubView, setF6SubView] = useState<F6SubView>('MAIN');
 
+  // Last triggered pad feedback state for header status display
+  const [lastTriggeredInfo, setLastTriggeredInfo] = useState<string>('READY');
+
   const [tableSpeed, setTableSpeed] = useState<number>(1);
   const [selectedTableRow, setSelectedTableRow] = useState<number>(0);
   const [tableRows, setTableRows] = useState<TableRow[]>([
@@ -45,6 +48,48 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
   ]);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Web Audio trigger simulation for 4x4 pads
+  const triggerPadAudio = (padName: string) => {
+    setActivePad(padName);
+    setLastTriggeredInfo(`PAD: ${padName}`);
+
+    try {
+      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const audioCtx = new AudioContextClass();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      if (padName.includes('KICK') || padName.includes('SUB')) {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(130, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(35, audioCtx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+      } else if (padName.includes('SNARE') || padName.includes('CLAP')) {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(250, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+      } else {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(220, audioCtx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+      }
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.15);
+    } catch {
+      // Fallback if browser audio policy restricts before user gesture
+    }
+
+    setTimeout(() => setActivePad(null), 120);
+  };
 
   const adjustTableTick = (delta: number) => {
     setTableRows(prev => prev.map((row, idx) => {
@@ -110,7 +155,7 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
           <span className="text-neutral-500">|</span>
           <span className="text-neutral-300">BPM: {tempo}</span>
           <span className="text-neutral-500">|</span>
-          <span className="text-emerald-500">ROW: {String(currentRow).padStart(2, '0')}/63</span>
+          <span className="text-amber-400 font-bold">{lastTriggeredInfo}</span>
         </div>
 
         <div className="flex items-center space-x-2 z-10">
@@ -194,9 +239,9 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
                     {['KICK_01', 'SNARE_01', 'HIHAT_01', 'SYNTH_01', 'CHOP_01', 'CHOP_02', 'CHOP_03', 'CHOP_04', 'PERC_01', 'PERC_02', 'VOCAL_1', 'BASS_01', 'FX_01', 'FX_02', 'CRASH_1', 'SUB_01'].map((pad, idx) => (
                       <button 
                         key={idx} 
-                        onMouseDown={() => setActivePad(pad)}
-                        onMouseUp={() => setActivePad(null)}
-                        className={`border rounded flex flex-col items-center justify-center p-1 text-[10px] transition-all ${activePad === pad ? 'bg-emerald-400 text-black border-emerald-300 font-bold scale-95' : 'bg-neutral-800 hover:bg-emerald-900/60 border-neutral-700 text-neutral-300'}`}
+                        onMouseDown={() => triggerPadAudio(pad)}
+                        onTouchStart={() => triggerPadAudio(pad)}
+                        className={`border rounded flex flex-col items-center justify-center p-1 text-[10px] transition-all ${activePad === pad ? 'bg-emerald-400 text-black border-emerald-200 font-bold scale-95 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-neutral-800 hover:bg-emerald-900/60 border-neutral-700 text-neutral-300'}`}
                       >
                         <span className="text-[9px] text-emerald-500">{idx + 1}</span>
                         <span className="truncate w-full text-center">{pad}</span>
