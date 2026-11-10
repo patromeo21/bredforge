@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { TransportBar } from './TransportBar';
 import { MixerView } from './MixerView';
 import { SampleWorkbench } from './SampleWorkbench';
+import { TrackerGrid } from './TrackerGrid';
 
 export interface DualScreenWorkspaceProps {
   projectName?: string;
@@ -66,17 +67,8 @@ export function DualScreenWorkspace({ projectName, tempo }: DualScreenWorkspaceP
 
       {/* Main Active Workspace View Container */}
       <div className="flex-1 flex flex-col bg-zinc-900/30 border border-zinc-800/80 rounded-2xl overflow-hidden p-3 shadow-2xl backdrop-blur-sm">
-        {activeTab === 'tracker' && (
-          <div className="flex-1 flex items-center justify-center text-zinc-500 border border-dashed border-zinc-800 rounded-xl bg-zinc-950/40">
-            <div className="text-center p-6">
-              <div className="text-amber-500 font-bold text-sm mb-1 tracking-wider">TRACKER VIEW ACTIVE</div>
-              <p className="text-xs text-zinc-600">Dual-screen pattern sequencer grid ready for sync ticks.</p>
-            </div>
-          </div>
-        )}
-
+        {activeTab === 'tracker' && <TrackerGrid />}
         {activeTab === 'mixer' && <MixerView />}
-
         {activeTab === 'workbench' && <SampleWorkbench />}
       </div>
 
