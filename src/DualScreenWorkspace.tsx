@@ -14,7 +14,7 @@ interface TableRow {
   pitch: string;
   vol: string;
   cmd: string;
-  del: number; // Micro-timing tick offset (-8 to +8)
+  del: number;
 }
 
 export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
@@ -31,7 +31,6 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
   const [activeFxTrigger, setActiveFxTrigger] = useState<string | null>(null);
   const [f6SubView, setF6SubView] = useState<F6SubView>('MAIN');
 
-  // Interactive Table Editor State
   const [tableSpeed, setTableSpeed] = useState<number>(1);
   const [selectedTableRow, setSelectedTableRow] = useState<number>(0);
   const [tableRows, setTableRows] = useState<TableRow[]>([
@@ -47,7 +46,6 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Helper to adjust micro-timing ticks (`del`) on the selected table row
   const adjustTableTick = (delta: number) => {
     setTableRows(prev => prev.map((row, idx) => {
       if (idx === selectedTableRow) {
@@ -58,7 +56,6 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
     }));
   };
 
-  // Simulated waveform scope renderer
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -458,4 +455,18 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
           onClick={() => { setActiveTab('F5_SONG'); setF6SubView('MAIN'); }}
           className={`px-3 py-1 rounded font-bold ${activeTab === 'F5_SONG' ? 'bg-emerald-600 text-black' : 'bg-neutral-800 text-emerald-400'}`}
         >
-          [F
+          [F5] SONG{activeTab === 'F5_SONG' ? '*' : ''}
+        </button>
+        <button 
+          onClick={() => { setActiveTab('F6_MENU'); }}
+          className={`px-3 py-1 rounded font-bold ${activeTab === 'F6_MENU' ? 'bg-emerald-600 text-black' : 'bg-neutral-800 text-emerald-400'}`}
+        >
+          [F6] MENU{activeTab === 'F6_MENU' ? '*' : ''}
+        </button>
+      </div>
+
+    </div>
+  );
+};
+
+export default DualScreenWorkspace;
