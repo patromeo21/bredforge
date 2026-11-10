@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 
 type TabMode = 'F1_F2' | 'F3_MIXER' | 'F4_BENCH' | 'F5_SONG' | 'F6_MENU';
 type RightPanelMode = 'PADS' | 'NAV';
-type F6SubView = 'MAIN' | 'PROJECT_SETTINGS' | 'TABLE_EDITOR' | 'FX_CONFIG';
+type F6SubView = 'MAIN' | 'PROJECT_SETTINGS' | 'SYNTH_ENGINE' | 'TABLE_EDITOR' | 'FX_CONFIG';
 
 interface DualScreenWorkspaceProps {
   projectName?: string;
@@ -24,6 +24,15 @@ interface SongSlot {
   status: 'ACTIVE' | 'QUEUED' | 'EMPTY';
 }
 
+// Expanded Synth Engine State Interface
+interface SynthParams {
+  waveform: OscillatorType;
+  filterCutoff: number; // 100Hz to 10000Hz
+  filterRes: number;    // 0 to 20 dB Q
+  attack: number;       // 0.001s to 1.0s
+  decay: number;        // 0.05s to 2.0s
+}
+
 export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
   projectName = 'BREDFORGE_M8_PROJ',
   tempo: initialTempo = 120,
@@ -38,6 +47,15 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
   const [activeFxTrigger, setActiveFxTrigger] = useState<string | null>(null);
   const [f6SubView, setF6SubView] = useState<F6SubView>('MAIN');
   const [lastTriggeredInfo, setLastTriggeredInfo] = useState<string>('SYS_READY');
+
+  // Interactive Synth Parameters
+  const [synthParams, setSynthParams] = useState<SynthParams>({
+    waveform: 'sawtooth',
+    filterCutoff: 3500,
+    filterRes: 4,
+    attack: 0.01,
+    decay: 0.25,
+  });
 
   const [tableSpeed, setTableSpeed] = useState<number>(1);
   const [selectedTableRow, setSelectedTableRow] = useState<number>(0);
@@ -76,13 +94,13 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
     }));
   };
 
-  // JSON State Export Feature
   const exportProjectState = () => {
     const projectData = {
       app: 'bredforge',
       version: '1.0.0',
       projectName,
       tempo,
+      synthParams,
       tableSpeed,
       tableRows,
       songSlots,
@@ -104,6 +122,7 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  // Expanded Web Audio Synth & Sample Trigger Engine
   const triggerPadAudio = (padName: string) => {
     setActivePad(padName);
     setLastTriggeredInfo(`PAD: ${padName}`);
@@ -112,32 +131,56 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
       const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       const audioCtx = new AudioContextClass();
       const osc = audioCtx.createOscillator();
+      const filter = audioCtx.createBiquadFilter();
       const gain = audioCtx.createGain();
+
+      const now = audioCtx.currentTime;
 
       if (padName.includes('KICK') || padName.includes('SUB')) {
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(130, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(35, audioCtx.currentTime + 0.15);
-        gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+        osc.frequency.setValueAtTime(140, now);
+        osc.frequency.exponentialRampToValueAtTime(32, now + 0.18);
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
       } else if (padName.includes('SNARE') || padName.includes('CLAP')) {
         osc.type = 'triangle';
-        osc.frequency.setValueAtTime(250, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.1);
-        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+        osc.frequency.setValueAtTime(260, now);
+        osc.frequency.exponentialRampToValueAtTime(75, now + 0.12);
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+      } else if (padName.includes('SYNTH') || padName.includes('BASS')) {
+        // Full Synth Engine Routing: OSC -> Filter -> Gain Envelope -> Output
+        osc.type = synthParams.waveform;
+        osc.frequency.setValueAtTime(padName.includes('BASS') ? 110 : 440, now);
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(synthParams.filterCutoff, now);
+        filter.Q.setValueAtTime(synthParams.filterRes, now);
+
+        // Envelope attack & decay
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(0.3, now + synthParams.attack);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + synthParams.attack + synthParams.decay);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
       } else {
         osc.type = 'square';
-        osc.frequency.setValueAtTime(440, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(220, audioCtx.currentTime + 0.08);
-        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+        osc.frequency.setValueAtTime(520, now);
+        osc.frequency.exponentialRampToValueAtTime(220, now + 0.08);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
       }
 
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.15);
+      osc.start(now);
+      osc.stop(now + 0.3);
     } catch {
       // Fallback
     }
@@ -469,7 +512,7 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
             {f6SubView === 'MAIN' && (
               <div className="space-y-2 text-neutral-300">
                 <div onClick={() => setF6SubView('PROJECT_SETTINGS')} className="p-2.5 bg-neutral-900 hover:bg-neutral-800 rounded-md border border-neutral-800 hover:border-emerald-500 cursor-pointer transition-colors">&gt; [1] PROJECT SETTINGS (Tempo, Swing, Master Scale, Export)</div>
-                <div className="p-2.5 bg-neutral-900 hover:bg-neutral-800 rounded-md border border-neutral-800 hover:border-emerald-500 cursor-pointer transition-colors">&gt; [2] INSTRUMENT PRESETS & BENCH KITS</div>
+                <div onClick={() => setF6SubView('SYNTH_ENGINE')} className="p-2.5 bg-neutral-900 hover:bg-neutral-800 rounded-md border border-neutral-800 hover:border-emerald-500 cursor-pointer transition-colors">&gt; [2] SYNTH ENGINE (Waveform, Filter LPF, Envelope ADSR)</div>
                 <div onClick={() => setF6SubView('TABLE_EDITOR')} className="p-2.5 bg-neutral-900 hover:bg-neutral-800 rounded-md border border-neutral-800 hover:border-emerald-500 cursor-pointer transition-colors">&gt; [3] TABLE EDITOR (Sub-Step Sequencing & Micro-Timing Ticks)</div>
                 <div onClick={() => setF6SubView('FX_CONFIG')} className="p-2.5 bg-neutral-900 hover:bg-neutral-800 rounded-md border border-neutral-800 hover:border-emerald-500 cursor-pointer transition-colors">&gt; [4] FX PARAMETER CONFIG & PUNCH-IN MAPS</div>
                 <div className="p-2.5 bg-neutral-900 hover:bg-neutral-800 rounded-md border border-neutral-800 hover:border-emerald-500 cursor-pointer transition-colors">&gt; [5] SYSTEM & AUDIO INFO (iPad 9th Gen Audio Latency / 256ms)</div>
@@ -486,7 +529,6 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
                   <span>SWING AMOUNT</span>
                   <span className="text-emerald-400">50% (OFF)</span>
                 </div>
-                {/* Export Project JSON Button */}
                 <div className="pt-2">
                   <button 
                     onClick={exportProjectState}
@@ -494,6 +536,82 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
                   >
                     <span>💾 EXPORT PROJECT STATE (.JSON)</span>
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* SYNTH ENGINE PARAMETERS EDITOR */}
+            {f6SubView === 'SYNTH_ENGINE' && (
+              <div className="space-y-3 text-xs text-neutral-300 flex-1 overflow-y-auto">
+                <div className="bg-neutral-900 p-2.5 rounded-md border border-neutral-800 flex justify-between items-center">
+                  <span className="font-bold text-emerald-300">OSCILLATOR WAVEFORM</span>
+                  <div className="flex space-x-1">
+                    {(['sawtooth', 'square', 'sine', 'triangle'] as OscillatorType[]).map(type => (
+                      <button 
+                        key={type} 
+                        onClick={() => setSynthParams(p => ({ ...p, waveform: type }))}
+                        className={`px-2 py-1 rounded text-[11px] font-bold uppercase transition-all ${synthParams.waveform === type ? 'bg-emerald-500 text-black' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-neutral-900 p-2.5 rounded-md border border-neutral-800 flex justify-between items-center">
+                  <span>LOW PASS FILTER CUTOFF ({synthParams.filterCutoff} Hz)</span>
+                  <input 
+                    type="range" 
+                    min={200} 
+                    max={8000} 
+                    step={100} 
+                    value={synthParams.filterCutoff} 
+                    onChange={e => setSynthParams(p => ({ ...p, filterCutoff: Number(e.target.value) }))}
+                    className="w-40 accent-emerald-500 cursor-pointer"
+                  />
+                </div>
+
+                <div className="bg-neutral-900 p-2.5 rounded-md border border-neutral-800 flex justify-between items-center">
+                  <span>FILTER RESONANCE / Q ({synthParams.filterRes} dB)</span>
+                  <input 
+                    type="range" 
+                    min={0} 
+                    max={15} 
+                    step={1} 
+                    value={synthParams.filterRes} 
+                    onChange={e => setSynthParams(p => ({ ...p, filterRes: Number(e.target.value) }))}
+                    className="w-40 accent-emerald-500 cursor-pointer"
+                  />
+                </div>
+
+                <div className="bg-neutral-900 p-2.5 rounded-md border border-neutral-800 flex justify-between items-center">
+                  <span>ENVELOPE ATTACK ({synthParams.attack.toFixed(2)}s)</span>
+                  <input 
+                    type="range" 
+                    min={0.001} 
+                    max={0.5} 
+                    step={0.01} 
+                    value={synthParams.attack} 
+                    onChange={e => setSynthParams(p => ({ ...p, attack: Number(e.target.value) }))}
+                    className="w-40 accent-emerald-500 cursor-pointer"
+                  />
+                </div>
+
+                <div className="bg-neutral-900 p-2.5 rounded-md border border-neutral-800 flex justify-between items-center">
+                  <span>ENVELOPE DECAY ({synthParams.decay.toFixed(2)}s)</span>
+                  <input 
+                    type="range" 
+                    min={0.05} 
+                    max={1.5} 
+                    step={0.05} 
+                    value={synthParams.decay} 
+                    onChange={e => setSynthParams(p => ({ ...p, decay: Number(e.target.value) }))}
+                    className="w-40 accent-emerald-500 cursor-pointer"
+                  />
+                </div>
+
+                <div className="p-2 bg-neutral-950/80 rounded border border-neutral-800 text-[11px] text-neutral-400">
+                  💡 <span className="text-emerald-400 font-bold">Pro Tip:</span> Tap <span className="text-white font-bold">SYNTH_01</span> or <span className="text-white font-bold">BASS_01</span> on the 4x4 pads to audition your custom synth parameters live!
                 </div>
               </div>
             )}
