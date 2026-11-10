@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 
 type TabMode = 'F1_F2' | 'F3_MIXER' | 'F4_BENCH' | 'F5_SONG' | 'F6_MENU';
 type RightPanelMode = 'PADS' | 'NAV';
+type F6SubView = 'MAIN' | 'PROJECT_SETTINGS' | 'TABLE_EDITOR' | 'FX_CONFIG';
 
 interface DualScreenWorkspaceProps {
   projectName?: string;
@@ -18,9 +19,13 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentRow, setCurrentRow] = useState<number>(0);
   const [tempo, setTempo] = useState<number>(initialTempo);
+  const [activePad, setActivePad] = useState<string | null>(null);
+  const [activeFxTrigger, setActiveFxTrigger] = useState<string | null>(null);
+  const [f6SubView, setF6SubView] = useState<F6SubView>('MAIN');
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  // Simulated waveform scope renderer
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -60,7 +65,8 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
 
   return (
     <div className="fixed inset-0 bg-neutral-950 text-emerald-400 font-mono select-none flex flex-col overflow-hidden text-xs md:text-sm">
-      {/* TOP HEADER & WAVEFORM BANNER */}
+      
+      {/* 1. TOP HEADER & WAVEFORM BANNER */}
       <div className="relative bg-neutral-900 border-b border-emerald-900/50 p-2 flex items-center justify-between shrink-0">
         <canvas 
           ref={canvasRef} 
@@ -87,10 +93,13 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
         </div>
       </div>
 
-      {/* MAIN VIEWPORT */}
+      {/* 2. MAIN VIEWPORT */}
       <div className="flex-1 flex overflow-hidden p-2 gap-2">
+        
+        {/* --- [F1 / F2] MULTI-VIEW TAB --- */}
         {activeTab === 'F1_F2' && (
           <>
+            {/* Left Pane: Tracker Grid */}
             <div className="flex-1 bg-neutral-900/80 border border-emerald-900/40 rounded flex flex-col overflow-hidden">
               <div className="bg-neutral-800 px-3 py-1 text-xs font-bold text-neutral-300 border-b border-emerald-900/30 flex justify-between">
                 <span>TRACKER SEQUENCER (64 ROWS)</span>
@@ -112,7 +121,10 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
               </div>
             </div>
 
+            {/* Right Pane */}
             <div className="w-80 flex flex-col gap-2 shrink-0">
+              
+              {/* Mini Workbench */}
               <div className="h-36 bg-neutral-900/80 border border-emerald-900/40 rounded p-2 flex flex-col justify-between">
                 <div className="text-[11px] font-bold text-neutral-300 flex justify-between items-center">
                   <span>MINI WORKBENCH</span>
@@ -130,6 +142,7 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
                 </div>
               </div>
 
+              {/* Bottom Section Toggle */}
               <div className="flex-1 bg-neutral-900/80 border border-emerald-900/40 rounded p-2 flex flex-col">
                 <div className="flex bg-neutral-950 p-1 rounded border border-neutral-800 mb-2">
                   <button 
@@ -149,7 +162,12 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
                 {rightMode === 'PADS' && (
                   <div className="flex-1 grid grid-cols-4 gap-1.5 p-1">
                     {['KICK_01', 'SNARE_01', 'HIHAT_01', 'SYNTH_01', 'CHOP_01', 'CHOP_02', 'CHOP_03', 'CHOP_04', 'PERC_01', 'PERC_02', 'VOCAL_1', 'BASS_01', 'FX_01', 'FX_02', 'CRASH_1', 'SUB_01'].map((pad, idx) => (
-                      <button key={idx} className="bg-neutral-800 hover:bg-emerald-900/60 border border-neutral-700 rounded flex flex-col items-center justify-center p-1 text-[10px] text-neutral-300 active:bg-emerald-500 active:text-black">
+                      <button 
+                        key={idx} 
+                        onMouseDown={() => setActivePad(pad)}
+                        onMouseUp={() => setActivePad(null)}
+                        className={`border rounded flex flex-col items-center justify-center p-1 text-[10px] transition-all ${activePad === pad ? 'bg-emerald-400 text-black border-emerald-300 font-bold scale-95' : 'bg-neutral-800 hover:bg-emerald-900/60 border-neutral-700 text-neutral-300'}`}
+                      >
                         <span className="text-[9px] text-emerald-500">{idx + 1}</span>
                         <span className="truncate w-full text-center">{pad}</span>
                       </button>
@@ -159,27 +177,47 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
 
                 {rightMode === 'NAV' && (
                   <div className="flex-1 flex flex-col justify-center items-center p-2 space-y-3">
-                    <div className="grid grid-cols-3 gap-2 w-full">
-                      <div />
-                      <button className="bg-neutral-800 border border-neutral-700 py-2 rounded text-center active:bg-emerald-500 active:text-black font-bold">▲ UP</button>
-                      <div />
-                      <button className="bg-neutral-800 border border-neutral-700 py-2 rounded text-center active:bg-emerald-500 active:text-black font-bold">◄</button>
-                      <button className="bg-neutral-800 border border-neutral-700 py-2 rounded text-center text-xs active:bg-emerald-500 active:text-black font-bold">EDIT</button>
-                      <button className="bg-neutral-800 border border-neutral-700 py-2 rounded text-center active:bg-emerald-500 active:text-black font-bold">►</button>
-                      <div />
-                      <button className="bg-neutral-800 border border-neutral-700 py-2 rounded text-center active:bg-emerald-500 active:text-black font-bold">▼ DOWN</button>
-                      <div />
-                    </div>
+                    
+                    {!fxModeActive ? (
+                      /* Standard M8 Navigation */
+                      <>
+                        <div className="grid grid-cols-3 gap-2 w-full">
+                          <div />
+                          <button className="bg-neutral-800 border border-neutral-700 py-2 rounded text-center active:bg-emerald-500 active:text-black font-bold">▲ UP</button>
+                          <div />
+                          <button className="bg-neutral-800 border border-neutral-700 py-2 rounded text-center active:bg-emerald-500 active:text-black font-bold">◄</button>
+                          <button className="bg-neutral-800 border border-neutral-700 py-2 rounded text-center text-xs active:bg-emerald-500 active:text-black font-bold">EDIT</button>
+                          <button className="bg-neutral-800 border border-neutral-700 py-2 rounded text-center active:bg-emerald-500 active:text-black font-bold">►</button>
+                          <div />
+                          <button className="bg-neutral-800 border border-neutral-700 py-2 rounded text-center active:bg-emerald-500 active:text-black font-bold">▼ DOWN</button>
+                          <div />
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 w-full text-xs">
+                          <button className="bg-neutral-800 border border-neutral-700 py-1.5 rounded active:bg-emerald-500 active:text-black font-bold">OPTION</button>
+                          <button className="bg-neutral-800 border border-neutral-700 py-1.5 rounded active:bg-emerald-500 active:text-black font-bold">SHIFT</button>
+                          <button className="bg-neutral-800 border border-neutral-700 py-1.5 rounded active:bg-emerald-500 active:text-black font-bold">PLAY</button>
+                        </div>
+                      </>
+                    ) : (
+                      /* Punch-In FX Performance Matrix (When 9th FX Mode is Active) */
+                      <div className="w-full grid grid-cols-3 gap-1.5">
+                        {['DJFX LOOP', 'TAPE STOP', 'STUTTER', 'BITCRUSH', 'HP FILTER', 'LP FILTER', 'REVERSE', 'VINYL SIM', 'PITCH DROP'].map((fx, i) => (
+                          <button 
+                            key={i} 
+                            onMouseDown={() => setActiveFxTrigger(fx)}
+                            onMouseUp={() => setActiveFxTrigger(null)}
+                            className={`p-2 rounded text-[10px] font-bold border ${activeFxTrigger === fx ? 'bg-amber-400 text-black border-white' : 'bg-neutral-900 border-amber-600/60 text-amber-400 hover:bg-amber-950/40'}`}
+                          >
+                            {fx}
+                          </button>
+                        ))}
+                      </div>
+                    )}
 
-                    <div className="grid grid-cols-3 gap-2 w-full text-xs">
-                      <button className="bg-neutral-800 border border-neutral-700 py-1.5 rounded active:bg-emerald-500 active:text-black font-bold">OPTION</button>
-                      <button className="bg-neutral-800 border border-neutral-700 py-1.5 rounded active:bg-emerald-500 active:text-black font-bold">SHIFT</button>
-                      <button className="bg-neutral-800 border border-neutral-700 py-1.5 rounded active:bg-emerald-500 active:text-black font-bold">PLAY</button>
-                    </div>
-
+                    {/* 9th Backlit FX Mode Button */}
                     <button 
                       onClick={() => setFxModeActive(!fxModeActive)}
-                      className={`w-full py-2 rounded border font-bold text-xs transition-all ${fxModeActive ? 'bg-amber-500 text-black border-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.6)]' : 'bg-neutral-900 border-neutral-700 text-neutral-400'}`}
+                      className={`w-full py-2 rounded border font-bold text-xs transition-all ${fxModeActive ? 'bg-amber-500 text-black border-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.6)] animate-pulse' : 'bg-neutral-900 border-neutral-700 text-neutral-400'}`}
                     >
                       {fxModeActive ? '⚡ [FX MODE ACTIVE: PUNCH-IN FX ENGAGED]' : '⚡ [9th BTN: FX MODE OFF]'}
                     </button>
@@ -190,6 +228,7 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
           </>
         )}
 
+        {/* --- [F3] MIXER TAB --- */}
         {activeTab === 'F3_MIXER' && (
           <div className="flex-1 bg-neutral-950 border border-emerald-900/40 rounded p-4 flex flex-col">
             <div className="font-bold text-emerald-300 mb-2 border-b border-neutral-800 pb-2">MASTER MIX & 7 TRACK CHANNELS (PARALLEL DYNAMICS)</div>
@@ -219,6 +258,7 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
           </div>
         )}
 
+        {/* --- [F4] BENCH TAB --- */}
         {activeTab === 'F4_BENCH' && (
           <div className="flex-1 flex gap-2">
             <div className="flex-1 bg-neutral-900/80 border border-emerald-900/40 rounded p-4 flex flex-col justify-between">
@@ -250,6 +290,7 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
           </div>
         )}
 
+        {/* --- [F5] SONG ARRANGER TAB --- */}
         {activeTab === 'F5_SONG' && (
           <div className="flex-1 bg-neutral-950 border border-emerald-900/40 rounded p-4 flex flex-col">
             <div className="font-bold text-emerald-300 mb-2">SONG ARRANGER (SP-404SX PATTERN CHAIN WORKFLOW)</div>
@@ -271,42 +312,95 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
           </div>
         )}
 
+        {/* --- [F6] MENU & PRESET MANAGER TAB --- */}
         {activeTab === 'F6_MENU' && (
           <div className="flex-1 bg-neutral-950 border border-emerald-900/40 rounded p-4 flex flex-col">
-            <div className="font-bold text-emerald-300 mb-3">MENU & PRESET MANAGER (TABLES & FX PARAMETERS)</div>
-            <div className="space-y-2 text-neutral-300">
-              <div className="p-2 bg-neutral-900 rounded border border-neutral-800 hover:border-emerald-500 cursor-pointer">&gt; [1] PROJECT SETTINGS (Tempo, Swing, Master Scale)</div>
-              <div className="p-2 bg-neutral-900 rounded border border-neutral-800 hover:border-emerald-500 cursor-pointer">&gt; [2] INSTRUMENT PRESETS & BENCH KITS</div>
-              <div className="p-2 bg-neutral-900 rounded border border-neutral-800 hover:border-emerald-500 cursor-pointer">&gt; [3] TABLE EDITOR (Sub-Step Sequencing & Micro-Timing Ticks)</div>
-              <div className="p-2 bg-neutral-900 rounded border border-neutral-800 hover:border-emerald-500 cursor-pointer">&gt; [4] FX PARAMETER CONFIG & PUNCH-IN MAPS</div>
-              <div className="p-2 bg-neutral-900 rounded border border-neutral-800 hover:border-emerald-500 cursor-pointer">&gt; [5] SYSTEM & AUDIO INFO (iPad 9th Gen Audio Latency / 256ms)</div>
+            <div className="flex justify-between items-center mb-3 border-b border-neutral-800 pb-2">
+              <span className="font-bold text-emerald-300">MENU & PRESET MANAGER {f6SubView !== 'MAIN' ? `// ${f6SubView}` : ''}</span>
+              {f6SubView !== 'MAIN' && (
+                <button onClick={() => setF6SubView('MAIN')} className="px-2 py-0.5 bg-neutral-800 text-neutral-300 rounded text-xs">← BACK TO MENU</button>
+              )}
             </div>
+
+            {f6SubView === 'MAIN' && (
+              <div className="space-y-2 text-neutral-300">
+                <div onClick={() => setF6SubView('PROJECT_SETTINGS')} className="p-2 bg-neutral-900 rounded border border-neutral-800 hover:border-emerald-500 cursor-pointer">&gt; [1] PROJECT SETTINGS (Tempo, Swing, Master Scale)</div>
+                <div className="p-2 bg-neutral-900 rounded border border-neutral-800 hover:border-emerald-500 cursor-pointer">&gt; [2] INSTRUMENT PRESETS & BENCH KITS</div>
+                <div onClick={() => setF6SubView('TABLE_EDITOR')} className="p-2 bg-neutral-900 rounded border border-neutral-800 hover:border-emerald-500 cursor-pointer">&gt; [3] TABLE EDITOR (Sub-Step Sequencing & Micro-Timing Ticks)</div>
+                <div onClick={() => setF6SubView('FX_CONFIG')} className="p-2 bg-neutral-900 rounded border border-neutral-800 hover:border-emerald-500 cursor-pointer">&gt; [4] FX PARAMETER CONFIG & PUNCH-IN MAPS</div>
+                <div className="p-2 bg-neutral-900 rounded border border-neutral-800 hover:border-emerald-500 cursor-pointer">&gt; [5] SYSTEM & AUDIO INFO (iPad 9th Gen Audio Latency / 256ms)</div>
+              </div>
+            )}
+
+            {f6SubView === 'PROJECT_SETTINGS' && (
+              <div className="space-y-3 text-xs text-neutral-300">
+                <div className="flex justify-between items-center bg-neutral-900 p-2 rounded">
+                  <span>MASTER TEMPO (BPM)</span>
+                  <input type="number" value={tempo} onChange={(e) => setTempo(Number(e.target.value))} className="bg-neutral-800 text-emerald-400 px-2 py-1 rounded w-20 text-center border border-neutral-700" />
+                </div>
+                <div className="flex justify-between items-center bg-neutral-900 p-2 rounded">
+                  <span>SWING AMOUNT</span>
+                  <span className="text-emerald-400">50% (OFF)</span>
+                </div>
+              </div>
+            )}
+
+            {f6SubView === 'TABLE_EDITOR' && (
+              <div className="flex-1 flex flex-col space-y-2 text-xs">
+                <div className="text-neutral-400">TABLE ID: 01 // SUB-STEP MICRO-TIMING & PUNCH-IN AUTOMATION</div>
+                <div className="grid grid-cols-4 font-bold text-neutral-500 border-b border-neutral-800 pb-1">
+                  <span>STEP</span><span>PITCH</span><span>VOL</span><span>CMD (FX/DEL)</span>
+                </div>
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="grid grid-cols-4 py-1 border-b border-neutral-900 text-neutral-300">
+                    <span>{String(i).padStart(2, '0')}</span>
+                    <span>{i === 0 ? '+00' : '---'}</span>
+                    <span>{i === 0 ? 'FF' : '--'}</span>
+                    <span>{i === 0 ? 'TSP (T-STOP)' : '---'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {f6SubView === 'FX_CONFIG' && (
+              <div className="space-y-2 text-xs text-neutral-300">
+                <div className="bg-neutral-900 p-2 rounded flex justify-between items-center">
+                  <span>9th BTN PUNCH-IN FX MAP: DJFX LOOP</span>
+                  <span className="text-emerald-400">RATE: 1/4 BEAT</span>
+                </div>
+                <div className="bg-neutral-900 p-2 rounded flex justify-between items-center">
+                  <span>TAPE STOP DECAY TIME</span>
+                  <span className="text-emerald-400">250ms</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
+
       </div>
 
-      {/* BOTTOM SOFT-KEYS NAVIGATION BAR */}
+      {/* 3. BOTTOM SOFT-KEYS NAVIGATION BAR */}
       <div className="bg-neutral-900 border-t border-emerald-900/50 p-2 flex justify-around items-center shrink-0">
         <button 
-          onClick={() => setActiveTab('F1_F2')}
+          onClick={() => { setActiveTab('F1_F2'); setF6SubView('MAIN'); }}
           className={`px-3 py-1 rounded font-bold ${activeTab === 'F1_F2' ? 'bg-emerald-600 text-black' : 'bg-neutral-800 text-emerald-400'}`}
         >
           [F1/F2] MULTI-VIEW{activeTab === 'F1_F2' ? '*' : ''}
         </button>
         <button 
-          onClick={() => setActiveTab('F3_MIXER')}
+          onClick={() => { setActiveTab('F3_MIXER'); setF6SubView('MAIN'); }}
           className={`px-3 py-1 rounded font-bold ${activeTab === 'F3_MIXER' ? 'bg-emerald-600 text-black' : 'bg-neutral-800 text-emerald-400'}`}
         >
           [F3] MIXER{activeTab === 'F3_MIXER' ? '*' : ''}
         </button>
         <button 
-          onClick={() => setActiveTab('F4_BENCH')}
+          onClick={() => { setActiveTab('F4_BENCH'); setF6SubView('MAIN'); }}
           className={`px-3 py-1 rounded font-bold ${activeTab === 'F4_BENCH' ? 'bg-emerald-600 text-black' : 'bg-neutral-800 text-emerald-400'}`}
         >
           [F4] BENCH{activeTab === 'F4_BENCH' ? '*' : ''}
         </button>
         <button 
-          onClick={() => setActiveTab('F5_SONG')}
+          onClick={() => { setActiveTab('F5_SONG'); setF6SubView('MAIN'); }}
           className={`px-3 py-1 rounded font-bold ${activeTab === 'F5_SONG' ? 'bg-emerald-600 text-black' : 'bg-neutral-800 text-emerald-400'}`}
         >
           [F5] SONG{activeTab === 'F5_SONG' ? '*' : ''}
@@ -318,6 +412,7 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
           [F6] MENU{activeTab === 'F6_MENU' ? '*' : ''}
         </button>
       </div>
+
     </div>
   );
 };
