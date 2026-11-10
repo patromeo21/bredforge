@@ -76,7 +76,7 @@ export class AudioEngine {
     return this.analyser;
   }
 
-  // --- Mixer & Limiter Control Setters for MixerView.tsx ---
+  // --- Master Mixer & Limiter Control Setters (used by MixerView.tsx) ---
 
   public setMasterVolume(value: number): void {
     if (this.masterGain && this.audioCtx) {
@@ -96,7 +96,7 @@ export class AudioEngine {
     }
   }
 
-  // ---------------------------------------------------------
+  // ----------------------------------------------------------------------
 
   public triggerPad(padIndex: number, velocity: number = 100): void {
     if (!this.audioCtx || !this.masterGain) {
