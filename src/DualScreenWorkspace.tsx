@@ -17,6 +17,13 @@ interface TableRow {
   del: number;
 }
 
+interface SongSlot {
+  id: string;
+  pattern: string;
+  bars: number;
+  status: 'ACTIVE' | 'QUEUED' | 'EMPTY';
+}
+
 export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
   projectName = 'BREDFORGE_PROJ_01',
   tempo: initialTempo = 120,
@@ -30,8 +37,6 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
   const [activePad, setActivePad] = useState<string | null>(null);
   const [activeFxTrigger, setActiveFxTrigger] = useState<string | null>(null);
   const [f6SubView, setF6SubView] = useState<F6SubView>('MAIN');
-
-  // Last triggered pad feedback state for header status display
   const [lastTriggeredInfo, setLastTriggeredInfo] = useState<string>('READY');
 
   const [tableSpeed, setTableSpeed] = useState<number>(1);
@@ -47,9 +52,33 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
     { step: 7, pitch: '+00', vol: 'FF', cmd: '---', del: 0 },
   ]);
 
+  // Interactive Song Arranger Pattern Chain State
+  const [songSlots, setSongSlots] = useState<SongSlot[]>([
+    { id: '1', pattern: 'PAT_A (Intro Beat)', bars: 4, status: 'ACTIVE' },
+    { id: '2', pattern: 'PAT_A (Verse Build)', bars: 4, status: 'QUEUED' },
+    { id: '3', pattern: 'PAT_B (Drop Kick)', bars: 8, status: 'EMPTY' },
+    { id: '4', pattern: 'PAT_C (Breakdown)', bars: 4, status: 'EMPTY' },
+  ]);
+
+  const addSongSlot = () => {
+    const newId = String(songSlots.length + 1);
+    setSongSlots([...songSlots, { id: newId, pattern: 'PAT_D (Outro)', bars: 4, status: 'EMPTY' }]);
+  };
+
+  const cycleSlotStatus = (id: string) => {
+    setSongSlots(prev => prev.map(slot => {
+      if (slot.id === id) {
+        const nextStatus: SongSlot['status'] = 
+          slot.status === 'ACTIVE' ? 'QUEUED' : 
+          slot.status === 'QUEUED' ? 'EMPTY' : 'ACTIVE';
+        return { ...slot, status: nextStatus };
+      }
+      return slot;
+    }));
+  };
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Web Audio trigger simulation for 4x4 pads
   const triggerPadAudio = (padName: string) => {
     setActivePad(padName);
     setLastTriggeredInfo(`PAD: ${padName}`);
@@ -85,7 +114,7 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
       osc.start();
       osc.stop(audioCtx.currentTime + 0.15);
     } catch {
-      // Fallback if browser audio policy restricts before user gesture
+      // Fallback
     }
 
     setTimeout(() => setActivePad(null), 120);
@@ -174,7 +203,6 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
         {/* --- [F1 / F2] MULTI-VIEW TAB --- */}
         {activeTab === 'F1_F2' && (
           <>
-            {/* Left Pane: Tracker Grid */}
             <div className="flex-1 bg-neutral-900/80 border border-emerald-900/40 rounded flex flex-col overflow-hidden">
               <div className="bg-neutral-800 px-3 py-1 text-xs font-bold text-neutral-300 border-b border-emerald-900/30 flex justify-between">
                 <span>TRACKER SEQUENCER (64 ROWS)</span>
@@ -196,10 +224,7 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
               </div>
             </div>
 
-            {/* Right Pane */}
             <div className="w-80 flex flex-col gap-2 shrink-0">
-              
-              {/* Mini Workbench */}
               <div className="h-36 bg-neutral-900/80 border border-emerald-900/40 rounded p-2 flex flex-col justify-between">
                 <div className="text-[11px] font-bold text-neutral-300 flex justify-between items-center">
                   <span>MINI WORKBENCH</span>
@@ -217,7 +242,6 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
                 </div>
               </div>
 
-              {/* Bottom Section Toggle */}
               <div className="flex-1 bg-neutral-900/80 border border-emerald-900/40 rounded p-2 flex flex-col">
                 <div className="flex bg-neutral-950 p-1 rounded border border-neutral-800 mb-2">
                   <button 
@@ -361,24 +385,48 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
           </div>
         )}
 
-        {/* --- [F5] SONG ARRANGER TAB --- */}
+        {/* --- [F5] SONG ARRANGER TAB (INTERACTIVE PATTERN CHAINING) --- */}
         {activeTab === 'F5_SONG' && (
           <div className="flex-1 bg-neutral-950 border border-emerald-900/40 rounded p-4 flex flex-col">
-            <div className="font-bold text-emerald-300 mb-2">SONG ARRANGER (SP-404SX PATTERN CHAIN WORKFLOW)</div>
-            <div className="text-neutral-400 text-xs mb-3">SEQUENCE CHAIN: [ 01: PAT_A ] → [ 02: PAT_A ] → [ 03: PAT_B ] → [ END ]</div>
-            <div className="space-y-2 flex-1 overflow-y-auto">
-              <div className="bg-neutral-900 p-2 rounded border border-emerald-500/50 flex justify-between items-center">
-                <span>SLOT 01: PAT_A (Intro Beat) [4 Bars]</span>
-                <span className="text-emerald-400 font-bold">[REALLY ACTIVE]</span>
-              </div>
-              <div className="bg-neutral-900 p-2 rounded border border-neutral-800 flex justify-between items-center">
-                <span>SLOT 02: PAT_A (Verse Build) [4 Bars]</span>
-                <span className="text-neutral-500">[QUEUED]</span>
-              </div>
-              <div className="bg-neutral-900 p-2 rounded border border-neutral-800 flex justify-between items-center">
-                <span>SLOT 03: PAT_B (Drop Kick) [8 Bars]</span>
-                <span className="text-neutral-500">[EMPTY]</span>
-              </div>
+            <div className="flex justify-between items-center mb-3 border-b border-neutral-800 pb-2">
+              <span className="font-bold text-emerald-300">SONG ARRANGER // SP-404SX PATTERN CHAIN WORKFLOW</span>
+              <button onClick={addSongSlot} className="px-3 py-1 bg-emerald-600 text-black font-bold rounded text-xs">+ ADD CHAIN SLOT</button>
+            </div>
+            
+            <div className="text-neutral-400 text-xs mb-3">
+              Click any slot status to toggle between <span className="text-emerald-400 font-bold">[ACTIVE]</span>, <span className="text-amber-400 font-bold">[QUEUED]</span>, and <span className="text-neutral-500">[EMPTY]</span>.
+            </div>
+
+            <div className="space-y-2 flex-1 overflow-y-auto pr-1">
+              {songSlots.map((slot, index) => (
+                <div 
+                  key={slot.id} 
+                  className={`p-3 rounded border flex justify-between items-center transition-all ${
+                    slot.status === 'ACTIVE' ? 'bg-emerald-950/60 border-emerald-500 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.3)]' :
+                    slot.status === 'QUEUED' ? 'bg-amber-950/40 border-amber-600 text-amber-300' :
+                    'bg-neutral-900 border-neutral-800 text-neutral-500'
+                  }`}
+                >
+                  <div className="flex items-center space-x-3">
+                    <span className="text-neutral-500 font-bold">SLOT {String(index + 1).padStart(2, '0')}</span>
+                    <span className="font-bold text-white">{slot.pattern}</span>
+                    <span className="text-xs text-neutral-400">({slot.bars} Bars)</span>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <button 
+                      onClick={() => cycleSlotStatus(slot.id)}
+                      className={`px-3 py-1 rounded text-xs font-bold border ${
+                        slot.status === 'ACTIVE' ? 'bg-emerald-600 text-black border-emerald-400' :
+                        slot.status === 'QUEUED' ? 'bg-amber-500 text-black border-amber-400' :
+                        'bg-neutral-800 text-neutral-400 border-neutral-700'
+                      }`}
+                    >
+                      [{slot.status}]
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -448,7 +496,6 @@ export const DualScreenWorkspace: React.FC<DualScreenWorkspaceProps> = ({
                   ))}
                 </div>
 
-                {/* Interactive Micro-Timing Nudge Control Bar */}
                 <div className="bg-neutral-900 p-2 rounded border border-neutral-800 flex justify-between items-center">
                   <span className="text-neutral-400">NUDGE STEP {selectedTableRow} Ticks:</span>
                   <div className="space-x-2">
